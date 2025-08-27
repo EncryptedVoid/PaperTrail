@@ -1,0 +1,44 @@
+================================================================================
+MULTILINGUAL OCR PROCESSING RESULTS
+================================================================================
+
+Processing Time: 2025-08-27T16:42:08.977959
+Original File: Adobe Scan Aug 23, 2025 (3).pdf
+File Type: .PDF
+File Size: 2.04 MB
+Total Pages: 4
+File Hash: 97ba9090aff49f82e46efc6aed7ea659
+
+OVERALL PROCESSING SUMMARY
+----------------------------------------
+• OCR Processing: 1 engines succeeded, 2 failed
+• Best confidence: easyocr (30.3%)
+• Average characters detected: 2031
+
+COMBINED OCR RESULTS (ALL PAGES)
+==================================================
+
+EASYOCR
+--------------------
+Pages with text: 4/4
+Average Confidence: 30.3%
+Combined Text:
+[Page 1] jmpocmenk: nakardpunsai  ansgke  Gurd wlname + dse uuds) 9 Guorcmkes Ldipes. HQur Hculum V (Slider Cerebs Violplec 'Aareting baonex Locdtions gEpaehce_(llulipk "ahuneps Rossel , embrv, Cean huu Vehth & 'Brnohr (Elex182 BYoc &_Hwx 2 Tsa plcies 42 Pexk Jojo 9Fou Uinle s0ciab, e Kinì smal Unus CC 3clvmns (linbs soeials Jeomn Per coafocd) Ii Chano "PRizin4" % "Paelioges" chuse_Vg _ (3 Ccre_bume_wl_buehyground) Pxoc (Honulcl e (BenRs_dRPeranees, €) Purinl cøvi , oZr rubs_Leqal Rcmo,Ck Cuel slIPmo(Bainner ) (Løs cPepkek) Bael + sehoo) Summes ek. AvBortimpovumenk : Highgh{_cucreot-puoy_LGnuscele Cr unbxke AdelF4@) mbpeppl 7 Foblz Navßør + beles Pesilcnm; CGollored 'wieh Hanepadg YSlider Plod Ime Gun 1ed OMowo {erty phøne Zurcn 5Ih Pyp-up) Pløq 4 semdL
+
+[Page 2] AboutPage_ixnpoement : Pone_bumes_(Reguler "Our Cunrcìulumm M (Slidox) siHlot bur pricmmg woclus ? " (PI_chat_brceldoem OR Ja) Secqho emojë, & visual brechcun we_ae_Jhe_bugt?" Slicer or BbehslCød) Smple poink wl {teen/reel Colors ) hop enoojjìs 3 Quuler po 01 (BYoe 6 Tek Cer Same CL8 pege but expomdeel ?7Instomze discants" (Gener]polces oun Cenes) FAQ Acecdlan 6 InPo Cevels + dceumene (FREB) HQtu Xxeseuntes V Slice) Cme 08 hamne puek Nekike_mmpoxcnenk: Æ membeg paqcs Hadpugs Wc G1 TEL@ T4(OhalbA &Resccea Nøxelvinak (Mpovcelcs , Jull_Vpw seeJons) 0l) EPleek_(exobbc} Cenkli) Saneb,ek) Cusesz roae serol bar ) Clidu ng Cenlxi Zmhons "a Rake eke Fade mslide Yhoneu l/ zyh 'Dicdrom Elugs K#ßPIq
+
+[Page 3] FAo Pcgx : )Seerchbl_F4@ (Seanch bar) (Dcxabeine 4_Omnsuns) Show all cuesdìcns luyworel bebu he scandh brr Common_%opls (Bukos L cohugoie;) (Glmhx Culaqerles d quesncns_(dlsappeons uhen secreh beor) @ooet Fm ( Rpu] question_Perm (Senk Bqd) 7 (Ccds w/ Reoreod) (Slide emedi G1lPa 562 Bx 5Gerc] low pe%ds_ k Bemtal_inxcnee L> Gelerladìc w/ emsi) Buq Icendonie Jøleq pes& Pesks poz
+
+[Page 4] Membs] [Poqe;: " Zellsìbl_cnly bypossucad (kr_uaec) 7lencnsuudenk (@lc_ccko pessucrd Gxenerl_Lumiculum (Chpeh14) (General hnJne) Tapoet indicalr LIA #æ 3tulenk) (Sepnæe Pxlgudenk (Rodirce +_rexeeus) (Fole_doxonued bubon) G18 G2 Ies: sbdoe J XE_s a (Full bechdoun) Bextesoueeg peads , Jabs, el.) (slidor) Bed QLrces Zpechoqu_(Ou-plem: ) (Clmn OR Bow) Testyualo: ( Go90l_me_moluba AP1 kRøus Las 8 Aa polcy  Losd,bes) Hmc,ek)kuclo) Zlce(Quiel Pes ,biq,e2._ (Row_Cendbs Slìee) Zdok Zoow Peaal) (Bleg (Map Reqs. Aoukhag
+
+PADDLEOCR
+--------------------
+Error: No text found on any page
+
+PYTESSERACT
+--------------------
+Error: No text found on any page
+
+
+================================================================================
+End of Report

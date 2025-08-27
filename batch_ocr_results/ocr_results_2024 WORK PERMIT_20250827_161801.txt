@@ -1,0 +1,33 @@
+================================================================================
+MULTILINGUAL OCR PROCESSING RESULTS
+================================================================================
+
+Processing Time: 2025-08-27T16:18:01.375462
+Original File: 2024 WORK PERMIT.JPG
+File Size: 0.33 MB
+Image Dimensions: 1750 x 1315
+File Hash: aea168c85a793fa339af277174dddf95
+
+PROCESSING SUMMARY
+----------------------------------------
+• OCR Processing: 2 engines succeeded, 1 failed
+• Best confidence: easyocr (63.3%)
+• Average characters detected: 745
+
+OCR RESULTS BY ENGINE
+========================================
+
+EASYOCR
+--------------------
+Text: Aelugeos and Imnmnigration Rêlugies et PRotectedwhen COMPLETED FRottge UNE fois ReMPL Imnngraton Citizenship Canada Citoyennete Canaoa EBO73 186 691 CANADA U516810879 ASHIQ ARIB GAZI 67 ASTERVALE STREET ORLEANS ON K4A 1AS CANADA ApplicationlDemande: W308459883 UcIUc: 60650733 WORK PERMITIPERMIS DE TRAVAIL CLIENT INFORMATIONIINFORMATION DU CLIENT Family NamelNom de Famllle: GAZI Given Name(s)IPrénom(s): ASHIQ ARIB Date of BirthIDale de nalssance: 2005/11/11 Waai) SexlSexe: MALE Country of BirthlPays de naissance: SWEDEN Country of CitizenshiplCitoyen de: BANGLADESH Travel Doc No IN" du document de voyage: ADDITIONAL INFORMATIONIINFORMATION SUPPLEMENTAIRE Date IssuediDelivré le: 2023/12/20 ywvvtrmo agaaanen Expiry DatelDate dexpiration: 2024/12/19 oynod 9944nqv) Casc TypelGenrc de cas: 28 LMIA or Exempt No /N" de I'EIMT ou Dispense: EmnployerlEmployeur: Employment Location/Emplacement de lemploi: OTTAWA OccupationlProfession: OPEN In Force FromEn vigueur le: 2023/12/20 (ioy nmvnd Mae Conditions: UNLESS AUTHORIZED PROHIBITED FROM ATTENDING ANY EDUCATIONAL INSTITUTION; OR TAKING ANY ACADEMIC , PROFESSIONAL OR VOCATIONAL TRAINING COURSE NOT VALID FOR EMPLOYMENT IN BUSINESSES RELATED TO THE SEX TRADE SUCH AS STRIP CLUBS MASSAGE PARLOURS OR ESCORT SERVICES RomarkslObservations: THIS DOCUMENT DOES NOT CONFER TEMPORARY RESIDENT STATUS ~This DOES NOT AUTHORIZE RE-ENTRYICECI N'AUTORISE PAS LA RE-ENTREE" his Foam Has BEFN {SiABiskED LY IHe MinistFr OF Mygrnnon Pefucles And OIZENSHIP CanADA IHIS DOCUMENTIS Ihe PROPeRTY Of THE GOVERNMENT OF CANADA ForMULAIRE [Iabli Par Le Nastede migraiionrfugies EI CIlOYENNETE CANADA le PRESENT DOCUMENT EST LA propriete Du GoUVERNEMENT DU CanADA 14420 (1-2010) 07 Canadà
+Confidence: 63.3%
+Word Count: 230
+
+PADDLEOCR
+--------------------
+Error: PaddleOCR not initialized
+
+PYTESSERACT
+--------------------
+Best Config: none
+Text: No text
