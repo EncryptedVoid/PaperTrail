@@ -3,13 +3,10 @@ from datetime import datetime
 import hashlib
 import uuid
 
-# Basic UUID generation
-unique_id: uuid.UUID = uuid.uuid4()
-print(f"Generated UUID: {unique_id}")
 
-# Convert to string with proper typing
-unique_string: str = str(unique_id)
-print(f"UUID as string: {unique_string}")
+# Basic UUID generation
+def generate_item_id() -> str:
+    return str(uuid.uuid4())
 
 
 def calculate_checksum(file_path, algorithm="sha512"):
@@ -21,63 +18,6 @@ def calculate_checksum(file_path, algorithm="sha512"):
             hash_obj.update(chunk)
 
     return hash_obj.hexdigest()
-
-
-# def demonstrate_deterministic_checksums(file_paths):
-#     """Demonstrate that checksums are deterministic by calculating multiple times."""
-
-#     for file_path in file_paths:
-#         print(f"\n=== Testing file: {file_path} ===")
-
-#         checksums = []
-
-#         # Calculate checksum 5 times with small delays
-#         for i in range(5):
-#             checksum = calculate_checksum(file_path)
-#             checksums.append(checksum)
-#             timestamp = time.strftime("%H:%M:%S")
-#             print(f"Run {i+1} at {timestamp}: {checksum}")
-#             time.sleep(0.1)  # Small delay to show different timestamps
-
-#         # Verify all checksums are identical
-#         all_same = all(cs == checksums[0] for cs in checksums)
-#         print(f"All checksums identical: {all_same}")
-
-#         if all_same:
-#             print("✅ DETERMINISTIC - Same file always produces same checksum")
-#         else:
-#             print("❌ ERROR - Checksums should be identical!")
-
-
-# Example usage with your file variables
-# file1: str = (
-#     r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\samples\Adobe Scan Aug 23, 2025 (1).pdf"
-# )
-# file2: str = (
-#     r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\samples\Adobe Scan Aug 23, 2025 (3).pdf"
-# )
-# file3: str = (
-#     r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\samples\Adobe Scan Aug 23, 2025 (5).pdf"
-# )
-
-# files_to_test = [file1, file2, file3]
-
-# Run the demonstration
-# demonstrate_deterministic_checksums(files_to_test)
-
-# Additional demonstration: Show that different files have different checksums
-# print("\n=== Comparing different files ===")
-# for i, file_path in enumerate(files_to_test):
-#     try:
-#         checksum = calculate_checksum(file_path)
-#         print(f"File {i+1} ({file_path}): {checksum[:16]}...")  # Show first 16 chars
-#     except FileNotFoundError:
-#         print(f"File {i+1} ({file_path}): [File not found - just for demo]")
-
-# print("\n🔍 Key Points:")
-# print("1. Same file = Same checksum EVERY time")
-# print("2. Different files = Different checksums")
-# print("3. Even tiny changes = Completely different checksum")
 
 
 def read_file_attributes_pathlib(filepath):
@@ -118,11 +58,3 @@ def read_file_attributes_pathlib(filepath):
         print(f"OS error: {e}")
     except Exception as e:
         print(f"Error reading file attributes: {e}")
-
-
-# Example usage
-if __name__ == "__main__":
-    print("\n=== Using pathlib ===")
-    read_file_attributes_pathlib(
-        r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\samples\Adobe Scan Aug 23, 2025 (1).pdf"
-    )

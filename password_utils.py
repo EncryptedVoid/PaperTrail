@@ -41,13 +41,15 @@ from typing import Set
 __all__ = ["PasswordConfig", "PasswordType", "SecurityProfile", "generate_password"]
 
 # Character set constants - treating as strings throughout
+with open(r"assets\mit_wordlist.txt", "r") as f:
+    _WORDS = (line.strip() for line in f)
+_WORDS = set(_WORDS)
 _LOWERCASE = string.ascii_lowercase
 _UPPERCASE = string.ascii_uppercase
 _DIGITS = string.digits
 _SYMBOLS_BASIC = "!@#$%^&*"
 _SYMBOLS_EXTENDED = "!@#$%^&*()_+-=[]{}|;:,.<>?"
 _SYMBOLS_FULL = string.punctuation
-_WORDS = "words"  # Special marker for word-based generation
 _SEPARATORS = "-_"
 _AMBIGUOUS_CHARS = "0O1lI|"
 _SEQUENTIAL_PATTERNS = [
