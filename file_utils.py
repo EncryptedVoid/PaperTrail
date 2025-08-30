@@ -1,30 +1,24 @@
-# Core libraries
-# pip install Pillow python-magic pymupdf pdfplumber
-# pip install python-docx openpyxl python-pptx
-# pip install mutagen opencv-python ffmpeg-python
-# pip install pyexiv2 pillow-heif py7zr
-
-# For better magic support on different OS:
-# Linux: sudo apt-get install libmagic1
-# macOS: brew install libmagic
-# Windows: pip install python-magic-bin
-
-
 from pathlib import Path
 from datetime import datetime
 import hashlib
-import uuid
-
-
-def calculate_checksum(file_path, algorithm="sha512"):
-    """Calculate checksum of a file using specified algorithm."""
-    hash_obj = hashlib.new(algorithm)
-
-    with open(file_path, "rb") as file:
-        for chunk in iter(lambda: file.read(4096), b""):
-            hash_obj.update(chunk)
-
-    return hash_obj.hexdigest()
+from PIL import Image
+from PIL.ExifTags import TAGS
+import pyexiv2  # pip install pyexiv2
+import pillow_heif  # pip install pillow-heif
+import fitz  # pip install pymupdf
+import pdfplumber  # pip install pdfplumber
+from docx import Document  # pip install python-docx
+import openpyxl  # pip install openpyxl
+from pptx import Presentation  # pip install python-pptx
+import mutagen  # pip install mutagen
+import cv2  # pip install opencv-python
+import zipfile
+import tarfile
+import py7zr  # pip install py7zr
+import os
+import magic
+from pathlib import Path
+import ffmpeg  # pip install ffmpeg-python
 
 
 def read_file_attributes_pathlib(filepath):
@@ -67,16 +61,7 @@ def read_file_attributes_pathlib(filepath):
         print(f"Error reading file attributes: {e}")
 
 
-from PIL import Image
-from PIL.ExifTags import TAGS
-import pyexiv2  # pip install pyexiv2
-import pillow_heif  # pip install pillow-heif
-
-# Register HEIC support
-pillow_heif.register_heif_opener()
-
-
-def extract_image_metadata(filepath):
+def _extract_image_metadata(filepath):
     # Basic image info with Pillow
     with Image.open(filepath) as img:
         basic = {"size": img.size, "mode": img.mode, "format": img.format}
@@ -90,11 +75,7 @@ def extract_image_metadata(filepath):
     return {"basic": basic, "exif": exif, "iptc": iptc, "xmp": xmp}
 
 
-import fitz  # pip install pymupdf
-import pdfplumber  # pip install pdfplumber
-
-
-def extract_pdf_metadata(filepath):
+def _extract_pdf_metadata(filepath):
     # Using pymupdf for comprehensive metadata
     doc = fitz.open(filepath)
     metadata = doc.metadata
@@ -118,11 +99,7 @@ def extract_pdf_metadata(filepath):
     return info
 
 
-# Word Documents
-from docx import Document  # pip install python-docx
-
-
-def extract_docx_metadata(filepath):
+def _extract_docx_metadata(filepath):
     doc = Document(filepath)
     props = doc.core_properties
 
@@ -137,11 +114,7 @@ def extract_docx_metadata(filepath):
     }
 
 
-# Excel Files
-import openpyxl  # pip install openpyxl
-
-
-def extract_xlsx_metadata(filepath):
+def _extract_xlsx_metadata(filepath):
     wb = openpyxl.load_workbook(filepath)
     props = wb.properties
 
@@ -154,11 +127,7 @@ def extract_xlsx_metadata(filepath):
     }
 
 
-# PowerPoint
-from pptx import Presentation  # pip install python-pptx
-
-
-def extract_pptx_metadata(filepath):
+def _extract_pptx_metadata(filepath):
     prs = Presentation(filepath)
     props = prs.core_properties
 
@@ -171,10 +140,7 @@ def extract_pptx_metadata(filepath):
     }
 
 
-import mutagen  # pip install mutagen
-
-
-def extract_audio_metadata(filepath):
+def _extract_audio_metadata(filepath):
     audio_file = mutagen.File(filepath)
 
     if audio_file is None:
@@ -197,13 +163,7 @@ def extract_audio_metadata(filepath):
     return {"raw_metadata": metadata, "common": common}
 
 
-import cv2  # pip install opencv-python
-
-# or
-import ffmpeg  # pip install ffmpeg-python
-
-
-def extract_video_metadata(filepath):
+def _extract_video_metadata(filepath):
     # Using OpenCV
     cap = cv2.VideoCapture(filepath)
 
@@ -220,40 +180,30 @@ def extract_video_metadata(filepath):
 
 
 # Alternative with ffmpeg
-def extract_video_metadata_ffmpeg(filepath):
-    probe = ffmpeg.probe(filepath)
-    return {"format": probe["format"], "streams": probe["streams"]}
+# def _extract_video_metadata_ffmpeg(filepath):
+#     probe = ffmpeg.probe(filepath)
+#     return {"format": probe["format"], "streams": probe["streams"]}
 
 
-import zipfile
-import tarfile
-import py7zr  # pip install py7zr
+# def _extract_archive_metadata(filepath):
+#     ext = filepath.lower().split(".")[-1]
 
+#     if ext == "zip":
+#         with zipfile.ZipFile(filepath, "r") as zf:
+#             return {
+#                 "file_count": len(zf.namelist()),
+#                 "files": zf.namelist(),
+#                 "compressed_size": sum(info.compress_size for info in zf.infolist()),
+#                 "uncompressed_size": sum(info.file_size for info in zf.infolist()),
+#             }
 
-def extract_archive_metadata(filepath):
-    ext = filepath.lower().split(".")[-1]
+#     elif ext in ["tar", "gz", "bz2", "xz"]:
+#         with tarfile.open(filepath, "r") as tf:
+#             return {"file_count": len(tf.getnames()), "files": tf.getnames()}
 
-    if ext == "zip":
-        with zipfile.ZipFile(filepath, "r") as zf:
-            return {
-                "file_count": len(zf.namelist()),
-                "files": zf.namelist(),
-                "compressed_size": sum(info.compress_size for info in zf.infolist()),
-                "uncompressed_size": sum(info.file_size for info in zf.infolist()),
-            }
-
-    elif ext in ["tar", "gz", "bz2", "xz"]:
-        with tarfile.open(filepath, "r") as tf:
-            return {"file_count": len(tf.getnames()), "files": tf.getnames()}
-
-    elif ext == "7z":
-        with py7zr.SevenZipFile(filepath, mode="r") as z7:
-            return {"file_count": len(z7.getnames()), "files": z7.getnames()}
-
-
-import os
-import magic
-from pathlib import Path
+#     elif ext == "7z":
+#         with py7zr.SevenZipFile(filepath, mode="r") as z7:
+#             return {"file_count": len(z7.getnames()), "files": z7.getnames()}
 
 
 def extract_all_metadata(filepath):
@@ -274,21 +224,21 @@ def extract_all_metadata(filepath):
 
     # Route to appropriate extractor
     if mime_type.startswith("image/"):
-        result["image"] = extract_image_metadata(filepath)
+        result["image"] = _extract_image_metadata(filepath)
     elif mime_type == "application/pdf":
-        result["pdf"] = extract_pdf_metadata(filepath)
+        result["pdf"] = _extract_pdf_metadata(filepath)
     elif "document" in mime_type or filepath.suffix in [".docx", ".xlsx", ".pptx"]:
         if filepath.suffix == ".docx":
-            result["document"] = extract_docx_metadata(filepath)
+            result["document"] = _extract_docx_metadata(filepath)
         elif filepath.suffix == ".xlsx":
-            result["document"] = extract_xlsx_metadata(filepath)
+            result["document"] = _extract_xlsx_metadata(filepath)
         elif filepath.suffix == ".pptx":
-            result["document"] = extract_pptx_metadata(filepath)
+            result["document"] = _extract_pptx_metadata(filepath)
     elif mime_type.startswith("audio/"):
-        result["audio"] = extract_audio_metadata(filepath)
+        result["audio"] = _extract_audio_metadata(filepath)
     elif mime_type.startswith("video/"):
-        result["video"] = extract_video_metadata(filepath)
-    elif mime_type in ["application/zip", "application/x-tar"]:
-        result["archive"] = extract_archive_metadata(filepath)
+        result["video"] = _extract_video_metadata(filepath)
+    # elif mime_type in ["application/zip", "application/x-tar"]:
+    #     result["archive"] = _extract_archive_metadata(filepath)
 
     return result
