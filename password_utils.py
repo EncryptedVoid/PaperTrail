@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ultra-secure password generator with cryptographic guarantees.
+Password generator with cryptographic guarantees.
 
 This module provides cryptographically secure password generation using Python's
 secrets module. Follows PEP 8 style guidelines and PEP 484 type annotations.
@@ -40,15 +40,11 @@ from typing import Set
 # Export list for clean module interface
 __all__ = ["PasswordConfig", "PasswordType", "SecurityProfile", "generate_password"]
 
-# Character set constants - treating as strings throughout
-with open(r"assets\mit_wordlist.txt", "r") as f:
-    _WORDS = (line.strip() for line in f)
-_WORDS = set(_WORDS)
 _LOWERCASE = string.ascii_lowercase
 _UPPERCASE = string.ascii_uppercase
 _DIGITS = string.digits
 _SYMBOLS_BASIC = "!@#$%^&*"
-_SYMBOLS_EXTENDED = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+_SYMBOLS_EXTENDED = r"!@#$%^&*()_+-=[]{}|;:,.<>?"
 _SYMBOLS_FULL = string.punctuation
 _SEPARATORS = "-_"
 _AMBIGUOUS_CHARS = "0O1lI|"
@@ -108,6 +104,67 @@ _SEQUENTIAL_PATTERNS = [
 ]
 
 
+def _load_word_list() -> set[str]:
+    """Load word list once during module import."""
+    try:
+        from pathlib import Path
+
+        wordlist_path = Path(__file__).parent / "assets" / "mit_wordlist.txt"
+
+        with open(wordlist_path, "r", encoding="utf-8") as f:
+            words = {
+                line.strip().lower()
+                for line in f
+                if line.strip() and len(line.strip()) >= 3
+            }
+
+        if not words:
+            raise ValueError("Wordlist file is empty")
+
+        return words
+
+    except FileNotFoundError:
+        print(f"Warning: Wordlist file not found, using fallback word set")
+        # Fallback word set for demonstration
+        return {
+            "correct",
+            "horse",
+            "battery",
+            "staple",
+            "mountain",
+            "river",
+            "forest",
+            "ocean",
+            "thunder",
+            "lightning",
+            "rainbow",
+            "sunset",
+            "keyboard",
+            "python",
+            "secure",
+            "random",
+            "generate",
+            "password",
+            "entropy",
+            "cipher",
+            "dragon",
+            "castle",
+            "wizard",
+            "magic",
+            "crystal",
+            "phoenix",
+            "tiger",
+            "eagle",
+        }
+    except Exception as e:
+        print(f"Error loading wordlist: {e}, using minimal fallback")
+        return {"word", "list", "loading", "failed", "using", "fallback", "set"}
+
+
+# Load words ONCE during module import
+_WORDS = _load_word_list()
+
+
 class PasswordType(Enum):
     """Password generation modes."""
 
@@ -165,7 +222,7 @@ class PasswordConfig:
     min_uppercase: int = 1
     min_digits: int = 1
     min_symbols: int = 1
-    character_sets: Set[str] = None
+    character_sets: Set[Set[str]] = set()
     ensure_pronounceable: bool = False
 
     # Passphrase-specific parameters
@@ -432,92 +489,92 @@ class SecurityProfile(Enum):
         Returns:
             PasswordConfig: Configured instance for the security level
         """
-        if self == SecurityProfile.BASIC:
-            # User-friendly but secure
-            return PasswordConfig(
-                password_type=PasswordType.CHARACTER_BASED,
-                length=12,
-                min_lowercase=1,
-                min_uppercase=1,
-                min_digits=1,
-                min_symbols=1,
-                exclude_ambiguous=True,
-                exclude_sequential=False,  # Allow some patterns for memorability
-                character_sets={
-                    _LOWERCASE,
-                    _UPPERCASE,
-                    _DIGITS,
-                    _SYMBOLS_BASIC,  # Only common symbols
-                },
-                max_repeated=3,  # More lenient
-                ensure_pronounceable=False,
-            )
+        match self:
+            case SecurityProfile.BASIC:
+                return PasswordConfig(
+                    password_type=PasswordType.CHARACTER_BASED,
+                    length=12,
+                    min_lowercase=1,
+                    min_uppercase=1,
+                    min_digits=1,
+                    min_symbols=1,
+                    exclude_ambiguous=True,
+                    exclude_sequential=False,
+                    character_sets={
+                        _LOWERCASE,
+                        _UPPERCASE,
+                        _DIGITS,
+                        _SYMBOLS_BASIC,
+                    },
+                    max_repeated=3,
+                    ensure_pronounceable=False,
+                )
 
-        elif self == SecurityProfile.SUPER:
-            # Strong security with good usability
-            return PasswordConfig(
-                password_type=PasswordType.CHARACTER_BASED,
-                length=18,
-                min_lowercase=2,
-                min_uppercase=2,
-                min_digits=2,
-                min_symbols=2,
-                exclude_ambiguous=True,
-                exclude_sequential=True,
-                character_sets={
-                    _LOWERCASE,
-                    _UPPERCASE,
-                    _DIGITS,
-                    _SYMBOLS_EXTENDED,  # More symbols available
-                },
-                max_repeated=2,
-                ensure_pronounceable=False,
-            )
+            case SecurityProfile.SUPER:
+                return PasswordConfig(
+                    password_type=PasswordType.CHARACTER_BASED,
+                    length=18,
+                    min_lowercase=2,
+                    min_uppercase=2,
+                    min_digits=2,
+                    min_symbols=2,
+                    exclude_ambiguous=True,
+                    exclude_sequential=True,
+                    character_sets={
+                        _LOWERCASE,
+                        _UPPERCASE,
+                        _DIGITS,
+                        _SYMBOLS_EXTENDED,
+                    },
+                    max_repeated=2,
+                    ensure_pronounceable=False,
+                )
 
-        elif self == SecurityProfile.ULTRA:
-            # Maximum security for high-value targets
-            return PasswordConfig(
-                password_type=PasswordType.CHARACTER_BASED,
-                length=28,
-                min_lowercase=4,
-                min_uppercase=4,
-                min_digits=4,
-                min_symbols=4,
-                exclude_ambiguous=True,
-                exclude_sequential=True,
-                character_sets={
-                    _LOWERCASE,
-                    _UPPERCASE,
-                    _DIGITS,
-                    _SYMBOLS_FULL,  # All available symbols
-                },
-                max_repeated=1,  # Minimal repetition
-                ensure_pronounceable=False,
-            )
+            case SecurityProfile.ULTRA:
+                return PasswordConfig(
+                    password_type=PasswordType.CHARACTER_BASED,
+                    length=28,
+                    min_lowercase=4,
+                    min_uppercase=4,
+                    min_digits=4,
+                    min_symbols=4,
+                    exclude_ambiguous=True,
+                    exclude_sequential=True,
+                    character_sets={
+                        _LOWERCASE,
+                        _UPPERCASE,
+                        _DIGITS,
+                        _SYMBOLS_FULL,
+                    },
+                    max_repeated=1,
+                    ensure_pronounceable=False,
+                )
 
-        elif self == SecurityProfile.PASSPHRASE:
-            # Memorable but secure word-based passwords
-            return PasswordConfig(
-                password_type=PasswordType.PASSPHRASE,
-                length=25,  # Minimum total characters
-                min_lowercase=0,  # Handled through word selection
-                min_uppercase=1,  # At least one capitalized word
-                min_digits=1,  # At least one number
-                min_symbols=1,  # Separators count as symbols
-                exclude_ambiguous=True,
-                exclude_sequential=False,  # Words can have sequential letters
-                character_sets={
-                    _WORDS,  # Enable word-based generation
-                    _SEPARATORS,  # Word separators
-                    _DIGITS,  # For adding numbers
-                },
-                max_repeated=2,  # Allow some repetition in words
-                ensure_pronounceable=True,  # Words are inherently pronounceable
-                word_count=4,  # Good balance of security/memorability
-                word_separator="-",  # Clean, readable separator
-                min_word_length=4,  # Avoid very short words
-                max_word_length=8,  # Avoid very long words
-            )
+            case SecurityProfile.PASSPHRASE:
+                return PasswordConfig(
+                    password_type=PasswordType.PASSPHRASE,
+                    length=25,
+                    min_lowercase=0,
+                    min_uppercase=1,
+                    min_digits=1,
+                    min_symbols=1,
+                    exclude_ambiguous=True,
+                    exclude_sequential=False,
+                    character_sets={
+                        _WORDS,
+                        _SEPARATORS,
+                        _DIGITS,
+                    },
+                    max_repeated=2,
+                    ensure_pronounceable=True,
+                    word_count=4,
+                    word_separator="-",
+                    min_word_length=4,
+                    max_word_length=8,
+                )
+
+            case _:
+                raise ValueError(f"Unknown SecurityProfile: {self}")
 
     @classmethod
     def get_profile_info(cls) -> dict:
