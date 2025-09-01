@@ -151,11 +151,8 @@ def generate_passphrase(
     ]
 
     if use_wordlist:
-        try:
-            # Try the optimized approach - read random lines instead of whole file
-            chosen = _get_random_words_from_file(words)
-        except:
-            chosen = [secrets.choice(word_list) for _ in range(words)]
+        # Try the optimized approach - read random lines instead of whole file
+        chosen = _get_random_words_from_file(words)
     else:
         chosen = [secrets.choice(word_list) for _ in range(words)]
 
@@ -209,10 +206,6 @@ def _get_random_words_from_file(word_count):
                     break
 
     return words[:word_count]
-
-
-def _get_random_words_builtin(word_count):
-    """Fallback: use built-in word list."""
 
 
 def demo():
