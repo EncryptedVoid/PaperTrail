@@ -1,0 +1,42 @@
+{
+  "base_dir": "C:\\Users\\UserX\\Desktop\\Github-Workspace\\PaperTrail\\test_run",
+  "session_limits": {
+    "max_files_per_session": 100,
+    "restart_recommended_after_session": true
+  },
+  "model_settings": {
+    "model_name": "Qwen/Qwen2-VL-7B-Instruct",
+    "gpu_memory_limit_percent": 75.0,
+    "model_refresh_interval": 20,
+    "max_memory_threshold_percent": 75.0
+  },
+  "processing_options": {
+    "extract_text": true,
+    "extract_descriptions": true,
+    "high_resolution_pdf": true,
+    "checksum_algorithm": "SHA3_512"
+  },
+  "supported_extensions": [
+    ".txt", ".pdf", ".doc", ".docx", ".xlsx", ".pptx", ".md", ".rtf",
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
+    ".webp", ".heic", ".heif", ".raw", ".cr2", ".nef", ".arw"
+  ],
+  "logging": {
+    "log_level": "INFO",
+    "console_logging": true,
+    "detailed_progress": true
+  },
+  "directories": {
+    "metadata": "metadata",
+    "semantics": "semantics",
+    "logs": "logs",
+    "completed": "completed",
+    "temp": "temp",
+    "duplicate": "duplicate",
+    "review": "review"
+  },
+  "files": {
+    "processed_checksums": "processed_checksums.json",
+    "completed_checksums": "completed_checksums.json"
+  }
+}
