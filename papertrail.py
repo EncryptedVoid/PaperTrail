@@ -1,0 +1,664 @@
+from tqdm import tqdm
+import logging
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import List, Set, Dict, Any
+from collections import defaultdict
+import time
+from checksum_utils import HashAlgorithm, generate_checksum
+from uuid_utils import generate_uuid4plus
+from metadata_processor import MetadataExtractor
+from visual_processor import QwenDocumentProcessor
+
+# =====================================================================
+# CONFIGURATION CONSTANTS
+# =====================================================================
+
+# Model settings
+GPU_MEMORY_LIMIT_PERCENT: float = 75.0
+MODEL_REFRESH_INTERVAL: int = 20
+MAX_MEMORY_THRESHOLD_PERCENT: float = 75.0
+
+# Checksum algorithm for duplicate detection and integrity verification
+CHECKSUM_ALGORITHM: HashAlgorithm = HashAlgorithm.SHA3_512
+
+# Supported file extensions for processing
+SUPPORTED_EXTENSIONS: Set[str] = {
+    ".txt",
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xlsx",
+    ".pptx",
+    ".md",
+    ".rtf",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".tiff",
+    ".tif",
+    ".webp",
+    ".heic",
+    ".heif",
+    ".raw",
+    ".cr2",
+    ".nef",
+    ".arw",
+}
+
+# File names for permanent storage
+PERMANENT_CHECKSUMS_FILE = "permanent_checksums.txt"
+
+# Base directory for all processing
+BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run")
+
+# Directory structure - each directory represents a processing stage
+PATHS: Dict[str, Path] = {
+    "base_dir": BASE_DIR,
+    "unprocessed_dir": BASE_DIR / "unprocessed_artifacts",
+    "rename_dir": BASE_DIR / "identified_artifacts",
+    "metadata_dir": BASE_DIR / "metadata_extracted",
+    "semantics_dir": BASE_DIR / "visually_processed",
+    "logs_dir": BASE_DIR / "session_logs",
+    "completed_dir": BASE_DIR / "completed_artifacts",
+    "temp_dir": BASE_DIR / "temp",
+    "review_dir": BASE_DIR
+    / "review_required",  # For zero-byte files and problematic files
+    "profiles_dir": BASE_DIR
+    / "artifact_profiles",  # JSON profile files for each artifact
+}
+
+# =====================================================================
+# INITIAL SETUP - DIRECTORIES, LOGGING, SESSION TRACKING
+# =====================================================================
+
+# Create all required directories
+for name, path in PATHS.items():
+    if name.endswith("_dir"):
+        path.mkdir(parents=True, exist_ok=True)
+
+# Setup comprehensive logging (both console and file)
+session_timestamp = datetime.now().strftime(r"%Y-%m-%d_%H-%M-%S_%Z%z")
+log_filename = f"PAPERTRAIL-SESSION-{session_timestamp}.log"
+
+handlers = [
+    logging.FileHandler(f"{str(PATHS['logs_dir'])}/{log_filename}", encoding="utf-8"),
+    logging.StreamHandler(),  # Also log to console for real-time monitoring
+]
+
+logging.basicConfig(
+    level=getattr(logging, "INFO"),
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=handlers,
+)
+
+logger = logging.getLogger(__name__)
+
+# =====================================================================
+# SESSION INITIALIZATION AND STATE TRACKING
+# =====================================================================
+
+# Initialize session tracking
+session_start_time = datetime.now()
+session_data = {
+    "session_id": session_timestamp,
+    "start_time": session_start_time.isoformat(),
+    "status": "running",
+    "total_files": 0,
+    "processed_files": 0,
+    "file_types": defaultdict(int),
+    "stage_counts": {
+        "unprocessed": 0,
+        "rename": 0,
+        "metadata": 0,
+        "semantics": 0,
+        "completed": 0,
+        "failed": 0,
+        "review": 0,
+    },
+    "performance": {"files_per_minute": 0.0, "total_runtime_seconds": 0},
+    "errors": [],
+}
+
+# SESSION JSON file path
+session_json_path = PATHS["logs_dir"] / f"SESSION-{session_timestamp}.json"
+
+logger.info("=" * 80)
+logger.info("PAPERTRAIL DOCUMENT PROCESSING PIPELINE STARTED")
+logger.info("=" * 80)
+logger.info(f"Session ID: {session_timestamp}")
+logger.info(f"Logging initialized. Log file: {log_filename}")
+logger.info(f"Session JSON: {session_json_path.name}")
+logger.info(f"Base directory: {PATHS['base_dir']}")
+logger.info(f"Supported extensions: {SUPPORTED_EXTENSIONS}")
+
+# Load permanent checksum history (one checksum per line)
+permanent_checksums: Set[str] = set()
+permanent_checksums_file = PATHS["base_dir"] / PERMANENT_CHECKSUMS_FILE
+
+if permanent_checksums_file.exists():
+    try:
+        with open(permanent_checksums_file, "r", encoding="utf-8") as f:
+            permanent_checksums = {line.strip() for line in f if line.strip()}
+        logger.info(
+            f"Loaded {len(permanent_checksums)} permanent checksums from history"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to load permanent checksums: {e}")
+else:
+    logger.info("No permanent checksum history found - creating new file")
+    permanent_checksums_file.touch()
+
+
+def update_session_json():
+    """Update the SESSION JSON file with current progress data"""
+    try:
+        with open(session_json_path, "w", encoding="utf-8") as f:
+            json.dump(session_data, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to update SESSION JSON: {e}")
+
+
+def log_detailed_progress(file_name: str, file_size: int, stage: str):
+    """Log detailed multi-line progress information after each file"""
+    elapsed_seconds = (datetime.now() - session_start_time).total_seconds()
+    files_per_minute = (
+        (session_data["processed_files"] / elapsed_seconds * 60)
+        if elapsed_seconds > 0
+        else 0
+    )
+
+    # Update performance metrics
+    session_data["performance"]["files_per_minute"] = round(files_per_minute, 2)
+    session_data["performance"]["total_runtime_seconds"] = int(elapsed_seconds)
+
+    # Format file size for human readability
+    if file_size < 1024:
+        size_str = f"{file_size}B"
+    elif file_size < 1024 * 1024:
+        size_str = f"{file_size/1024:.1f}KB"
+    else:
+        size_str = f"{file_size/(1024*1024):.1f}MB"
+
+    # Create file type summary
+    file_type_summary = ", ".join(
+        [f"{count} {ext}" for ext, count in session_data["file_types"].items()]
+    )
+
+    # Create stage status summary
+    stage_summary = ", ".join(
+        [
+            f"{stage}({count})"
+            for stage, count in session_data["stage_counts"].items()
+            if count > 0
+        ]
+    )
+
+    logger.info("=" * 60)
+    logger.info(
+        f"[File {session_data['processed_files']}/{session_data['total_files']}] Completed: {file_name} ({size_str})"
+    )
+    logger.info(f"Stage: {stage}")
+    logger.info(
+        f"Session Runtime: {elapsed_seconds//3600:02.0f}:{(elapsed_seconds%3600)//60:02.0f}:{elapsed_seconds%60:02.0f} | Speed: {files_per_minute:.1f} files/min"
+    )
+    logger.info(f"File Types: {file_type_summary}")
+    logger.info(f"Stage Status: {stage_summary}")
+    logger.info("=" * 60)
+
+
+# =====================================================================
+# STAGE 1: DUPLICATE DETECTION AND CHECKSUM VERIFICATION
+# =====================================================================
+
+logger.info("\n" + "=" * 80)
+logger.info("STAGE 1: DUPLICATE DETECTION AND CHECKSUM VERIFICATION")
+logger.info("=" * 80)
+logger.info("Scanning unprocessed artifacts for duplicates and zero-byte files...")
+
+# Get all artifacts in unprocessed directory and sort by size (smallest first)
+unprocessed_artifacts: List[Path] = [
+    item
+    for item in PATHS["unprocessed_dir"].iterdir()
+    if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS
+]
+
+# Sort by file size - process smallest files first for faster initial feedback
+unprocessed_artifacts.sort(key=lambda p: p.stat().st_size)
+
+session_data["total_files"] = len(unprocessed_artifacts)
+logger.info(
+    f"Found {len(unprocessed_artifacts)} artifacts to process (sorted smallest to largest)"
+)
+
+# Count file types for initial summary
+for artifact in unprocessed_artifacts:
+    ext = artifact.suffix.lower()
+    session_data["file_types"][ext] += 1
+
+initial_file_summary = ", ".join(
+    [f"{count} {ext}" for ext, count in session_data["file_types"].items()]
+)
+logger.info(f"File type breakdown: {initial_file_summary}")
+
+# Update session JSON with initial state
+update_session_json()
+
+# Process each artifact for duplicate detection
+skipped_duplicates = 0
+skipped_zero_byte = 0
+remaining_artifacts = []
+
+for artifact in tqdm(
+    unprocessed_artifacts, desc="Checking for duplicates", unit="files"
+):
+    try:
+        # Check for zero-byte files (corrupted/incomplete downloads)
+        file_size = artifact.stat().st_size
+        if file_size == 0:
+            logger.warning(
+                f"Zero-byte file detected: {artifact.name} - moving to review"
+            )
+            review_location = PATHS["review_dir"] / artifact.name
+            if not review_location.exists():
+                artifact.rename(review_location)
+                skipped_zero_byte += 1
+                session_data["stage_counts"]["review"] += 1
+            continue
+
+        # Generate checksum for duplicate detection
+        checksum = generate_checksum(artifact, algorithm=CHECKSUM_ALGORITHM)
+        logger.debug(f"Generated checksum for {artifact.name}: {checksum[:16]}...")
+
+        # Check if this file has been processed before (permanent history)
+        if checksum in permanent_checksums:
+            logger.info(f"Duplicate detected: {artifact.name} - skipping")
+            skipped_duplicates += 1
+            continue
+
+        # Add to permanent checksums and save immediately
+        permanent_checksums.add(checksum)
+        with open(permanent_checksums_file, "a", encoding="utf-8") as f:
+            f.write(f"{checksum}\n")
+
+        # This is a new file - keep for processing
+        remaining_artifacts.append(artifact)
+        session_data["stage_counts"]["unprocessed"] += 1
+
+    except Exception as e:
+        logger.error(f"Failed to process {artifact.name} in duplicate detection: {e}")
+        session_data["errors"].append(
+            {"file": artifact.name, "stage": "duplicate_detection", "error": str(e)}
+        )
+
+logger.info(f"Duplicate detection complete:")
+logger.info(f"  - {len(remaining_artifacts)} new files to process")
+logger.info(f"  - {skipped_duplicates} duplicates skipped")
+logger.info(f"  - {skipped_zero_byte} zero-byte files moved to review")
+
+# Update session data and JSON
+session_data["total_files"] = len(remaining_artifacts)
+update_session_json()
+
+# =====================================================================
+# STAGE 2: UUID RENAMING AND PROFILE CREATION
+# =====================================================================
+
+logger.info("\n" + "=" * 80)
+logger.info("STAGE 2: UUID RENAMING AND PROFILE CREATION")
+logger.info("=" * 80)
+logger.info("Renaming artifacts with unique UUIDs and creating profile files...")
+
+for artifact in tqdm(
+    remaining_artifacts, desc="Renaming and creating profiles", unit="files"
+):
+    try:
+        # Generate unique identifier for this artifact
+        artifact_id: str = generate_uuid4plus()
+        original_name = artifact.name
+        file_size = artifact.stat().st_size
+
+        # Create initial profile data
+        profile_data = {
+            "uuid": artifact_id,
+            "original_filename": original_name,
+            "file_size": file_size,
+            "file_extension": artifact.suffix.lower(),
+            "stages": {
+                "renamed": {
+                    "status": "completed",
+                    "timestamp": datetime.now().isoformat(),
+                }
+            },
+        }
+
+        # Rename artifact with UUID (preserving extension)
+        new_artifact_name = f"ARTIFACT-{artifact_id}{artifact.suffix}"
+        renamed_artifact = artifact.rename(PATHS["rename_dir"] / new_artifact_name)
+
+        # Create corresponding profile file
+        profile_filename = f"PROFILE-{artifact_id}.json"
+        profile_path = PATHS["profiles_dir"] / profile_filename
+
+        with open(profile_path, "w", encoding="utf-8") as f:
+            json.dump(profile_data, f, indent=2)
+
+        # Update session tracking
+        session_data["processed_files"] += 1
+        session_data["stage_counts"]["unprocessed"] -= 1
+        session_data["stage_counts"]["rename"] += 1
+
+        # Log detailed progress
+        log_detailed_progress(new_artifact_name, file_size, "renamed")
+
+        # Update session JSON after each file
+        update_session_json()
+
+        logger.debug(f"Renamed: {original_name} -> {new_artifact_name}")
+        logger.debug(f"Created profile: {profile_filename}")
+
+    except Exception as e:
+        logger.error(f"Failed to rename {artifact.name}: {e}")
+        session_data["errors"].append(
+            {"file": artifact.name, "stage": "rename", "error": str(e)}
+        )
+
+logger.info(
+    f"Renaming stage complete - {session_data['stage_counts']['rename']} files renamed"
+)
+
+# =====================================================================
+# STAGE 3: METADATA EXTRACTION
+# =====================================================================
+
+logger.info("\n" + "=" * 80)
+logger.info("STAGE 3: METADATA EXTRACTION")
+logger.info("=" * 80)
+logger.info("Extracting technical metadata from renamed artifacts...")
+
+# Get all artifacts from rename directory, sorted by size
+renamed_artifacts: List[Path] = [
+    item
+    for item in PATHS["rename_dir"].iterdir()
+    if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS
+]
+renamed_artifacts.sort(key=lambda p: p.stat().st_size)
+
+logger.info(f"Found {len(renamed_artifacts)} artifacts ready for metadata extraction")
+
+# Initialize metadata extractor
+extractor = MetadataExtractor(logger=logger)
+logger.info("Document Metadata Extractor initialized")
+
+for artifact in tqdm(renamed_artifacts, desc="Extracting metadata", unit="files"):
+    try:
+        # Extract UUID from filename for profile lookup
+        artifact_id = artifact.name.split("-")[1].split(".")[0]
+        profile_path = PATHS["profiles_dir"] / f"PROFILE-{artifact_id}.json"
+
+        # Load existing profile
+        with open(profile_path, "r", encoding="utf-8") as f:
+            profile_data = json.load(f)
+
+        # Extract metadata using the extractor
+        logger.info(f"Extracting metadata for: {artifact.name}")
+        extracted_metadata: Dict[str, Any] = extractor.extract(artifact)
+
+        # Update profile with metadata and stage completion
+        profile_data["metadata"] = extracted_metadata
+        profile_data["stages"]["metadata_extraction"] = {
+            "status": "completed",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Save updated profile
+        with open(profile_path, "w", encoding="utf-8") as f:
+            json.dump(profile_data, f, indent=2)
+
+        # Move artifact to next stage directory
+        moved_artifact = artifact.rename(PATHS["metadata_dir"] / artifact.name)
+
+        # Update session tracking
+        session_data["stage_counts"]["rename"] -= 1
+        session_data["stage_counts"]["metadata"] += 1
+
+        # Log detailed progress
+        file_size = moved_artifact.stat().st_size
+        log_detailed_progress(artifact.name, file_size, "metadata_extraction")
+
+        # Update session JSON after each file
+        update_session_json()
+
+        logger.debug(f"Metadata extracted and saved for: {artifact.name}")
+
+    except Exception as e:
+        logger.error(f"Failed to extract metadata for {artifact.name}: {e}")
+
+        # Create failed subdirectory if needed and move file there
+        failed_dir = PATHS["rename_dir"] / "failed"
+        failed_dir.mkdir(exist_ok=True)
+
+        try:
+            artifact.rename(failed_dir / artifact.name)
+            session_data["stage_counts"]["failed"] += 1
+            logger.info(f"Moved failed file to: {failed_dir / artifact.name}")
+        except Exception as move_error:
+            logger.error(
+                f"Failed to move {artifact.name} to failed directory: {move_error}"
+            )
+
+        session_data["errors"].append(
+            {"file": artifact.name, "stage": "metadata_extraction", "error": str(e)}
+        )
+
+logger.info(
+    f"Metadata extraction complete - {session_data['stage_counts']['metadata']} files processed"
+)
+
+# =====================================================================
+# STAGE 4: SEMANTIC EXTRACTION (VISUAL PROCESSING)
+# =====================================================================
+
+logger.info("\n" + "=" * 80)
+logger.info("STAGE 4: SEMANTIC EXTRACTION (VISUAL PROCESSING)")
+logger.info("=" * 80)
+logger.info("Extracting semantic data using visual processor...")
+
+# Get all artifacts from metadata directory, sorted by size
+metadata_artifacts: List[Path] = [
+    item
+    for item in PATHS["metadata_dir"].iterdir()
+    if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS
+]
+metadata_artifacts.sort(key=lambda p: p.stat().st_size)
+
+logger.info(f"Found {len(metadata_artifacts)} artifacts ready for semantic extraction")
+
+# Initialize visual processor
+processor = QwenDocumentProcessor(logger=logger)
+logger.info("LLM-based Document Semantics and Text Extractor initialized")
+
+for artifact in tqdm(metadata_artifacts, desc="Extracting semantics", unit="files"):
+    try:
+        # Extract UUID from filename for profile lookup
+        artifact_id = artifact.name.split("-")[1].split(".")[0]
+        profile_path = PATHS["profiles_dir"] / f"PROFILE-{artifact_id}.json"
+
+        # Load existing profile
+        with open(profile_path, "r", encoding="utf-8") as f:
+            profile_data = json.load(f)
+
+        # Extract semantic data using visual processor
+        logger.info(f"Extracting semantics for: {artifact.name}")
+        extracted_semantics: Dict[str, str] = processor.extract_article_semantics(
+            document=artifact
+        )
+
+        # Update profile with semantics and stage completion
+        profile_data["semantics"] = extracted_semantics
+        profile_data["stages"]["semantic_extraction"] = {
+            "status": "completed",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Save updated profile
+        with open(profile_path, "w", encoding="utf-8") as f:
+            json.dump(profile_data, f, indent=2)
+
+        # Move artifact to next stage directory
+        moved_artifact = artifact.rename(PATHS["semantics_dir"] / artifact.name)
+
+        # Update session tracking
+        session_data["stage_counts"]["metadata"] -= 1
+        session_data["stage_counts"]["semantics"] += 1
+
+        # Log detailed progress
+        file_size = moved_artifact.stat().st_size
+        log_detailed_progress(artifact.name, file_size, "semantic_extraction")
+
+        # Update session JSON after each file
+        update_session_json()
+
+        logger.debug(f"Semantics extracted and saved for: {artifact.name}")
+
+    except Exception as e:
+        logger.error(f"Failed to extract semantics for {artifact.name}: {e}")
+
+        # Create failed subdirectory if needed and move file there
+        failed_dir = PATHS["metadata_dir"] / "failed"
+        failed_dir.mkdir(exist_ok=True)
+
+        try:
+            artifact.rename(failed_dir / artifact.name)
+            session_data["stage_counts"]["failed"] += 1
+            logger.info(f"Moved failed file to: {failed_dir / artifact.name}")
+        except Exception as move_error:
+            logger.error(
+                f"Failed to move {artifact.name} to failed directory: {move_error}"
+            )
+
+        session_data["errors"].append(
+            {"file": artifact.name, "stage": "semantic_extraction", "error": str(e)}
+        )
+
+logger.info(
+    f"Semantic extraction complete - {session_data['stage_counts']['semantics']} files processed"
+)
+
+# =====================================================================
+# STAGE 5: SEMANTIC METADATA EXTRACTION (LLM PROCESSING)
+# =====================================================================
+
+# =====================================================================
+# STAGE 6: COMPLETION AND FINAL PROCESSING
+# =====================================================================
+
+logger.info("\n" + "=" * 80)
+logger.info("STAGE 5: COMPLETION AND FINAL PROCESSING")
+logger.info("=" * 80)
+logger.info("Moving fully processed artifacts to completion directory...")
+
+# Get all artifacts from semantics directory, sorted by size
+semantic_artifacts: List[Path] = [
+    item
+    for item in PATHS["semantics_dir"].iterdir()
+    if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS
+]
+semantic_artifacts.sort(key=lambda p: p.stat().st_size)
+
+logger.info(f"Found {len(semantic_artifacts)} artifacts ready for completion")
+
+for artifact in tqdm(semantic_artifacts, desc="Completing processing", unit="files"):
+    try:
+        # Extract UUID from filename for profile lookup
+        artifact_id = artifact.name.split("-")[1].split(".")[0]
+        profile_path = PATHS["profiles_dir"] / f"PROFILE-{artifact_id}.json"
+
+        # Load existing profile
+        with open(profile_path, "r", encoding="utf-8") as f:
+            profile_data = json.load(f)
+
+        # Mark as completed in profile
+        profile_data["stages"]["completed"] = {
+            "status": "completed",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Save final profile
+        with open(profile_path, "w", encoding="utf-8") as f:
+            json.dump(profile_data, f, indent=2)
+
+        # Move artifact to completed directory
+        final_artifact = artifact.rename(PATHS["completed_dir"] / artifact.name)
+
+        # Update session tracking
+        session_data["stage_counts"]["semantics"] -= 1
+        session_data["stage_counts"]["completed"] += 1
+
+        # Log detailed progress
+        file_size = final_artifact.stat().st_size
+        log_detailed_progress(artifact.name, file_size, "completed")
+
+        # Update session JSON after each file
+        update_session_json()
+
+        logger.debug(f"Processing completed for: {artifact.name}")
+
+    except Exception as e:
+        logger.error(f"Failed to complete processing for {artifact.name}: {e}")
+        session_data["errors"].append(
+            {"file": artifact.name, "stage": "completion", "error": str(e)}
+        )
+
+# =====================================================================
+# FINAL SESSION SUMMARY AND COMPLETION
+# =====================================================================
+
+# Mark session as completed
+session_data["status"] = "completed"
+session_data["end_time"] = datetime.now().isoformat()
+update_session_json()
+
+# Calculate final statistics
+total_elapsed = (datetime.now() - session_start_time).total_seconds()
+successful_files = session_data["stage_counts"]["completed"]
+failed_files = session_data["stage_counts"]["failed"]
+
+logger.info("\n" + "=" * 80)
+logger.info("PAPERTRAIL SESSION PROCESSING COMPLETED!")
+logger.info("=" * 80)
+logger.info(f"Session ID: {session_timestamp}")
+logger.info(
+    f"Total Runtime: {total_elapsed//3600:02.0f}:{(total_elapsed%3600)//60:02.0f}:{total_elapsed%60:02.0f}"
+)
+logger.info(f"Successfully Processed: {successful_files} files")
+logger.info(f"Failed Processing: {failed_files} files")
+logger.info(f"Zero-byte Files: {skipped_zero_byte} files moved to review")
+logger.info(f"Duplicates Skipped: {skipped_duplicates} files")
+logger.info(
+    f"Average Speed: {session_data['performance']['files_per_minute']:.1f} files/min"
+)
+
+# Final file type summary
+final_file_summary = ", ".join(
+    [f"{count} {ext}" for ext, count in session_data["file_types"].items()]
+)
+logger.info(f"File Types Processed: {final_file_summary}")
+
+# Directory locations summary
+logger.info("\nOutput Locations:")
+logger.info(f"  Completed Files: {PATHS['completed_dir']}")
+logger.info(f"  Profile Data: {PATHS['profiles_dir']}")
+logger.info(f"  Session Logs: {PATHS['logs_dir']}")
+logger.info(f"  Files for Review: {PATHS['review_dir']}")
+
+# Error summary if any
+if session_data["errors"]:
+    logger.info(f"\nErrors Encountered ({len(session_data['errors'])}):")
+    for error in session_data["errors"]:
+        logger.info(f"  {error['file']} ({error['stage']}): {error['error']}")
+
+logger.info("=" * 80)

@@ -43,7 +43,7 @@ def generate_uuid4plus(
         This is more secure than standard uuid.uuid4() which may vary by system.
     """
     # Use secrets for guaranteed cryptographic security instead of uuid.uuid4()
-    secure_uuid = str(uuid.UUID(bytes=secrets.token_bytes(entropy), version=4))
+    secure_uuid: str = str(uuid.UUID(bytes=secrets.token_bytes(entropy), version=4))
 
     if include_timestamp:
         # Add ISO timestamp for traceability

@@ -8,6 +8,9 @@ import logging
 class MetadataExtractor:
     """Comprehensive file metadata extraction with lazy loading of dependencies"""
 
+    logger: Union[logger, logging.logger]
+    _cache: dict
+
     def __init__(self, logger: logging.Logger):
         if logger is None:
             raise ValueError(
@@ -15,7 +18,7 @@ class MetadataExtractor:
             )
 
         if not isinstance(logger, logging.Logger):
-            raise TypeError(f"Expected logging.Logger instance, got {type(logger)}")
+            raise TypeError(f"Expected logger instance, got {type(logger)}")
 
         self.logger = logger
         self._cache = {}

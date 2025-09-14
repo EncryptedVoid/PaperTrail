@@ -1,11 +1,9 @@
 import torch
 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
-import fitz  # PyMuPDF
-from PIL import Image, ImageDraw, ImageFont
+import fitz
+from PIL import Image
 import io
-import base64
-import os
 import logging
 import gc
 from enum import Enum
@@ -27,11 +25,14 @@ class QwenDocumentProcessor:
     processor: Optional[AutoProcessor]
     model_name: LLM_Models
     documents_processed: int
+    refresh_interval: int  # Measured in number of files
+    memory_threshold: float = 75.0
 
     def __init__(
         self,
         logger: logging.Logger,
         model_name: LLM_Models = LLM_Models.QWEN2_VL_7B,
+        refresh_interval: int = 5,
     ) -> None:
         # Validate required logger parameter
         if logger is None:
@@ -48,6 +49,7 @@ class QwenDocumentProcessor:
         self.documents_processed = 0
         self.model = None
         self.processor = None
+        self.refresh_interval = refresh_interval
 
         self.logger.info(
             f"Initializing QwenDocumentProcessor with model: {model_name.value}"
