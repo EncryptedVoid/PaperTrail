@@ -10,6 +10,7 @@ from checksum_utils import HashAlgorithm, generate_checksum
 from uuid_utils import generate_uuid4plus
 from metadata_processor import MetadataExtractor
 from visual_processor import QwenDocumentProcessor
+from language_processor import LanguageProcessor
 
 # =====================================================================
 # CONFIGURATION CONSTANTS
@@ -549,17 +550,13 @@ logger.info(
 )
 
 # =====================================================================
-# STAGE 5: SEMANTIC METADATA EXTRACTION (LLM PROCESSING)
-# =====================================================================
-
-# =====================================================================
-# STAGE 6: COMPLETION AND FINAL PROCESSING
+# STAGE 5: LLM FIELD EXTRACTION (SEMANTIC METADATA)
 # =====================================================================
 
 logger.info("\n" + "=" * 80)
-logger.info("STAGE 5: COMPLETION AND FINAL PROCESSING")
+logger.info("STAGE 5: LLM FIELD EXTRACTION (SEMANTIC METADATA)")
 logger.info("=" * 80)
-logger.info("Moving fully processed artifacts to completion directory...")
+logger.info("Extracting structured document fields using LLM...")
 
 # Get all artifacts from semantics directory, sorted by size
 semantic_artifacts: List[Path] = [
@@ -569,9 +566,167 @@ semantic_artifacts: List[Path] = [
 ]
 semantic_artifacts.sort(key=lambda p: p.stat().st_size)
 
-logger.info(f"Found {len(semantic_artifacts)} artifacts ready for completion")
+logger.info(f"Found {len(semantic_artifacts)} artifacts ready for LLM field extraction")
 
-for artifact in tqdm(semantic_artifacts, desc="Completing processing", unit="files"):
+# Initialize LLM field extractor
+field_extractor = LanguageProcessor(logger=logger)
+logger.info("LLM Document Field Extractor initialized")
+
+# Create new directory for LLM-processed artifacts
+PATHS["llm_processed_dir"] = BASE_DIR / "llm_processed"
+PATHS["llm_processed_dir"].mkdir(parents=True, exist_ok=True)
+
+for artifact in tqdm(semantic_artifacts, desc="Extracting LLM fields", unit="files"):
+    try:
+        # Extract UUID from filename for profile lookup
+        artifact_id = artifact.name.split("-")[1].split(".")[0]
+        profile_path = PATHS["profiles_dir"] / f"PROFILE-{artifact_id}.json"
+
+        # Load existing profile
+        with open(profile_path, "r", encoding="utf-8") as f:
+            profile_data = json.load(f)
+
+        # Get the data we need for LLM processing
+        ocr_text = profile_data.get("semantics", {}).get("all_text", "")
+        visual_description = profile_data.get("semantics", {}).get("all_imagery", "")
+        metadata = profile_data.get("metadata", {})
+
+        # Check if we have enough content to process
+        if not ocr_text or ocr_text.strip() == "No text found in document.":
+            logger.warning(
+                f"No OCR text available for {artifact.name} - using visual description only"
+            )
+            ocr_text = (
+                f"No text content extracted. Visual description: {visual_description}"
+            )
+
+        if (
+            not visual_description
+            or visual_description.strip() == "No visual content described."
+        ):
+            logger.warning(f"No visual description available for {artifact.name}")
+            visual_description = "No visual description available."
+
+        logger.info(f"Extracting structured fields for: {artifact.name}")
+        logger.debug(
+            f"OCR text length: {len(ocr_text)} chars, Visual desc length: {len(visual_description)} chars"
+        )
+
+        # Extract structured fields using LLM
+        extraction_result = field_extractor.extract_fields(
+            ocr_text=ocr_text,
+            visual_description=visual_description,
+            metadata=metadata,
+            uuid=artifact_id,
+        )
+
+        # Update profile with LLM-extracted fields and stage completion
+        profile_data["llm_extraction"] = extraction_result
+        profile_data["stages"]["llm_field_extraction"] = {
+            "status": "completed" if extraction_result["success"] else "failed",
+            "timestamp": datetime.now().isoformat(),
+            "model_used": field_extractor.model,
+            "fields_extracted": len(extraction_result.get("extracted_fields", {})),
+        }
+
+        # Save updated profile
+        with open(profile_path, "w", encoding="utf-8") as f:
+            json.dump(profile_data, f, indent=2)
+
+        # Move artifact to next stage directory
+        moved_artifact = artifact.rename(PATHS["llm_processed_dir"] / artifact.name)
+
+        # Update session tracking
+        session_data["stage_counts"]["semantics"] -= 1
+        if extraction_result["success"]:
+            session_data["stage_counts"]["llm_processed"] = (
+                session_data["stage_counts"].get("llm_processed", 0) + 1
+            )
+        else:
+            session_data["stage_counts"]["failed"] += 1
+
+        # Log detailed progress
+        file_size = moved_artifact.stat().st_size
+        extraction_status = "successful" if extraction_result["success"] else "failed"
+        log_detailed_progress(
+            artifact.name, file_size, f"llm_extraction_{extraction_status}"
+        )
+
+        # Update session JSON after each file
+        update_session_json()
+
+        # Log extraction results
+        if extraction_result["success"]:
+            extracted_fields = extraction_result["extracted_fields"]
+            non_unknown_fields = sum(
+                1 for v in extracted_fields.values() if v != "UNKNOWN"
+            )
+            total_fields = len(extracted_fields)
+            logger.info(
+                f"LLM extraction successful for {artifact.name}: {non_unknown_fields}/{total_fields} fields extracted"
+            )
+
+            # Log some key extracted fields for verification
+            key_fields = ["title", "document_type", "issuer_name", "date_of_issue"]
+            extracted_sample = {
+                k: extracted_fields.get(k, "UNKNOWN") for k in key_fields
+            }
+            logger.debug(f"Key fields extracted: {extracted_sample}")
+        else:
+            logger.warning(
+                f"LLM extraction failed for {artifact.name}: {extraction_result.get('error', 'Unknown error')}"
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to process LLM extraction for {artifact.name}: {e}")
+
+        # Create failed subdirectory if needed and move file there
+        failed_dir = PATHS["semantics_dir"] / "failed"
+        failed_dir.mkdir(exist_ok=True)
+
+        try:
+            artifact.rename(failed_dir / artifact.name)
+            session_data["stage_counts"]["failed"] += 1
+            logger.info(f"Moved failed file to: {failed_dir / artifact.name}")
+        except Exception as move_error:
+            logger.error(
+                f"Failed to move {artifact.name} to failed directory: {move_error}"
+            )
+
+        session_data["errors"].append(
+            {"file": artifact.name, "stage": "llm_field_extraction", "error": str(e)}
+        )
+
+# Log extractor statistics
+extractor_stats = field_extractor.get_stats()
+logger.info(
+    f"LLM field extraction complete - {session_data['stage_counts'].get('llm_processed', 0)} files processed successfully"
+)
+logger.info(f"LLM model used: {extractor_stats['model']} on {extractor_stats['host']}")
+logger.info(f"Total LLM API calls made: {extractor_stats['total_processed']}")
+
+# =====================================================================
+# STAGE 6: COMPLETION AND FINAL PROCESSING
+# =====================================================================
+
+logger.info("\n" + "=" * 80)
+logger.info("STAGE 6: COMPLETION AND FINAL PROCESSING")
+logger.info("=" * 80)
+logger.info("Moving fully processed artifacts to completion directory...")
+
+# Get all artifacts from LLM processed directory, sorted by size
+llm_processed_artifacts: List[Path] = [
+    item
+    for item in PATHS["llm_processed_dir"].iterdir()
+    if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS
+]
+llm_processed_artifacts.sort(key=lambda p: p.stat().st_size)
+
+logger.info(f"Found {len(llm_processed_artifacts)} artifacts ready for completion")
+
+for artifact in tqdm(
+    llm_processed_artifacts, desc="Completing processing", unit="files"
+):
     try:
         # Extract UUID from filename for profile lookup
         artifact_id = artifact.name.split("-")[1].split(".")[0]
@@ -585,6 +740,41 @@ for artifact in tqdm(semantic_artifacts, desc="Completing processing", unit="fil
         profile_data["stages"]["completed"] = {
             "status": "completed",
             "timestamp": datetime.now().isoformat(),
+            "total_stages_completed": len(
+                [
+                    s
+                    for s in profile_data["stages"].values()
+                    if s.get("status") == "completed"
+                ]
+            ),
+        }
+
+        # Add final processing summary
+        profile_data["processing_summary"] = {
+            "total_file_size_mb": profile_data.get("file_size", 0) / (1024 * 1024),
+            "stages_completed": list(profile_data["stages"].keys()),
+            "has_ocr_text": bool(
+                profile_data.get("semantics", {}).get("all_text", "").strip()
+            ),
+            "has_visual_description": bool(
+                profile_data.get("semantics", {}).get("all_imagery", "").strip()
+            ),
+            "llm_extraction_success": profile_data.get("llm_extraction", {}).get(
+                "success", False
+            ),
+            "fields_with_data": (
+                len(
+                    [
+                        v
+                        for v in profile_data.get("llm_extraction", {})
+                        .get("extracted_fields", {})
+                        .values()
+                        if v != "UNKNOWN"
+                    ]
+                )
+                if profile_data.get("llm_extraction", {}).get("success")
+                else 0
+            ),
         }
 
         # Save final profile
@@ -595,7 +785,7 @@ for artifact in tqdm(semantic_artifacts, desc="Completing processing", unit="fil
         final_artifact = artifact.rename(PATHS["completed_dir"] / artifact.name)
 
         # Update session tracking
-        session_data["stage_counts"]["semantics"] -= 1
+        session_data["stage_counts"]["llm_processed"] -= 1
         session_data["stage_counts"]["completed"] += 1
 
         # Log detailed progress
