@@ -8,7 +8,7 @@ import logging
 class MetadataExtractor:
     """Comprehensive file metadata extraction with lazy loading of dependencies"""
 
-    logger: Union[logger, logging.logger]
+    logger: logging.Logger
     _cache: dict
 
     def __init__(self, logger: logging.Logger):
@@ -265,7 +265,9 @@ class MetadataExtractor:
                         "metadata": doc.metadata,
                         "toc": doc.get_toc(),
                         "has_text": (
-                            bool(doc[0].get_text()) if doc.page_count > 0 else False
+                            bool(doc[0].get_text_words())
+                            if doc.page_count > 0
+                            else False
                         ),
                     }
                 }
