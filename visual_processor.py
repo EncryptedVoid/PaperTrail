@@ -6,61 +6,275 @@ from PIL import Image
 import io
 import logging
 import gc
+import psutil
+import time
 from enum import Enum
 from typing import Union, List, Dict, Any, Optional, Tuple
 from pathlib import Path
+from dataclasses import dataclass
+from datetime import datetime
 
 
-class LLM_Models(Enum):
-    """Available LLM model configurations"""
+class ProcessingMode(Enum):
+    """Processing quality modes"""
 
-    QWEN2_VL_7B = "Qwen/Qwen2-VL-7B-Instruct"
+    FAST = "fast"
+    BALANCED = "balanced"
+    HIGH_QUALITY = "high_quality"
 
 
-class QwenDocumentProcessor:
-    # Class attributes with type hints
-    logger: logging.Logger
-    device: str
-    model: Optional[Qwen2VLForConditionalGeneration]
-    processor: Optional[AutoProcessor]
-    model_name: LLM_Models
-    documents_processed: int
-    refresh_interval: int  # Measured in number of files
-    memory_threshold: float = 75.0
+@dataclass
+class VisionModelSpec:
+    """Specification for vision models including hardware requirements"""
+
+    name: str
+    model_id: str
+    min_gpu_vram_gb: float
+    min_ram_gb: float
+    quality_score: int  # 1-10, higher is better
+    max_tokens: int
+    supports_batch: bool = False
+    model_type: str = "qwen2vl"  # qwen2vl, llava, blip2, etc.
+
+
+@dataclass
+class HardwareConstraints:
+    """Hardware resource constraints"""
+
+    max_gpu_vram_gb: float
+    max_ram_gb: float
+    force_cpu: bool = False
+
+
+@dataclass
+class ProcessingStats:
+    """Track processing performance and quality metrics"""
+
+    documents_processed: int = 0
+    pages_processed: int = 0
+    text_extractions_successful: int = 0
+    descriptions_successful: int = 0
+    total_processing_time: float = 0.0
+    memory_refreshes: int = 0
+    model_switches: int = 0
+    average_text_length: float = 0.0
+    average_description_length: float = 0.0
+    last_refresh_time: float = 0.0
+
+
+class VisualProcessor:
+    """Enhanced Visual Processor with hardware optimization and multi-model support"""
 
     def __init__(
         self,
         logger: logging.Logger,
-        model_name: LLM_Models = LLM_Models.QWEN2_VL_7B,
+        max_gpu_vram_gb: Optional[float] = None,
+        max_ram_gb: Optional[float] = None,
+        force_cpu: bool = False,
+        processing_mode: ProcessingMode = ProcessingMode.BALANCED,
         refresh_interval: int = 5,
+        memory_threshold: float = 80.0,
+        auto_model_selection: bool = True,
+        preferred_model: Optional[str] = None,
     ) -> None:
         # Validate required logger parameter
         if logger is None:
             raise ValueError(
-                "Logger is required - QwenDocumentProcessor cannot be initialized without a logger"
+                "Logger is required - VisualProcessor cannot be initialized without a logger"
             )
-
         if not isinstance(logger, logging.Logger):
             raise TypeError(f"Expected logging.Logger instance, got {type(logger)}")
 
         # Initialize instance attributes
-        self.logger: logging.Logger = logger
-        self.model_name = model_name
-        self.documents_processed = 0
-        self.model = None
-        self.processor = None
+        self.logger = logger
+        self.processing_mode = processing_mode
         self.refresh_interval = refresh_interval
+        self.memory_threshold = memory_threshold
+        self.auto_model_selection = auto_model_selection
 
-        self.logger.info(
-            f"Initializing QwenDocumentProcessor with model: {model_name.value}"
+        # Initialize hardware constraints
+        self.hardware_constraints = self._detect_hardware_constraints(
+            max_gpu_vram_gb, max_ram_gb, force_cpu
         )
 
-        # Load the model
+        # Initialize model registry
+        self.model_registry = self._initialize_model_registry()
+
+        # Initialize processing statistics
+        self.stats = ProcessingStats()
+
+        # Model state
+        self.model = None
+        self.processor = None
+        self.current_model_spec = None
+        self.device = None
+
+        # Select and load optimal model
+        if auto_model_selection:
+            self.current_model_spec = self._select_optimal_model(preferred_model)
+        else:
+            # Use preferred model or default
+            model_name = preferred_model or "Qwen/Qwen2-VL-7B-Instruct"
+            self.current_model_spec = self._get_model_spec_by_id(model_name)
+
+        self.logger.info(
+            f"Initialized VisualProcessor with model: {self.current_model_spec.name}"
+        )
+        self.logger.info(f"Hardware constraints: {self.hardware_constraints}")
+
+        # Load the selected model
         self._load_model()
 
+    def _detect_hardware_constraints(
+        self,
+        max_gpu_vram_gb: Optional[float],
+        max_ram_gb: Optional[float],
+        force_cpu: bool,
+    ) -> HardwareConstraints:
+        """Detect available hardware or use provided constraints"""
+
+        # RAM detection
+        if max_ram_gb is None:
+            total_ram = psutil.virtual_memory().total / (1024**3)  # Convert to GB
+            available_ram = total_ram * 0.7  # Use 70% of total RAM
+        else:
+            available_ram = max_ram_gb
+
+        # GPU detection
+        if max_gpu_vram_gb is None and not force_cpu:
+            try:
+                if torch.cuda.is_available():
+                    # Get GPU memory from torch
+                    gpu_props = torch.cuda.get_device_properties(0)
+                    total_vram = gpu_props.total_memory / (1024**3)  # Convert to GB
+                    available_vram = total_vram * 0.8  # Use 80% of total VRAM
+                else:
+                    available_vram = 0
+            except Exception as e:
+                self.logger.warning(f"Could not detect GPU VRAM: {e}")
+                available_vram = 0
+        else:
+            available_vram = max_gpu_vram_gb or 0
+
+        if force_cpu:
+            available_vram = 0
+
+        return HardwareConstraints(
+            max_gpu_vram_gb=available_vram,
+            max_ram_gb=available_ram,
+            force_cpu=force_cpu,
+        )
+
+    def _initialize_model_registry(self) -> List[VisionModelSpec]:
+        """Initialize registry of available vision models with their requirements"""
+        return [
+            # Qwen2-VL models
+            VisionModelSpec(
+                name="Qwen2-VL-2B",
+                model_id="Qwen/Qwen2-VL-2B-Instruct",
+                min_gpu_vram_gb=4.0,
+                min_ram_gb=8.0,
+                quality_score=7,
+                max_tokens=512,
+                model_type="qwen2vl",
+            ),
+            VisionModelSpec(
+                name="Qwen2-VL-7B",
+                model_id="Qwen/Qwen2-VL-7B-Instruct",
+                min_gpu_vram_gb=14.0,
+                min_ram_gb=16.0,
+                quality_score=9,
+                max_tokens=512,
+                model_type="qwen2vl",
+            ),
+            VisionModelSpec(
+                name="Qwen2-VL-72B",
+                model_id="Qwen/Qwen2-VL-72B-Instruct",
+                min_gpu_vram_gb=144.0,
+                min_ram_gb=200.0,
+                quality_score=10,
+                max_tokens=1024,
+                model_type="qwen2vl",
+            ),
+            # Alternative models for fallback
+            VisionModelSpec(
+                name="Qwen2-VL-7B-CPU",
+                model_id="Qwen/Qwen2-VL-7B-Instruct",
+                min_gpu_vram_gb=0.0,  # CPU only
+                min_ram_gb=32.0,
+                quality_score=8,
+                max_tokens=512,
+                model_type="qwen2vl",
+            ),
+        ]
+
+    def _select_optimal_model(
+        self, preferred_model: Optional[str] = None
+    ) -> VisionModelSpec:
+        """Select the best model that fits within hardware constraints"""
+
+        # If a preferred model is specified, try to use it if it fits
+        if preferred_model:
+            preferred_spec = self._get_model_spec_by_id(preferred_model)
+            if preferred_spec and self._model_fits_constraints(preferred_spec):
+                self.logger.info(f"Using preferred model: {preferred_spec.name}")
+                return preferred_spec
+            else:
+                self.logger.warning(
+                    f"Preferred model {preferred_model} doesn't fit constraints, selecting alternative"
+                )
+
+        # Filter models that fit within hardware constraints
+        suitable_models = [
+            model
+            for model in self.model_registry
+            if self._model_fits_constraints(model)
+        ]
+
+        if not suitable_models:
+            # Fallback to CPU-only model
+            cpu_models = [m for m in self.model_registry if m.min_gpu_vram_gb == 0]
+            if cpu_models:
+                best_model = max(cpu_models, key=lambda m: m.quality_score)
+                self.logger.warning(
+                    f"No GPU models fit constraints, using CPU model: {best_model.name}"
+                )
+                return best_model
+            else:
+                raise RuntimeError(
+                    "No suitable vision models found for current hardware constraints"
+                )
+
+        # Select model with highest quality score that fits
+        best_model = max(suitable_models, key=lambda m: m.quality_score)
+        self.logger.info(
+            f"Selected optimal model: {best_model.name} (quality: {best_model.quality_score})"
+        )
+
+        return best_model
+
+    def _model_fits_constraints(self, model_spec: VisionModelSpec) -> bool:
+        """Check if a model fits within hardware constraints"""
+        if self.hardware_constraints.force_cpu:
+            return model_spec.min_gpu_vram_gb == 0
+
+        fits_vram = (
+            model_spec.min_gpu_vram_gb <= self.hardware_constraints.max_gpu_vram_gb
+        )
+        fits_ram = model_spec.min_ram_gb <= self.hardware_constraints.max_ram_gb
+
+        return fits_vram and fits_ram
+
+    def _get_model_spec_by_id(self, model_id: str) -> Optional[VisionModelSpec]:
+        """Get model specification by model ID"""
+        for spec in self.model_registry:
+            if spec.model_id == model_id:
+                return spec
+        return None
+
     def _load_model(self) -> None:
-        """Load or reload the Qwen2-VL model and processor"""
-        self.logger.info("Loading Qwen2-VL model...")
+        """Load or reload the vision model and processor"""
+        self.logger.info(f"Loading vision model: {self.current_model_spec.name}")
 
         try:
             # Clean up existing model if present
@@ -72,129 +286,281 @@ class QwenDocumentProcessor:
                     torch.cuda.empty_cache()
                 gc.collect()
 
-            # Determine compute device (CUDA vs CPU)
-            self.device: str = "cuda" if torch.cuda.is_available() else "cpu"
+            # Determine compute device
+            if (
+                self.hardware_constraints.force_cpu
+                or self.current_model_spec.min_gpu_vram_gb == 0
+            ):
+                self.device = "cpu"
+            else:
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
             self.logger.info(f"Using device: {self.device}")
 
-            # Log GPU information if available
-            if torch.cuda.is_available():
-                gpu_name: str = torch.cuda.get_device_name(0)
-                gpu_memory: float = torch.cuda.get_device_properties(0).total_memory / (
+            # Log hardware info
+            if torch.cuda.is_available() and self.device == "cuda":
+                gpu_name = torch.cuda.get_device_name(0)
+                gpu_memory = torch.cuda.get_device_properties(0).total_memory / (
                     1024**3
                 )
-                self.logger.info(f"GPU detected: {gpu_name} ({gpu_memory:.1f}GB)")
+                self.logger.info(f"GPU: {gpu_name} ({gpu_memory:.1f}GB)")
 
-            self.logger.debug("Loading Qwen2VL model from transformers...")
-            # Load the vision-language model with optimized settings for inference
-            self.model: Qwen2VLForConditionalGeneration = (
-                Qwen2VLForConditionalGeneration.from_pretrained(
-                    self.model_name.value,
-                    torch_dtype=torch.bfloat16,  # Use bfloat16 for better memory efficiency
-                    device_map="auto",  # Automatically distribute model across available devices
-                )
-            )
-            self.logger.info("Qwen2VL model loaded successfully")
+            # Load model with appropriate settings
+            model_kwargs = {
+                "torch_dtype": (
+                    torch.bfloat16 if self.device == "cuda" else torch.float32
+                ),
+                "device_map": "auto" if self.device == "cuda" else None,
+            }
 
-            self.logger.debug("Loading AutoProcessor...")
-            # Load the processor for handling text and image inputs
-            self.processor: AutoProcessor = AutoProcessor.from_pretrained(
-                self.model_name.value
-            )
-            self.logger.info("AutoProcessor loaded successfully")
+            if self.device == "cpu":
+                model_kwargs["device_map"] = {"": "cpu"}
 
-            self.logger.info(
-                f"QwenDocumentProcessor model loading complete on {self.device}"
+            self.logger.debug("Loading vision model from transformers...")
+            self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                self.current_model_spec.model_id, **model_kwargs
             )
+
+            self.logger.debug("Loading processor...")
+            self.processor = AutoProcessor.from_pretrained(
+                self.current_model_spec.model_id
+            )
+
+            self.logger.info(f"Model loaded successfully on {self.device}")
+            self.stats.last_refresh_time = time.time()
 
         except Exception as e:
-            self.logger.error(f"Failed to load QwenDocumentProcessor model: {e}")
-            raise
+            self.logger.error(
+                f"Failed to load model {self.current_model_spec.name}: {e}"
+            )
+            # Try fallback to a smaller model or CPU
+            self._try_fallback_model()
 
-    def refresh_model(self) -> None:
-        """Refresh the model to clear context and free memory"""
-        self.logger.info("Refreshing AI model context...")
-        try:
-            self._load_model()
-            self.documents_processed = 0
-            self.logger.info("Model refresh completed successfully")
-        except Exception as e:
-            self.logger.error(f"Failed to refresh model: {e}")
-            raise
+    def _try_fallback_model(self) -> None:
+        """Try to load a fallback model if primary model fails"""
+        self.logger.info("Attempting to load fallback model...")
+
+        # Try smaller models first
+        fallback_models = sorted(
+            [m for m in self.model_registry if m != self.current_model_spec],
+            key=lambda m: m.quality_score,
+            reverse=True,
+        )
+
+        for fallback_spec in fallback_models:
+            if self._model_fits_constraints(fallback_spec):
+                try:
+                    self.logger.info(f"Trying fallback model: {fallback_spec.name}")
+                    self.current_model_spec = fallback_spec
+                    self._load_model()
+                    self.stats.model_switches += 1
+                    return
+                except Exception as e:
+                    self.logger.warning(
+                        f"Fallback model {fallback_spec.name} also failed: {e}"
+                    )
+                    continue
+
+        raise RuntimeError("All fallback models failed to load")
 
     def _should_refresh_model(self) -> bool:
-        """Check if model should be refreshed based on usage"""
-        # Refresh based on config interval
-        if self.documents_processed >= self.refresh_interval:
+        """Check if model should be refreshed based on usage and performance"""
+        current_time = time.time()
+
+        # Refresh based on document count
+        if self.stats.documents_processed >= self.refresh_interval:
+            self.logger.info(
+                f"Refresh triggered: processed {self.stats.documents_processed} documents"
+            )
             return True
 
         # Check GPU memory if available
-        if torch.cuda.is_available():
-            memory_used = torch.cuda.memory_allocated() / (1024**3)  # GB
-            memory_total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            memory_percent = (memory_used / memory_total) * 100
+        if torch.cuda.is_available() and self.device == "cuda":
+            try:
+                memory_used = torch.cuda.memory_allocated() / (1024**3)  # GB
+                memory_total = torch.cuda.get_device_properties(0).total_memory / (
+                    1024**3
+                )
+                memory_percent = (memory_used / memory_total) * 100
 
-            if memory_percent > self.memory_threshold:
+                if memory_percent > self.memory_threshold:
+                    self.logger.warning(
+                        f"Refresh triggered: GPU memory usage {memory_percent:.1f}%"
+                    )
+                    return True
+            except Exception as e:
+                self.logger.warning(f"Could not check GPU memory: {e}")
+
+        # Check processing time degradation (refresh if processing is taking too long)
+        if self.stats.documents_processed > 0:
+            avg_time_per_doc = (
+                self.stats.total_processing_time / self.stats.documents_processed
+            )
+            if avg_time_per_doc > 60.0:  # More than 1 minute per document
                 self.logger.warning(
-                    f"High GPU memory usage detected: {memory_percent:.1f}%"
+                    f"Refresh triggered: slow processing ({avg_time_per_doc:.1f}s per doc)"
                 )
                 return True
 
         return False
 
+    def refresh_model(self) -> None:
+        """Refresh the model to clear context and free memory"""
+        self.logger.info("Refreshing vision model...")
+        try:
+            self._load_model()
+            self.stats.memory_refreshes += 1
+            # Reset some counters but keep overall stats
+            processing_count = self.stats.documents_processed
+            self.stats.documents_processed = 0
+            self.logger.info(
+                f"Model refresh completed (total processed: {processing_count})"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to refresh model: {e}")
+            raise
+
+    def switch_model(self, new_model_id: str) -> bool:
+        """Switch to a different model"""
+        new_spec = self._get_model_spec_by_id(new_model_id)
+        if not new_spec:
+            self.logger.error(f"Model {new_model_id} not found in registry")
+            return False
+
+        if not self._model_fits_constraints(new_spec):
+            self.logger.error(f"Model {new_model_id} doesn't fit hardware constraints")
+            return False
+
+        try:
+            old_model = self.current_model_spec.name
+            self.current_model_spec = new_spec
+            self._load_model()
+            self.stats.model_switches += 1
+            self.logger.info(
+                f"Successfully switched from {old_model} to {new_spec.name}"
+            )
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to switch to model {new_model_id}: {e}")
+            return False
+
+    def _monitor_memory_usage(self) -> Dict[str, float]:
+        """Monitor current memory usage"""
+        memory_info = {}
+
+        # System RAM
+        ram = psutil.virtual_memory()
+        memory_info["system_ram_used_gb"] = (ram.total - ram.available) / (1024**3)
+        memory_info["system_ram_total_gb"] = ram.total / (1024**3)
+        memory_info["system_ram_percent"] = ram.percent
+
+        # GPU memory if available
+        if torch.cuda.is_available() and self.device == "cuda":
+            try:
+                memory_info["gpu_memory_used_gb"] = torch.cuda.memory_allocated() / (
+                    1024**3
+                )
+                memory_info["gpu_memory_reserved_gb"] = torch.cuda.memory_reserved() / (
+                    1024**3
+                )
+                memory_info["gpu_memory_total_gb"] = torch.cuda.get_device_properties(
+                    0
+                ).total_memory / (1024**3)
+                memory_info["gpu_memory_percent"] = (
+                    memory_info["gpu_memory_used_gb"]
+                    / memory_info["gpu_memory_total_gb"]
+                ) * 100
+            except Exception as e:
+                self.logger.warning(f"Could not get GPU memory info: {e}")
+
+        return memory_info
+
+    def _calculate_quality_metrics(self, result: Dict[str, Any]) -> Dict[str, float]:
+        """Calculate quality metrics for processing results"""
+        metrics = {}
+
+        # Text extraction quality
+        text = result.get("text", "")
+        if text and text not in ["NO_TEXT_FOUND", "TEXT_EXTRACTION_FAILED"]:
+            metrics["text_extraction_success"] = 1.0
+            metrics["text_length"] = len(text)
+            # Simple quality heuristic based on text length and diversity
+            unique_words = len(set(text.lower().split()))
+            total_words = len(text.split())
+            metrics["text_diversity"] = unique_words / max(total_words, 1)
+        else:
+            metrics["text_extraction_success"] = 0.0
+            metrics["text_length"] = 0
+            metrics["text_diversity"] = 0.0
+
+        # Description quality
+        description = result.get("description", "")
+        if description and description != "DESCRIPTION_GENERATION_FAILED":
+            metrics["description_success"] = 1.0
+            metrics["description_length"] = len(description)
+            # Check for descriptive keywords as quality indicator
+            descriptive_keywords = [
+                "color",
+                "layout",
+                "text",
+                "image",
+                "diagram",
+                "chart",
+                "table",
+            ]
+            keyword_count = sum(
+                1 for keyword in descriptive_keywords if keyword in description.lower()
+            )
+            metrics["description_richness"] = keyword_count / len(descriptive_keywords)
+        else:
+            metrics["description_success"] = 0.0
+            metrics["description_length"] = 0
+            metrics["description_richness"] = 0.0
+
+        return metrics
+
     def _pdf_to_images(self, pdf_path: Union[str, Path]) -> List[Image.Image]:
-        # Convert PDF pages to PIL Image objects for processing
-        pdf_path_obj: Path = Path(pdf_path)
+        """Convert PDF pages to PIL Image objects with adaptive resolution"""
+        pdf_path_obj = Path(pdf_path)
         self.logger.info(f"Converting PDF to images: {pdf_path_obj}")
 
-        # Validate file existence
         if not pdf_path_obj.exists():
             self.logger.error(f"PDF file not found: {pdf_path_obj}")
             raise FileNotFoundError(f"PDF file not found: {pdf_path_obj}")
 
         try:
-            self.logger.debug("Opening PDF with PyMuPDF")
-            # Open PDF document using PyMuPDF
-            doc = fitz.open(str(pdf_path_obj))  # type: ignore[attr-defined]
-            images: List[Image.Image] = []
-            page_count: int = len(doc)
+            doc = fitz.open(str(pdf_path_obj))
+            images = []
+            page_count = len(doc)
 
-            self.logger.info(f"PDF has {page_count} pages to convert")
+            # Adjust resolution based on processing mode
+            zoom_factors = {
+                ProcessingMode.FAST: 1.5,
+                ProcessingMode.BALANCED: 2.0,
+                ProcessingMode.HIGH_QUALITY: 3.0,
+            }
+            zoom = zoom_factors.get(self.processing_mode, 2.0)
 
-            # Process each page individually
+            self.logger.info(f"PDF has {page_count} pages, using {zoom}x zoom")
+
             for page_num in range(page_count):
-                self.logger.debug(f"Converting page {page_num + 1}/{page_count}")
-
                 try:
-                    # Get specific page from document
-                    page = doc[page_num]  # type: ignore[index]
-
-                    # Create transformation matrix for higher resolution (2x zoom)
-                    mat: fitz.Matrix = fitz.Matrix(2.0, 2.0)  # type: ignore[attr-defined]
-
-                    # Render page as pixmap with enhanced resolution
-                    pix = page.get_pixmap(matrix=mat)  # type: ignore[attr-defined]
-
-                    # Convert pixmap to PNG bytes
-                    img_data: bytes = pix.tobytes("png")  # type: ignore[attr-defined]
-
-                    # Create PIL Image from bytes
-                    img: Image.Image = Image.open(io.BytesIO(img_data))
+                    page = doc[page_num]
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = page.get_pixmap(matrix=mat)
+                    img_data = pix.tobytes("png")
+                    img = Image.open(io.BytesIO(img_data))
                     images.append(img)
 
                     self.logger.debug(
-                        f"Page {page_num + 1} converted successfully - size: {img.size}"
+                        f"Page {page_num + 1} converted - size: {img.size}"
                     )
-
                 except Exception as e:
                     self.logger.error(f"Failed to convert page {page_num + 1}: {e}")
-                    # Continue processing remaining pages even if one fails
                     continue
 
-            # Clean up document resources
-            doc.close()  # type: ignore[attr-defined]
-            self.logger.info(
-                f"Successfully converted {len(images)}/{page_count} pages to images"
-            )
+            doc.close()
+            self.logger.info(f"Successfully converted {len(images)}/{page_count} pages")
             return images
 
         except Exception as e:
@@ -207,62 +573,43 @@ class QwenDocumentProcessor:
         extract_text: bool = True,
         describe_image: bool = True,
     ) -> Dict[str, Any]:
-        # Process individual image for text extraction and/or visual description
-        self.logger.debug("Processing single image")
+        """Process individual image with enhanced error handling and quality monitoring"""
+
+        start_time = time.time()
 
         try:
-            # Load image from file path if string/Path provided
-            processed_image: Image.Image
+            # Load image
             if isinstance(image, (str, Path)):
-                image_path: Path = Path(image)
-                self.logger.debug(f"Loading image from path: {image_path}")
-
-                # Validate image file exists
+                image_path = Path(image)
                 if not image_path.exists():
-                    self.logger.error(f"Image file not found: {image_path}")
                     raise FileNotFoundError(f"Image file not found: {image_path}")
-
                 processed_image = Image.open(image_path)
-                self.logger.debug(
-                    f"Image loaded successfully - size: {processed_image.size}, mode: {processed_image.mode}"
-                )
             else:
-                # Image is already a PIL Image object
                 processed_image = image
 
-            # Initialize results dictionary
-            results: Dict[str, Any] = {}
+            results = {}
 
-            # Text extraction branch
+            # Text extraction
             if extract_text:
-                self.logger.debug("Extracting text from image")
                 try:
-                    # Prepare messages for text extraction task
-                    text_messages: List[Dict[str, Any]] = [
+                    text_messages = [
                         {
                             "role": "user",
                             "content": [
                                 {"type": "image", "image": processed_image},
                                 {
                                     "type": "text",
-                                    "text": "Extract all text from this image. Return only the text content, no explanations or formatting. If there's no text, return 'NO_TEXT_FOUND'.",
+                                    "text": "Extract all text from this image. Return only the text content, no explanations. If there's no text, return 'NO_TEXT_FOUND'.",
                                 },
                             ],
                         }
                     ]
 
-                    self.logger.debug("Preparing text extraction inputs")
-                    # Apply chat template to format messages properly
-                    text_inputs: str = self.processor.apply_chat_template(
+                    text_inputs = self.processor.apply_chat_template(
                         text_messages, tokenize=False, add_generation_prompt=True
                     )
-
-                    # Process vision information (images/videos)
-                    image_inputs: Any
-                    video_inputs: Any
                     image_inputs, video_inputs = process_vision_info(text_messages)
 
-                    # Tokenize and prepare inputs for model
                     inputs = self.processor(
                         text=[text_inputs],
                         images=image_inputs,
@@ -270,25 +617,21 @@ class QwenDocumentProcessor:
                         padding=True,
                         return_tensors="pt",
                     )
-
-                    # Move inputs to appropriate device (GPU/CPU)
                     inputs = inputs.to(self.device)
 
-                    self.logger.debug("Running text extraction inference")
-                    # Generate text using the model
-                    with torch.no_grad():  # Disable gradient computation for inference
-                        generated_ids: torch.Tensor = self.model.generate(
-                            **inputs, max_new_tokens=512
+                    with torch.no_grad():
+                        generated_ids = self.model.generate(
+                            **inputs,
+                            max_new_tokens=self.current_model_spec.max_tokens,
+                            do_sample=False,  # Deterministic for consistency
                         )
 
-                        # Remove input tokens from generated output
-                        generated_ids_trimmed: List[torch.Tensor] = [
+                        generated_ids_trimmed = [
                             out_ids[len(in_ids) :]
                             for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                         ]
 
-                        # Decode generated tokens to text
-                        text_output: str = self.processor.batch_decode(
+                        text_output = self.processor.batch_decode(
                             generated_ids_trimmed,
                             skip_special_tokens=True,
                             clean_up_tokenization_spaces=False,
@@ -296,24 +639,14 @@ class QwenDocumentProcessor:
 
                         results["text"] = text_output.strip()
 
-                        # Log extraction results
-                        if results["text"] == "NO_TEXT_FOUND":
-                            self.logger.debug("No text found in image")
-                        else:
-                            self.logger.info(
-                                f"Text extracted successfully - {len(results['text'])} characters"
-                            )
-
                 except Exception as e:
                     self.logger.error(f"Text extraction failed: {e}")
                     results["text"] = "TEXT_EXTRACTION_FAILED"
 
-            # Image description branch
+            # Image description
             if describe_image:
-                self.logger.debug("Generating image description")
                 try:
-                    # Prepare messages for image description task
-                    desc_messages: List[Dict[str, Any]] = [
+                    desc_messages = [
                         {
                             "role": "user",
                             "content": [
@@ -326,16 +659,11 @@ class QwenDocumentProcessor:
                         }
                     ]
 
-                    self.logger.debug("Preparing image description inputs")
-                    # Apply chat template for description task
-                    desc_inputs: str = self.processor.apply_chat_template(
+                    desc_inputs = self.processor.apply_chat_template(
                         desc_messages, tokenize=False, add_generation_prompt=True
                     )
-
-                    # Process vision information for description
                     image_inputs, video_inputs = process_vision_info(desc_messages)
 
-                    # Prepare inputs for model inference
                     inputs = self.processor(
                         text=[desc_inputs],
                         images=image_inputs,
@@ -343,191 +671,183 @@ class QwenDocumentProcessor:
                         padding=True,
                         return_tensors="pt",
                     )
-
-                    # Move to appropriate device
                     inputs = inputs.to(self.device)
 
-                    self.logger.debug("Running image description inference")
-                    # Generate description using the model
                     with torch.no_grad():
                         generated_ids = self.model.generate(
-                            **inputs, max_new_tokens=512
+                            **inputs,
+                            max_new_tokens=self.current_model_spec.max_tokens,
+                            do_sample=False,
                         )
 
-                        # Trim input tokens from output
                         generated_ids_trimmed = [
                             out_ids[len(in_ids) :]
                             for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                         ]
 
-                        # Decode to human-readable text
-                        desc_output: str = self.processor.batch_decode(
+                        desc_output = self.processor.batch_decode(
                             generated_ids_trimmed,
                             skip_special_tokens=True,
                             clean_up_tokenization_spaces=False,
                         )[0]
 
                         results["description"] = desc_output.strip()
-                        self.logger.info(
-                            f"Image description generated successfully - {len(results['description'])} characters"
-                        )
 
                 except Exception as e:
                     self.logger.error(f"Image description failed: {e}")
                     results["description"] = "DESCRIPTION_GENERATION_FAILED"
 
-            self.logger.debug("Single image processing completed")
+            # Calculate processing time and quality metrics
+            processing_time = time.time() - start_time
+            results["processing_time"] = processing_time
+            results["quality_metrics"] = self._calculate_quality_metrics(results)
+
             return results
 
         except Exception as e:
-            self.logger.error(f"Failed to process single image: {e}")
+            self.logger.error(f"Failed to process image: {e}")
             raise
 
     def extract_article_semantics(self, document: Union[str, Path]) -> Dict[str, str]:
-        # Process document file (PDF or image) and extract all text + descriptions
-        document_obj: Path = Path(document)
+        """Process document with enhanced monitoring and performance tracking"""
+        document_obj = Path(document)
         self.logger.info(f"Starting document processing: {document_obj}")
 
-        # Check if model should be refreshed due to usage
+        start_time = time.time()
+
+        # Check if model should be refreshed
         if self._should_refresh_model():
             self.logger.info(
                 "Auto-refreshing model due to usage threshold or memory pressure"
             )
             self.refresh_model()
 
-        # Validate file exists
+        # Monitor memory before processing
+        memory_before = self._monitor_memory_usage()
+        self.logger.debug(
+            f"Memory before processing: GPU {memory_before.get('gpu_memory_percent', 0):.1f}%, "
+            f"RAM {memory_before.get('system_ram_percent', 0):.1f}%"
+        )
+
         if not document_obj.exists():
-            self.logger.error(f"Document file not found: {document_obj}")
             raise FileNotFoundError(f"Document file not found: {document_obj}")
 
-        # Determine file type from extension
-        file_ext: str = document_obj.suffix.lower()
-        self.logger.info(f"Document type detected: {file_ext}")
+        file_ext = document_obj.suffix.lower()
+        self.logger.info(f"Document type: {file_ext}")
 
-        # Initialize result containers
-        all_text: List[str] = []
-        all_descriptions: List[str] = []
+        all_text = []
+        all_descriptions = []
+        page_quality_metrics = []
 
         try:
-            # Handle PDF documents
             if file_ext == ".pdf":
-                self.logger.info(f"Processing PDF document: {document_obj}")
-
-                # Convert PDF pages to images first
-                images: List[Image.Image] = self._pdf_to_images(document_obj)
-                total_pages: int = len(images)
-
+                images = self._pdf_to_images(document_obj)
+                total_pages = len(images)
                 self.logger.info(f"Processing {total_pages} pages from PDF")
 
-                # Process each page individually
                 for i, img in enumerate(images):
-                    page_num: int = i + 1
-                    self.logger.info(f"Processing page {page_num}/{total_pages}")
+                    page_num = i + 1
+                    self.logger.debug(f"Processing page {page_num}/{total_pages}")
 
                     try:
-                        # Extract text and description from current page
-                        result: Dict[str, Any] = self._process_single_image(img)
+                        result = self._process_single_image(img)
+                        page_quality_metrics.append(result.get("quality_metrics", {}))
 
-                        # Handle text extraction results
+                        # Handle text extraction
                         if result.get("text") and result["text"] not in [
                             "NO_TEXT_FOUND",
                             "TEXT_EXTRACTION_FAILED",
                         ]:
-                            page_text: str = (
-                                f"=== Page {page_num} ===\n{result['text']}"
-                            )
+                            page_text = f"=== Page {page_num} ===\n{result['text']}"
                             all_text.append(page_text)
-                            self.logger.debug(
-                                f"Page {page_num}: Text extracted successfully"
-                            )
-                        else:
-                            self.logger.debug(
-                                f"Page {page_num}: No text found or extraction failed"
-                            )
+                            self.stats.text_extractions_successful += 1
 
-                        # Handle description generation results
+                        # Handle descriptions
                         if (
                             result.get("description")
                             and result["description"] != "DESCRIPTION_GENERATION_FAILED"
                         ):
-                            page_desc: str = (
-                                f"=== Page {page_num} Visual Description ===\n{result['description']}"
-                            )
+                            page_desc = f"=== Page {page_num} Visual Description ===\n{result['description']}"
                             all_descriptions.append(page_desc)
-                            self.logger.debug(
-                                f"Page {page_num}: Description generated successfully"
-                            )
-                        else:
-                            self.logger.debug(
-                                f"Page {page_num}: Description generation failed"
-                            )
+                            self.stats.descriptions_successful += 1
+
+                        self.stats.pages_processed += 1
 
                     except Exception as e:
                         self.logger.error(f"Failed to process page {page_num}: {e}")
-                        # Continue with remaining pages even if one fails
                         continue
 
-                self.logger.info(
-                    f"PDF processing complete - {len(all_text)} pages with text, {len(all_descriptions)} with descriptions"
-                )
-
-            # Handle image files
             elif file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]:
                 self.logger.info(f"Processing image file: {document_obj}")
 
-                try:
-                    # Process single image file
-                    result: Dict[str, Any] = self._process_single_image(document_obj)
+                result = self._process_single_image(document_obj)
+                page_quality_metrics.append(result.get("quality_metrics", {}))
 
-                    # Handle text extraction from image
-                    if result.get("text") and result["text"] not in [
-                        "NO_TEXT_FOUND",
-                        "TEXT_EXTRACTION_FAILED",
-                    ]:
-                        all_text.append(result["text"])
-                        self.logger.info("Image text extraction successful")
-                    else:
-                        self.logger.info("No text found in image or extraction failed")
+                if result.get("text") and result["text"] not in [
+                    "NO_TEXT_FOUND",
+                    "TEXT_EXTRACTION_FAILED",
+                ]:
+                    all_text.append(result["text"])
+                    self.stats.text_extractions_successful += 1
 
-                    # Handle image description generation
-                    if (
-                        result.get("description")
-                        and result["description"] != "DESCRIPTION_GENERATION_FAILED"
-                    ):
-                        all_descriptions.append(result["description"])
-                        self.logger.info("Image description generation successful")
-                    else:
-                        self.logger.warning("Image description generation failed")
+                if (
+                    result.get("description")
+                    and result["description"] != "DESCRIPTION_GENERATION_FAILED"
+                ):
+                    all_descriptions.append(result["description"])
+                    self.stats.descriptions_successful += 1
 
-                except Exception as e:
-                    self.logger.error(f"Failed to process image: {e}")
-                    raise
+                self.stats.pages_processed += 1
 
-            # Handle unsupported file types
             else:
-                error_msg: str = f"Unsupported file type: {file_ext}"
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
+                raise ValueError(f"Unsupported file type: {file_ext}")
 
-            # Compile final results into strings
-            final_text: str = (
+            # Compile results
+            final_text = (
                 "\n\n".join(all_text) if all_text else "No text found in document."
             )
-            final_descriptions: str = (
+            final_descriptions = (
                 "\n\n".join(all_descriptions)
                 if all_descriptions
                 else "No visual content described."
             )
 
-            # Increment processing counter
-            self.documents_processed += 1
+            # Update statistics
+            processing_time = time.time() - start_time
+            self.stats.total_processing_time += processing_time
+            self.stats.documents_processed += 1
 
-            self.logger.info(f"Document processing completed successfully")
-            self.logger.info(
-                f"Final results - Text: {len(final_text)} chars, Descriptions: {len(final_descriptions)} chars"
+            # Update average metrics
+            if all_text:
+                avg_text_length = sum(len(text) for text in all_text) / len(all_text)
+                self.stats.average_text_length = (
+                    self.stats.average_text_length
+                    * (self.stats.documents_processed - 1)
+                    + avg_text_length
+                ) / self.stats.documents_processed
+
+            if all_descriptions:
+                avg_desc_length = sum(len(desc) for desc in all_descriptions) / len(
+                    all_descriptions
+                )
+                self.stats.average_description_length = (
+                    self.stats.average_description_length
+                    * (self.stats.documents_processed - 1)
+                    + avg_desc_length
+                ) / self.stats.documents_processed
+
+            # Monitor memory after processing
+            memory_after = self._monitor_memory_usage()
+            self.logger.debug(
+                f"Memory after processing: GPU {memory_after.get('gpu_memory_percent', 0):.1f}%, "
+                f"RAM {memory_after.get('system_ram_percent', 0):.1f}%"
             )
 
-            # Return structured results
+            self.logger.info(f"Document processing completed in {processing_time:.2f}s")
+            self.logger.info(
+                f"Results - Text: {len(final_text)} chars, Descriptions: {len(final_descriptions)} chars"
+            )
+
             return {
                 "all_text": final_text,
                 "all_imagery": final_descriptions,
@@ -538,20 +858,108 @@ class QwenDocumentProcessor:
             raise
 
     def get_processing_stats(self) -> Dict[str, Any]:
-        """Get current processing statistics"""
+        """Get comprehensive processing statistics"""
         stats = {
-            "documents_processed": self.documents_processed,
-            "model_loaded": self.model is not None,
+            "documents_processed": self.stats.documents_processed,
+            "pages_processed": self.stats.pages_processed,
+            "text_extractions_successful": self.stats.text_extractions_successful,
+            "descriptions_successful": self.stats.descriptions_successful,
+            "total_processing_time": self.stats.total_processing_time,
+            "memory_refreshes": self.stats.memory_refreshes,
+            "model_switches": self.stats.model_switches,
+            "current_model": {
+                "name": self.current_model_spec.name,
+                "model_id": self.current_model_spec.model_id,
+                "quality_score": self.current_model_spec.quality_score,
+            },
             "device": self.device,
+            "processing_mode": self.processing_mode.value,
         }
 
-        if torch.cuda.is_available():
-            stats["gpu_memory_used_gb"] = torch.cuda.memory_allocated() / (1024**3)
-            stats["gpu_memory_total_gb"] = torch.cuda.get_device_properties(
-                0
-            ).total_memory / (1024**3)
-            stats["gpu_memory_percent"] = (
-                stats["gpu_memory_used_gb"] / stats["gpu_memory_total_gb"]
-            ) * 100
+        # Calculate rates and averages
+        if self.stats.documents_processed > 0:
+            stats["avg_processing_time_per_doc"] = (
+                self.stats.total_processing_time / self.stats.documents_processed
+            )
+            stats["text_extraction_success_rate"] = (
+                self.stats.text_extractions_successful / self.stats.pages_processed
+                if self.stats.pages_processed > 0
+                else 0
+            )
+            stats["description_success_rate"] = (
+                self.stats.descriptions_successful / self.stats.pages_processed
+                if self.stats.pages_processed > 0
+                else 0
+            )
+            stats["average_text_length"] = self.stats.average_text_length
+            stats["average_description_length"] = self.stats.average_description_length
+
+        # Add current memory usage
+        stats["memory_usage"] = self._monitor_memory_usage()
+
+        # Hardware constraints
+        stats["hardware_constraints"] = {
+            "max_gpu_vram_gb": self.hardware_constraints.max_gpu_vram_gb,
+            "max_ram_gb": self.hardware_constraints.max_ram_gb,
+            "force_cpu": self.hardware_constraints.force_cpu,
+        }
 
         return stats
+
+    def get_available_models(self) -> List[Dict[str, Any]]:
+        """Get list of models that fit current hardware constraints"""
+        available_models = []
+        for model_spec in self.model_registry:
+            fits = self._model_fits_constraints(model_spec)
+            available_models.append(
+                {
+                    "name": model_spec.name,
+                    "model_id": model_spec.model_id,
+                    "quality_score": model_spec.quality_score,
+                    "min_gpu_vram_gb": model_spec.min_gpu_vram_gb,
+                    "min_ram_gb": model_spec.min_ram_gb,
+                    "fits_constraints": fits,
+                    "is_current": model_spec == self.current_model_spec,
+                }
+            )
+        return available_models
+
+    def optimize_performance(self) -> Dict[str, Any]:
+        """Analyze performance and suggest optimizations"""
+        stats = self.get_processing_stats()
+        suggestions = []
+
+        # Check success rates
+        text_success_rate = stats.get("text_extraction_success_rate", 0)
+        desc_success_rate = stats.get("description_success_rate", 0)
+
+        if text_success_rate < 0.8:
+            suggestions.append(
+                "Consider switching to a higher quality model for better text extraction"
+            )
+
+        if desc_success_rate < 0.8:
+            suggestions.append(
+                "Consider adjusting processing mode to HIGH_QUALITY for better descriptions"
+            )
+
+        # Check processing speed
+        avg_time = stats.get("avg_processing_time_per_doc", 0)
+        if avg_time > 30:
+            suggestions.append(
+                "Processing is slow - consider using FAST mode or switching to a smaller model"
+            )
+
+        # Check memory usage
+        memory_usage = stats.get("memory_usage", {})
+        gpu_percent = memory_usage.get("gpu_memory_percent", 0)
+        if gpu_percent > 90:
+            suggestions.append(
+                "GPU memory usage is very high - consider reducing refresh interval or using CPU mode"
+            )
+
+        return {
+            "current_performance": stats,
+            "optimization_suggestions": suggestions,
+            "available_models": self.get_available_models(),
+        }
