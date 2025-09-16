@@ -3,6 +3,11 @@
 from tqdm import tqdm
 import logging
 import json
+import subprocess
+import requests
+import time
+import os
+import signal
 from datetime import datetime
 from pathlib import Path
 from typing import List, Set, Dict, Any
@@ -23,7 +28,7 @@ from visual_processor import (
     HardwareConstraints,
     ProcessingStats,
 )
-from language_processor import LanguageProcessor, ExtractionMode
+from language_processor import LanguageProcessor
 from database_processor import create_final_spreadsheet
 
 
@@ -167,7 +172,8 @@ PATHS: Dict[str, Path] = {
     "metadata_dir": BASE_DIR / "metadata_extracted",
     "semantics_dir": BASE_DIR / "visually_processed",
     "logs_dir": BASE_DIR / "session_logs",
-    "completed_dir": BASE_DIR / "completed_artifacts",
+    "process_completed_dir": BASE_DIR / "processed_artifacts",
+    "encrypted_dir": BASE_DIR / "encrypted_artifacts",
     "temp_dir": BASE_DIR / "temp",
     "review_dir": BASE_DIR
     / "review_required",  # For zero-byte files and problematic files
@@ -348,9 +354,9 @@ unprocessed_artifacts: List[Path] = [
 
 if len(unprocessed_artifacts) > 0:
 
-    logger.info("\n" + "=" * 80)
+    logger.info("=" * 80)
     logger.info(
-        "STAGE 1: DUPLICATE DETECTION, UNSUPPORTED FILES, AND CHECKSUM VERIFICATION"
+        "DUPLICATE DETECTION, UNSUPPORTED FILES, AND CHECKSUM VERIFICATION STAGE"
     )
     logger.info("=" * 80)
     logger.info("Scanning unprocessed artifacts for duplicates and zero-byte files...")
@@ -460,8 +466,8 @@ if len(unprocessed_artifacts) > 0:
     # STAGE 2: UUID RENAMING AND PROFILE CREATION
     # =====================================================================
 
-    logger.info("\n" + "=" * 80)
-    logger.info("STAGE 2: UUID RENAMING AND PROFILE CREATION")
+    logger.info("=" * 80)
+    logger.info("UUID RENAMING AND PROFILE CREATION STAGE")
     logger.info("=" * 80)
     logger.info("Renaming artifacts with unique UUIDs and creating profile files...")
 
@@ -536,8 +542,8 @@ if len(unprocessed_artifacts) > 0:
 renamed_artifacts: List[Path] = [item for item in PATHS["rename_dir"].iterdir()]
 
 if len(renamed_artifacts) > 0:
-    logger.info("\n" + "=" * 80)
-    logger.info("STAGE 3: METADATA EXTRACTION")
+    logger.info("=" * 80)
+    logger.info("AUTOMATED TECHNICAL METADATA EXTRACTION STAGE")
     logger.info("=" * 80)
     logger.info("Extracting technical metadata from renamed artifacts...")
 
@@ -628,8 +634,8 @@ metadata_artifacts: List[Path] = [item for item in PATHS["metadata_dir"].iterdir
 
 if len(metadata_artifacts) > 0:
 
-    logger.info("\n" + "=" * 80)
-    logger.info("STAGE 4: SEMANTIC EXTRACTION (VISUAL PROCESSING)")
+    logger.info("=" * 80)
+    logger.info("ARTIFACT VISUAL PROCESSING STAGE")
     logger.info("=" * 80)
     logger.info("Extracting semantic data using enhanced visual processor...")
 
@@ -643,15 +649,25 @@ if len(metadata_artifacts) > 0:
     try:
         # Configure visual processing parameters (can be made configurable via config file)
         visual_config = {
-            "max_gpu_vram_gb": None,  # Auto-detect (or set specific limit like 8.0)
-            "max_ram_gb": None,  # Auto-detect (or set specific limit like 16.0)
-            "force_cpu": False,  # Set to True to force CPU-only processing
-            "processing_mode": ProcessingMode.HIGH_QUALITY,  # FAST, BALANCED, or HIGH_QUALITY
-            "refresh_interval": 10,  # Refresh model every 10 documents
-            "memory_threshold": 80.0,  # Refresh at 80% GPU memory usage
-            "auto_model_selection": True,  # Automatically select best model for hardware
-            "preferred_model": None,  # Optional: "Qwen/Qwen2-VL-7B-Instruct"
+            "max_gpu_vram_gb": 11.0,  # Use most of your 9.6GB GPU
+            "max_ram_gb": 48.0,  # Limit to 48GB as requested (was auto-detecting 44.8GB)
+            "force_cpu": False,  # Make sure GPU is used
+            "processing_mode": ProcessingMode.FAST,  # Changed from HIGH_QUALITY
+            "refresh_interval": 5,  # More frequent refresh due to memory pressure
+            "memory_threshold": 70.0,  # Lower threshold for cleanup
+            "auto_model_selection": True,
+            "preferred_model": "Qwen/Qwen2-VL-2B-Instruct",  # Force smaller, faster model
         }
+
+        # logger.info("=== PERFORMANCE DEBUG INFO ===")
+        # logger.info(f"GPU Available: {torch.cuda.is_available()}")
+        # logger.info(f"GPU Device Count: {torch.cuda.device_count()}")
+        # if torch.cuda.is_available():
+        #     logger.info(f"GPU Name: {torch.cuda.get_device_name(0)}")
+        #     logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.1f}GB")
+        # logger.info(f"System RAM: {psutil.virtual_memory().total / (1024**3):.1f}GB")
+        # logger.info(f"Available RAM: {psutil.virtual_memory().available / (1024**3):.1f}GB")
+        # logger.info("=" * 30)
 
         # Initialize enhanced visual processor
         processor = VisualProcessor(
@@ -965,7 +981,7 @@ if len(metadata_artifacts) > 0:
         else 0
     )
 
-    logger.info("\n" + "=" * 80)
+    logger.info("=" * 80)
     logger.info("SEMANTIC EXTRACTION COMPLETE - FINAL STATISTICS")
     logger.info("=" * 80)
     logger.info(f"Total files processed: {processing_stats['total_processed']}")
@@ -1040,8 +1056,8 @@ semantic_artifacts: List[Path] = [item for item in PATHS["semantics_dir"].iterdi
 
 if len(semantic_artifacts) > 0:
 
-    logger.info("\n" + "=" * 80)
-    logger.info("STAGE 5: LLM FIELD EXTRACTION (SEMANTIC METADATA)")
+    logger.info("=" * 80)
+    logger.info("LLM-BASED SEMANTIC METADATA EXTRACTION STAGE")
     logger.info("=" * 80)
     logger.info("Extracting structured document fields using LLM...")
 
@@ -1051,62 +1067,26 @@ if len(semantic_artifacts) > 0:
         f"Found {len(semantic_artifacts)} artifacts ready for LLM field extraction"
     )
 
-    # Initialize enhanced LLM field extractor with hardware optimization
-    try:
-        # Configure extraction parameters (can be made configurable via config file)
-        extraction_config = {
-            "max_ram_gb": None,  # Auto-detect (or set specific limit like 16.0)
-            "max_gpu_vram_gb": None,  # Auto-detect (or set specific limit like 8.0)
-            "max_cpu_cores": None,  # Auto-detect (or set specific limit like 8)
-            "context_refresh_interval": 50,  # Refresh context every 50 prompts
-            "extraction_mode": ExtractionMode.AUTO,  # Try single, fallback to multi
-            "auto_model_selection": True,  # Automatically select best model for hardware
-            "timeout": 300,  # 5 minute timeout for each extraction
-        }
+    # Configure extraction parameters (can be made configurable via config file)
+    extraction_config = {
+        "max_ram_gb": 40.0,  # Auto-detect (or set specific limit like 16.0)
+        "max_gpu_vram_gb": 11.0,  # Auto-detect (or set specific limit like 8.0)
+        "max_cpu_cores": None,  # Auto-detect (or set specific limit like 8)
+        "context_refresh_interval": 50,  # Refresh context every 50 prompts
+        "auto_model_selection": False,  # Automatically select best model for hardware
+        "timeout": 300,  # 5 minute timeout for each extraction
+    }
 
-        field_extractor = LanguageProcessor(
-            logger=logger,
-            max_ram_gb=extraction_config["max_ram_gb"],
-            max_gpu_vram_gb=extraction_config["max_gpu_vram_gb"],
-            max_cpu_cores=extraction_config["max_cpu_cores"],
-            context_refresh_interval=extraction_config["context_refresh_interval"],
-            extraction_mode=extraction_config["extraction_mode"],
-            auto_model_selection=extraction_config["auto_model_selection"],
-            timeout=extraction_config["timeout"],
-        )
-
-        # Log initialization details
-        logger.info("Enhanced LLM Document Field Extractor initialized successfully")
-        extractor_stats = field_extractor.get_stats()
-        logger.info(f"Selected model: {extractor_stats['model']}")
-        logger.info(
-            f"Hardware constraints: RAM={extractor_stats['hardware_constraints']['max_ram_gb']:.1f}GB, "
-            f"GPU={extractor_stats['hardware_constraints']['max_gpu_vram_gb']:.1f}GB, "
-            f"CPU={extractor_stats['hardware_constraints']['max_cpu_cores']} cores"
-        )
-        logger.info(
-            f"Available models for current hardware: {field_extractor.get_available_models()}"
-        )
-        logger.info(
-            f"Context refresh interval: {extractor_stats['context_refresh_interval']} prompts"
-        )
-        logger.info(f"Extraction mode: {extractor_stats['extraction_mode']}")
-
-    except Exception as e:
-        logger.error(f"Failed to initialize LLM field extractor: {e}")
-        logger.error("Falling back to basic configuration...")
-
-        # Fallback to basic configuration if enhanced setup fails
-        field_extractor = LanguageProcessor(
-            logger=logger,
-            auto_model_selection=False,  # Use default model
-            extraction_mode=ExtractionMode.SINGLE_PROMPT,
-        )
-        logger.warning("Using fallback LLM configuration")
-
-    # Create new directory for LLM-processed artifacts
-    PATHS["llm_processed_dir"] = BASE_DIR / "llm_processed"
-    PATHS["llm_processed_dir"].mkdir(parents=True, exist_ok=True)
+    field_extractor = LanguageProcessor(
+        logger=logger,
+        host="http://localhost:11434",
+        max_ram_gb=extraction_config["max_ram_gb"],
+        max_gpu_vram_gb=extraction_config["max_gpu_vram_gb"],
+        max_cpu_cores=extraction_config["max_cpu_cores"],
+        context_refresh_interval=extraction_config["context_refresh_interval"],
+        auto_model_selection=extraction_config["auto_model_selection"],
+        timeout=extraction_config["timeout"],
+    )
 
     # Track processing statistics
     processing_stats = {
@@ -1171,7 +1151,7 @@ if len(semantic_artifacts) > 0:
             )
 
             # Track pre-extraction stats to detect context refreshes
-            pre_extraction_stats = field_extractor.get_stats()
+            # pre_extraction_stats = field_extractor.get_stats()
 
             # Extract structured fields using enhanced LLM
             extraction_result = field_extractor.extract_fields(
@@ -1181,19 +1161,7 @@ if len(semantic_artifacts) > 0:
                 uuid=artifact_id,
             )
 
-            # Track post-extraction stats
-            post_extraction_stats = field_extractor.get_stats()
             processing_stats["total_processed"] += 1
-
-            # Check if context was refreshed during this extraction
-            if (
-                pre_extraction_stats["prompts_since_refresh"]
-                > post_extraction_stats["prompts_since_refresh"]
-            ):
-                processing_stats["context_refreshes"] += 1
-                logger.info(
-                    f"Context was refreshed during processing of {artifact.name}"
-                )
 
             # Update profile with LLM-extracted fields and stage completion
             profile_data["llm_extraction"] = extraction_result
@@ -1220,7 +1188,9 @@ if len(semantic_artifacts) > 0:
                 json.dump(profile_data, f, indent=2)
 
             # Move artifact to next stage directory
-            moved_artifact = artifact.rename(PATHS["llm_processed_dir"] / artifact.name)
+            moved_artifact = artifact.rename(
+                PATHS["process_completed_dir"] / artifact.name
+            )
 
             # Update session tracking
             if extraction_result["success"]:
@@ -1270,28 +1240,6 @@ if len(semantic_artifacts) > 0:
                 logger.warning(
                     f"LLM extraction failed for {artifact.name}: {extraction_result.get('error', 'Unknown error')}"
                 )
-
-                # For failures, check if we should try a different model
-                if (
-                    processing_stats["failed_extractions"] > 5
-                    and processing_stats["failed_extractions"] % 10 == 0
-                ):
-                    available_models = field_extractor.get_available_models()
-                    current_model = field_extractor.model
-
-                    # Try switching to a different model if available
-                    other_models = [m for m in available_models if m != current_model]
-                    if other_models:
-                        new_model = other_models[0]
-                        logger.info(
-                            f"High failure rate detected. Attempting to switch from {current_model} to {new_model}"
-                        )
-
-                        if field_extractor.switch_model(new_model):
-                            processing_stats["model_switches"] += 1
-                            logger.info(f"Successfully switched to model: {new_model}")
-                        else:
-                            logger.warning(f"Failed to switch to model: {new_model}")
 
             # Log progress every 50 files
             if processing_stats["total_processed"] % 50 == 0:
@@ -1344,7 +1292,7 @@ if len(semantic_artifacts) > 0:
     final_stats = field_extractor.get_stats()
     processing_time = datetime.now() - processing_stats["start_time"]
 
-    logger.info("\n" + "=" * 80)
+    logger.info("=" * 80)
     logger.info("LLM FIELD EXTRACTION COMPLETE - FINAL STATISTICS")
     logger.info("=" * 80)
     logger.info(f"Total files processed: {processing_stats['total_processed']}")
@@ -1357,18 +1305,18 @@ if len(semantic_artifacts) > 0:
     logger.info(
         f"Average time per file: {processing_time / max(processing_stats['total_processed'], 1)}"
     )
-    logger.info("")
-    logger.info("LLM MODEL STATISTICS:")
-    logger.info(f"Final model used: {final_stats['model']}")
-    logger.info(f"Total LLM API calls made: {final_stats['total_processed']}")
-    logger.info(f"Context refreshes performed: {processing_stats['context_refreshes']}")
-    logger.info(f"Model switches performed: {processing_stats['model_switches']}")
-    logger.info(
-        f"Hardware utilized: RAM={final_stats['hardware_constraints']['max_ram_gb']:.1f}GB, "
-        f"GPU={final_stats['hardware_constraints']['max_gpu_vram_gb']:.1f}GB, "
-        f"CPU={final_stats['hardware_constraints']['max_cpu_cores']} cores"
-    )
-    logger.info(f"Extraction mode: {final_stats['extraction_mode']}")
+    # logger.info("")
+    # logger.info("LLM MODEL STATISTICS:")
+    # logger.info(f"Final model used: {final_stats['model']}")
+    # logger.info(f"Total LLM API calls made: {final_stats['total_processed']}")
+    # logger.info(f"Context refreshes performed: {processing_stats['context_refreshes']}")
+    # logger.info(f"Model switches performed: {processing_stats['model_switches']}")
+    # logger.info(
+    #     f"Hardware utilized: RAM={final_stats['hardware_constraints']['max_ram_gb']:.1f}GB, "
+    #     f"GPU={final_stats['hardware_constraints']['max_gpu_vram_gb']:.1f}GB, "
+    #     f"CPU={final_stats['hardware_constraints']['max_cpu_cores']} cores"
+    # )
+    # logger.info(f"Extraction mode: {final_stats['extraction_mode']}")
 
     # Save final processing statistics to session data
     session_data["llm_extraction_stats"] = {
@@ -1379,19 +1327,20 @@ if len(semantic_artifacts) > 0:
 
     logger.info("=" * 80)
 
+
 # =====================================================================
 # STAGE 6: COMPLETION AND FINAL PROCESSING
 # =====================================================================
 
 # Get all artifacts from LLM processed directory, sorted by size
 llm_processed_artifacts: List[Path] = [
-    item for item in PATHS["llm_processed_dir"].iterdir()
+    item for item in PATHS["process_completed_dir"].iterdir()
 ]
 
 if len(llm_processed_artifacts) > 0:
 
-    logger.info("\n" + "=" * 80)
-    logger.info("STAGE 6: COMPLETION AND FINAL PROCESSING")
+    logger.info("=" * 80)
+    logger.info("FINAL PROCESSING STAGE")
     logger.info("=" * 80)
     logger.info("Moving fully processed artifacts to completion directory...")
 
@@ -1457,7 +1406,9 @@ if len(llm_processed_artifacts) > 0:
                 json.dump(profile_data, f, indent=2)
 
             # Move artifact to completed directory
-            final_artifact = artifact.rename(PATHS["completed_dir"] / artifact.name)
+            final_artifact = artifact.rename(
+                PATHS["process_completed_dir"] / artifact.name
+            )
 
             # Update session tracking
             update_stage_counts("llm_processed", "completed", session_data)
@@ -1485,8 +1436,8 @@ profiles: List[Path] = [item for item in PATHS["profiles_dir"].iterdir()]
 
 if len(profiles) > 0:  # Fixed condition - process when we HAVE profiles
 
-    logger.info("\n" + "=" * 80)
-    logger.info("STAGE 7: DATABASE FORMATION")
+    logger.info("=" * 80)
+    logger.info("DATABASE FORMATION STAGE")
     logger.info("=" * 80)
     logger.info("Creating final spreadsheet databases from processed profiles...")
 
@@ -1547,37 +1498,37 @@ if len(profiles) > 0:  # Fixed condition - process when we HAVE profiles
             )
 
             # Add database formation timestamp
-            session_data["stages"]["database_formation"] = {
-                "status": "completed",
-                "timestamp": datetime.now().isoformat(),
-                "files_created": list(output_files.keys()),
-                "total_profiles_exported": len(profiles),
-            }
+            # session_data["stages"]["database_formation"] = {
+            #     "status": "completed",
+            #     "timestamp": datetime.now().isoformat(),
+            #     "files_created": list(output_files.keys()),
+            #     "total_profiles_exported": len(profiles),
+            # }
 
         else:
             logger.warning("No database files were created")
-            session_data["stages"]["database_formation"] = {
-                "status": "failed",
-                "timestamp": datetime.now().isoformat(),
-                "reason": "No output files generated",
-            }
+            # session_data["stages"]["database_formation"] = {
+            #     "status": "failed",
+            #     "timestamp": datetime.now().isoformat(),
+            #     "reason": "No output files generated",
+            # }
 
     except Exception as e:
         logger.error(f"Database formation failed: {e}")
-        session_data["errors"].append(
-            {
-                "file": "database_formation",
-                "stage": "database_formation",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat(),
-            }
-        )
+        # session_data["errors"].append(
+        #     {
+        #         "file": "database_formation",
+        #         "stage": "database_formation",
+        #         "error": str(e),
+        #         "timestamp": datetime.now().isoformat(),
+        #     }
+        # )
 
-        session_data["stages"]["database_formation"] = {
-            "status": "failed",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e),
-        }
+        # session_data["stages"]["database_formation"] = {
+        #     "status": "failed",
+        #     "timestamp": datetime.now().isoformat(),
+        #     "error": str(e),
+        # }
 
     # Update session JSON with final database information
     update_session_json()
@@ -1586,11 +1537,11 @@ if len(profiles) > 0:  # Fixed condition - process when we HAVE profiles
 
 else:
     logger.warning("No profiles found for database formation")
-    session_data["stages"]["database_formation"] = {
-        "status": "skipped",
-        "timestamp": datetime.now().isoformat(),
-        "reason": "No profiles found",
-    }
+    # session_data["stages"]["database_formation"] = {
+    #     "status": "skipped",
+    #     "timestamp": datetime.now().isoformat(),
+    #     "reason": "No profiles found",
+    # }
 
 # =====================================================================
 # STAGE 8: ARTIFACT ENCRYPTION AND PASSWORD PROTECTING
@@ -1610,7 +1561,7 @@ total_elapsed = (datetime.now() - session_start_time).total_seconds()
 successful_files = session_data["stage_counts"]["completed"]
 failed_files = session_data["stage_counts"]["failed"]
 
-logger.info("\n" + "=" * 80)
+logger.info("=" * 80)
 logger.info("PAPERTRAIL SESSION PROCESSING COMPLETED!")
 logger.info("=" * 80)
 logger.info(f"Session ID: {session_timestamp}")
@@ -1630,7 +1581,7 @@ logger.info(f"File Types Processed: {final_file_summary}")
 
 # Directory locations summary
 logger.info("\nOutput Locations:")
-logger.info(f"  Completed Files: {PATHS['completed_dir']}")
+logger.info(f"  Completed Files: {PATHS['process_completed_dir']}")
 logger.info(f"  Profile Data: {PATHS['profiles_dir']}")
 logger.info(f"  Session Logs: {PATHS['logs_dir']}")
 logger.info(f"  Files for Review: {PATHS['review_dir']}")

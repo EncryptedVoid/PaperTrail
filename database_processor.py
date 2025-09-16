@@ -97,7 +97,7 @@ class DocumentSpreadsheetExporter:
         self,
         profiles_dir: Path,
         output_dir: Path,
-        filename_prefix: str = "PaperTrail_Documents",
+        filename_prefix: str = "PaperTrail_Artifact_Registry",
     ) -> Dict[str, Path]:
         """
         Export all profile JSON files to Excel and CSV spreadsheets
