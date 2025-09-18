@@ -144,7 +144,7 @@ class LanguageProcessor:
 
     # NETWORK AND TIMEOUT CONFIGURATION
     # ==================================
-    DEFAULT_TIMEOUT_SECONDS = 300  # 5 minute timeout for LLM API requests
+    DEFAULT_TIMEOUT_SECONDS = 120  # 5 minute timeout for LLM API requests
     # How it works: Maximum time to wait for OLLAMA API response before giving up
     # Why 5 minutes: Accounts for various processing scenarios:
     #   - Small models (1-3B params): Usually respond in 5-30 seconds
@@ -289,7 +289,7 @@ class LanguageProcessor:
             if auto_model_selection:
                 self.model = self._select_optimal_model()
             else:
-                self.model = "mistral-nemo:12b"
+                self.model = "llama3.2:3b"  # "mistral-nemo:12b"
                 self.logger.warning(f"Using specified fallback model: {self.model}")
 
             # Load the model
@@ -315,6 +315,109 @@ class LanguageProcessor:
             if not hasattr(self, "model"):
                 self.model = "llama3.2:3b"
             raise
+
+    def _cleanup_existing_ollama_processes(self):
+        """
+        Kill all existing OLLAMA processes and free up port 11434.
+        This prevents conflicts when starting a new OLLAMA server.
+        """
+        self.logger.info("--- Cleaning up existing OLLAMA processes ---")
+
+        import platform
+        import subprocess
+        import time
+
+        try:
+            if platform.system() == "Windows":
+                # Method 1: Kill all ollama.exe processes
+                self.logger.debug("Killing OLLAMA processes on Windows...")
+
+                # Use taskkill to force-kill all ollama processes
+                result = subprocess.run(
+                    ["taskkill", "/F", "/IM", "ollama.exe"],
+                    capture_output=True,
+                    text=True,
+                    check=False,  # Don't raise exception if no processes found
+                )
+
+                if result.returncode == 0:
+                    self.logger.info("Successfully killed existing OLLAMA processes")
+                else:
+                    self.logger.debug(f"Taskkill result: {result.stderr}")
+
+                # Method 2: Kill anything using port 11434
+                self.logger.debug("Checking for processes using port 11434...")
+
+                # Find what's using port 11434
+                netstat_result = subprocess.run(
+                    ["netstat", "-ano"], capture_output=True, text=True, check=False
+                )
+
+                if netstat_result.returncode == 0:
+                    lines = netstat_result.stdout.split("\n")
+                    for line in lines:
+                        if ":11434" in line and "LISTENING" in line:
+                            # Extract PID (last column)
+                            parts = line.split()
+                            if parts:
+                                try:
+                                    pid = parts[-1]
+                                    self.logger.info(
+                                        f"Found process {pid} using port 11434, killing it..."
+                                    )
+                                    subprocess.run(
+                                        ["taskkill", "/F", "/PID", pid], check=False
+                                    )
+                                except (ValueError, IndexError):
+                                    continue
+
+                # Method 3: PowerShell cleanup as fallback
+                ps_command = "Get-Process -Name 'ollama' -ErrorAction SilentlyContinue | Stop-Process -Force"
+                subprocess.run(
+                    ["powershell", "-Command", ps_command],
+                    capture_output=True,
+                    check=False,
+                )
+
+            else:  # Linux/Mac
+                self.logger.debug("Killing OLLAMA processes on Unix-like system...")
+
+                # Kill all ollama processes
+                subprocess.run(["pkill", "-f", "ollama"], check=False)
+
+                # Kill anything using port 11434
+                subprocess.run(["fuser", "-k", "11434/tcp"], check=False)
+
+            # Wait a moment for processes to actually die
+            time.sleep(2)
+
+            # Verify port 11434 is free
+            self._verify_port_free()
+
+            self.logger.info("OLLAMA cleanup completed successfully")
+
+        except Exception as e:
+            self.logger.warning(f"Error during OLLAMA cleanup: {e}")
+            # Don't fail initialization due to cleanup issues
+            pass
+
+    def _verify_port_free(self):
+        """Verify that port 11434 is actually free"""
+        import socket
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)
+                result = sock.connect_ex(("localhost", 11434))
+                if result == 0:
+                    self.logger.warning("Port 11434 is still occupied after cleanup")
+                    return False
+                else:
+                    self.logger.debug("Port 11434 is free")
+                    return True
+        except Exception as e:
+            self.logger.debug(f"Port check failed: {e}")
+            return True  # Assume it's free if we can't check
 
     def _detect_hardware_constraints(
         self,
@@ -540,28 +643,31 @@ class LanguageProcessor:
         Load the selected model in OLLAMA with comprehensive status checking.
 
         This method handles:
+        - Cleaning up any existing OLLAMA processes first
+        - Starting a fresh OLLAMA server
         - Checking if model is already loaded
         - Pulling model from registry if needed
         - Verifying successful loading
-        - Detailed progress logging
-
-        Raises:
-            ConnectionError: If OLLAMA server is not accessible
-            TimeoutError: If model loading exceeds timeout
-            RuntimeError: If model loading fails
         """
         self.logger.info(f"--- Loading Model: {self.model} ---")
 
         try:
+            # FIRST: Clean up any existing OLLAMA processes
+            self._cleanup_existing_ollama_processes()
 
-            # Start OLLAMA server automatically
-            self.logger.info("Starting OLLAMA server...")
+            # Start OLLAMA server fresh
+            self.logger.info("Starting fresh OLLAMA server...")
             try:
-                # Get the PID when you start it
-                ollama_process: subprocess.Popen = subprocess.Popen(
-                    ["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                # Start with clean environment
+                ollama_process = subprocess.Popen(
+                    ["ollama", "serve"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    creationflags=(
+                        subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+                    ),
                 )
-                pid: int = ollama_process.pid
+                pid = ollama_process.pid
                 self.OLLAMA_SERVER = ollama_process
                 self.pid = pid
                 self.logger.info(f"OLLAMA server started with PID: {pid}")
@@ -574,13 +680,15 @@ class LanguageProcessor:
                 self.logger.error(f"Failed to start OLLAMA process: {e}")
                 raise
 
-            # Wait for server to start up
+            # Wait for server to start up with longer timeout
             self.logger.info("Waiting for server to become responsive...")
-            server_ready: bool = False
-            for i in range(30):  # Wait up to 30 seconds
+            server_ready = False
+
+            for i in range(45):  # Increased timeout to 45 seconds
                 try:
-                    response: requests.Response = requests.get(
-                        "http://localhost:11434/api/tags", timeout=2
+                    response = requests.get(
+                        "http://localhost:11434/api/tags",
+                        timeout=5,  # Longer individual request timeout
                     )
                     if response.status_code == 200:
                         self.logger.info(
@@ -590,16 +698,18 @@ class LanguageProcessor:
                         break
                 except (ConnectionError, Timeout, RequestException):
                     time.sleep(1)
-                    self.logger.debug(f"Server not ready, attempt {i+1}/30")
+                    if i % 10 == 9:  # Log every 10 attempts
+                        self.logger.debug(f"Server not ready yet, attempt {i+1}/45")
                 except Exception as e:
                     self.logger.warning(f"Unexpected error checking server: {e}")
                     time.sleep(1)
 
             if not server_ready:
                 self.logger.error(
-                    "OLLAMA server failed to become responsive within 30 seconds"
+                    "OLLAMA server failed to become responsive within 45 seconds"
                 )
-                ollama_process.terminate()
+                if hasattr(self, "OLLAMA_SERVER") and self.OLLAMA_SERVER:
+                    self.OLLAMA_SERVER.terminate()
                 raise RuntimeError("OLLAMA server startup failed")
 
             self.logger.debug("OLLAMA server is accessible")
@@ -622,8 +732,8 @@ class LanguageProcessor:
 
             pull_payload = {"name": self.model}
 
-            # Use extended timeout for model downloads (10 minutes)
-            download_timeout = 600
+            # Use extended timeout for model downloads (15 minutes)
+            download_timeout = 900
             self.logger.debug(
                 f"Starting model download with {download_timeout}s timeout..."
             )
@@ -657,9 +767,7 @@ class LanguageProcessor:
                 raise RuntimeError(error_msg)
 
         except requests.Timeout:
-            error_msg = (
-                f"Timeout loading model {self.model} (exceeded {download_timeout}s)"
-            )
+            error_msg = f"Timeout loading model {self.model} (exceeded timeout)"
             self.logger.error(error_msg)
             raise TimeoutError(error_msg)
         except requests.ConnectionError as e:
@@ -852,9 +960,45 @@ class LanguageProcessor:
         """
         start_time = datetime.now()
         self.logger.info(f"=== Starting field extraction for document {uuid} ===")
+
+        # STEP 1: Summarize OCR text
+        self.logger.debug("Step 1: Summarizing OCR content...")
+        ocr_summary_prompt = f"""Summarize this document text in exactly 375 words. Focus on:
+- Document title and type
+- Key names, organizations, dates
+- Important content and purpose
+- Any official information
+
+Text to summarize:
+{ocr_text}
+
+Summary (exactly 375 words):"""
+
+        ocr_summary = self._send_to_ollama(ocr_summary_prompt)
+        self.prompts_since_refresh += 1
+
+        # STEP 2: Summarize visual description
+        self.logger.debug("Step 2: Summarizing visual content...")
+        visual_summary_prompt = f"""Summarize this visual description in exactly 375 words. Focus on:
+- Document layout and structure
+- Official markings, seals, signatures
+- Visual clues about document type
+- Any formatting that indicates purpose
+
+Visual description to summarize:
+{visual_description}
+
+Summary (exactly 375 words):"""
+
+        visual_summary = self._send_to_ollama(visual_summary_prompt)
+        self.prompts_since_refresh += 1
+
+        # STEP 3: Extract fields using summaries
+        self.logger.debug("Step 3: Extracting fields from summaries...")
+
         self.logger.info(
-            f"Input sizes: OCR={len(ocr_text)} chars, "
-            f"d{len(visual_description)} chars, "
+            f"Input sizes: OCR={len(ocr_summary)} chars, "
+            f"d{len(visual_summary)} chars, "
             f"Metadata keys={list(metadata.keys())}"
         )
 
@@ -1050,7 +1194,7 @@ class LanguageProcessor:
 
             Extract the information. Nothing else.
 
-            "Return ONLY the requested information. Any additional text, explanation, or reasoning will be considered an error and rejected."
+            Return ONLY the requested information. Any additional text, explanation, or reasoning will be considered an error and rejected causing immediate shutdown
             """
 
             # Updated extraction loop
@@ -1065,10 +1209,10 @@ class LanguageProcessor:
                     DOCUMENT DATA:
                     =============
                     OCR TEXT CONTENT:
-                    {ocr_text}
+                    {ocr_summary}
 
                     VISUAL DESCRIPTION:
-                    {visual_description}
+                    {visual_summary}
 
                     TASK:
                     =====

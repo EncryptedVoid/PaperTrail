@@ -649,7 +649,7 @@ if len(metadata_artifacts) > 0:
     try:
         # Configure visual processing parameters (can be made configurable via config file)
         visual_config = {
-            "max_gpu_vram_gb": 11.0,  # Use most of your 9.6GB GPU
+            "max_gpu_vram_gb": 12.0,  # Use most of your 9.6GB GPU
             "max_ram_gb": 48.0,  # Limit to 48GB as requested (was auto-detecting 44.8GB)
             "force_cpu": False,  # Make sure GPU is used
             "processing_mode": ProcessingMode.FAST,  # Changed from HIGH_QUALITY
@@ -995,8 +995,7 @@ if len(metadata_artifacts) > 0:
     logger.info(
         f"Average time per file: {processing_time / max(processing_stats['total_processed'], 1)}"
     )
-    logger.info("")
-    logger.info("VISUAL PROCESSOR STATISTICS:")
+    logger.info("=== VISUAL PROCESSOR STATISTICS: ===")
     logger.info(f"Final model used: {final_stats['current_model']['name']}")
     logger.info(f"Device: {final_stats['device']}")
     logger.info(f"Processing mode: {final_stats['processing_mode']}")
@@ -1019,22 +1018,22 @@ if len(metadata_artifacts) > 0:
     logger.info(f"Final RAM usage: {memory_usage.get('system_ram_percent', 0):.1f}%")
 
     # Get and log optimization suggestions
-    try:
-        optimization_report = processor.optimize_performance()
-        suggestions = optimization_report.get("optimization_suggestions", [])
+    # try:
+    #     optimization_report = processor.optimize_performance()
+    #     suggestions = optimization_report.get("optimization_suggestions", [])
 
-        if suggestions:
-            logger.info("")
-            logger.info("PERFORMANCE OPTIMIZATION SUGGESTIONS:")
-            for i, suggestion in enumerate(suggestions, 1):
-                logger.info(f"{i}. {suggestion}")
-        else:
-            logger.info(
-                "No performance optimization suggestions - system is running optimally"
-            )
+    #     if suggestions:
+    #         logger.info("")
+    #         logger.info("PERFORMANCE OPTIMIZATION SUGGESTIONS:")
+    #         for i, suggestion in enumerate(suggestions, 1):
+    #             logger.info(f"{i}. {suggestion}")
+    #     else:
+    #         logger.info(
+    #             "No performance optimization suggestions - system is running optimally"
+    #         )
 
-    except Exception as e:
-        logger.warning(f"Could not generate optimization report: {e}")
+    # except Exception as e:
+    #     logger.warning(f"Could not generate optimization report: {e}")
 
     # Save processing statistics to session data
     session_data["semantic_extraction_stats"] = {
@@ -1043,8 +1042,6 @@ if len(metadata_artifacts) > 0:
         "processing_time_seconds": processing_time.total_seconds(),
         "average_quality_score": avg_quality,
     }
-
-    logger.info("=" * 80)
 
 # =====================================================================
 # STAGE 5: LLM FIELD EXTRACTION (SEMANTIC METADATA)
@@ -1069,17 +1066,17 @@ if len(semantic_artifacts) > 0:
 
     # Configure extraction parameters (can be made configurable via config file)
     extraction_config = {
-        "max_ram_gb": 40.0,  # Auto-detect (or set specific limit like 16.0)
-        "max_gpu_vram_gb": 11.0,  # Auto-detect (or set specific limit like 8.0)
+        "max_ram_gb": 48.0,  # Auto-detect (or set specific limit like 16.0)
+        "max_gpu_vram_gb": 12.0,  # Auto-detect (or set specific limit like 8.0)
         "max_cpu_cores": None,  # Auto-detect (or set specific limit like 8)
         "context_refresh_interval": 50,  # Refresh context every 50 prompts
         "auto_model_selection": False,  # Automatically select best model for hardware
-        "timeout": 300,  # 5 minute timeout for each extraction
+        "timeout": 1200,  # 5 minute timeout for each extraction
     }
 
     field_extractor = LanguageProcessor(
         logger=logger,
-        host="http://localhost:11434",
+        host="http://localhost:11434",  # 11434
         max_ram_gb=extraction_config["max_ram_gb"],
         max_gpu_vram_gb=extraction_config["max_gpu_vram_gb"],
         max_cpu_cores=extraction_config["max_cpu_cores"],
