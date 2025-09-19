@@ -200,7 +200,6 @@ try:
         logging.FileHandler(
             f"{str(PATHS['logs_dir'])}/{log_filename}", encoding="utf-8"
         ),
-        logging.StreamHandler(),  # Also log to console for real-time monitoring
     ]
 
     logging.basicConfig(
@@ -487,6 +486,7 @@ if len(unprocessed_artifacts) > 0:
             # Create initial profile data
             profile_data = {
                 "uuid": artifact_id,
+                "checksum": generate_checksum(artifact, algorithm=CHECKSUM_ALGORITHM),
                 "original_filename": original_name,
                 "file_size": file_size,
                 "file_extension": artifact.suffix.lower(),
@@ -1064,25 +1064,12 @@ if len(semantic_artifacts) > 0:
         f"Found {len(semantic_artifacts)} artifacts ready for LLM field extraction"
     )
 
-    # Configure extraction parameters (can be made configurable via config file)
-    extraction_config = {
-        "max_ram_gb": 48.0,  # Auto-detect (or set specific limit like 16.0)
-        "max_gpu_vram_gb": 12.0,  # Auto-detect (or set specific limit like 8.0)
-        "max_cpu_cores": None,  # Auto-detect (or set specific limit like 8)
-        "context_refresh_interval": 50,  # Refresh context every 50 prompts
-        "auto_model_selection": False,  # Automatically select best model for hardware
-        "timeout": 1200,  # 5 minute timeout for each extraction
-    }
-
     field_extractor = LanguageProcessor(
         logger=logger,
-        host="http://localhost:11434",  # 11434
-        max_ram_gb=extraction_config["max_ram_gb"],
-        max_gpu_vram_gb=extraction_config["max_gpu_vram_gb"],
-        max_cpu_cores=extraction_config["max_cpu_cores"],
-        context_refresh_interval=extraction_config["context_refresh_interval"],
-        auto_model_selection=extraction_config["auto_model_selection"],
-        timeout=extraction_config["timeout"],
+        max_ram_gb=48.0,  # Auto-detect (or set specific limit like 16.0)
+        max_gpu_vram_gb=12.0,  # Auto-detect (or set specific limit like 8.0)
+        max_cpu_cores=None,  # Auto-detect (or set specific limit like 8)
+        auto_model_selection=False,  # Automatically select best model for hardware
     )
 
     # Track processing statistics
@@ -1146,9 +1133,6 @@ if len(semantic_artifacts) > 0:
             logger.debug(
                 f"OCR text length: {len(ocr_text)} chars, Visual desc length: {len(visual_description)} chars"
             )
-
-            # Track pre-extraction stats to detect context refreshes
-            # pre_extraction_stats = field_extractor.get_stats()
 
             # Extract structured fields using enhanced LLM
             extraction_result = field_extractor.extract_fields(
@@ -1303,17 +1287,17 @@ if len(semantic_artifacts) > 0:
         f"Average time per file: {processing_time / max(processing_stats['total_processed'], 1)}"
     )
     # logger.info("")
-    # logger.info("LLM MODEL STATISTICS:")
-    # logger.info(f"Final model used: {final_stats['model']}")
-    # logger.info(f"Total LLM API calls made: {final_stats['total_processed']}")
-    # logger.info(f"Context refreshes performed: {processing_stats['context_refreshes']}")
-    # logger.info(f"Model switches performed: {processing_stats['model_switches']}")
-    # logger.info(
-    #     f"Hardware utilized: RAM={final_stats['hardware_constraints']['max_ram_gb']:.1f}GB, "
-    #     f"GPU={final_stats['hardware_constraints']['max_gpu_vram_gb']:.1f}GB, "
-    #     f"CPU={final_stats['hardware_constraints']['max_cpu_cores']} cores"
-    # )
-    # logger.info(f"Extraction mode: {final_stats['extraction_mode']}")
+    logger.info("LLM MODEL STATISTICS:")
+    logger.info(f"Final model used: {final_stats['model']}")
+    logger.info(f"Total LLM API calls made: {final_stats['total_processed']}")
+    logger.info(f"Context refreshes performed: {processing_stats['context_refreshes']}")
+    logger.info(f"Model switches performed: {processing_stats['model_switches']}")
+    logger.info(
+        f"Hardware utilized: RAM={final_stats['hardware_constraints']['max_ram_gb']:.1f}GB, "
+        f"GPU={final_stats['hardware_constraints']['max_gpu_vram_gb']:.1f}GB, "
+        f"CPU={final_stats['hardware_constraints']['max_cpu_cores']} cores"
+    )
+    logger.info(f"Extraction mode: {final_stats['extraction_mode']}")
 
     # Save final processing statistics to session data
     session_data["llm_extraction_stats"] = {
