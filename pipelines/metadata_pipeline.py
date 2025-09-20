@@ -27,11 +27,22 @@ import hashlib
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Union, TypedDict, Optional
+from typing import Dict, List, Any, TypedDict, Optional
 from tqdm import tqdm
-from utilities.security_agent import SecurityAgent
-from utilities.session_tracking_agent import SessionTracker
 from config import ARTIFACT_PROFILES_DIR, ARTIFACT_PREFIX, PROFILE_PREFIX
+
+
+class TextCodeInfo(TypedDict):
+    """Type definition for text/code analysis results"""
+
+    code_lines: int
+    comment_lines: int
+    blank_lines: int
+    total_lines: int
+    comment_ratio: float
+    functions_detected: int
+    classes_detected: int
+    language: str
 
 
 class MetadataReport(TypedDict):
@@ -48,6 +59,7 @@ class MetadataReport(TypedDict):
         errors: List of error messages encountered during processing
         extraction_summary: Dictionary summarizing extraction results by file type
         profile_updates: Number of artifact profiles successfully updated
+        code_analysis: Analysis results for code files
     """
 
     processed_files: int
@@ -59,6 +71,7 @@ class MetadataReport(TypedDict):
     errors: List[str]
     extraction_summary: Dict[str, int]
     profile_updates: int
+    code_analysis: Optional[TextCodeInfo]
 
 
 class MetadataPipeline:
@@ -80,20 +93,14 @@ class MetadataPipeline:
     7. Comprehensive reporting and logging
     """
 
-    def __init__(
-        self,
-        logger: logging.Logger,
-        session_agent: SessionTracker,
-    ):
+    def __init__(self, logger: logging.Logger):
         """
         Initialize the MetadataPipeline.
 
         Args:
             logger: Logger instance for recording pipeline operations and errors
-            session_agent: SessionTracker for monitoring pipeline progress and state
         """
         self.logger = logger
-        self.session_agent = session_agent
 
     def extract_metadata(
         self, source_dir: Path, review_dir: Path, success_dir: Path
@@ -143,11 +150,12 @@ class MetadataPipeline:
             "errors": [],
             "extraction_summary": {},
             "profile_updates": 0,
+            "code_analysis": None,
         }
 
         # Discover all artifact files in the source directory
         try:
-            artifacts = [
+            unprocessed_artifacts = [
                 item
                 for item in source_dir.iterdir()
                 if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
@@ -159,22 +167,35 @@ class MetadataPipeline:
             return report
 
         # Handle empty directory case
-        if not artifacts:
+        if not unprocessed_artifacts:
             self.logger.info("No artifact files found in source directory")
             return report
 
         # Sort files by size for consistent processing order
-        artifacts.sort(key=lambda p: p.stat().st_size)
-        report["total_files"] = len(artifacts)
+        unprocessed_artifacts.sort(key=lambda p: p.stat().st_size)
+        report["total_files"] = len(unprocessed_artifacts)
 
         # Log metadata extraction stage header for clear progress tracking
         self.logger.info("=" * 80)
         self.logger.info("METADATA EXTRACTION AND PROFILE UPDATE STAGE")
         self.logger.info("=" * 80)
-        self.logger.info(f"Found {len(artifacts)} artifact files to process")
+        self.logger.info(
+            f"Found {len(unprocessed_artifacts)} artifact files to process"
+        )
+
+        # Process each file through the sanitization pipeline
+        # Use progress bar only for multiple files
+        if len(unprocessed_artifacts) > 1:
+            artifact_iterator: Any = tqdm(
+                unprocessed_artifacts,
+                desc="Extracting technical metadata",
+                unit="artifacts",
+            )
+        else:
+            artifact_iterator = unprocessed_artifacts
 
         # Process each artifact through the metadata extraction pipeline
-        for artifact in tqdm(artifacts, desc="Extracting metadata", unit="artifact"):
+        for artifact in artifact_iterator:
             try:
                 # STAGE 1: Extract UUID from filename for profile lookup
                 artifact_id = artifact.stem[
@@ -272,9 +293,6 @@ class MetadataPipeline:
                         f"Failed to move {artifact.name} to failed directory: {move_error}"
                     )
 
-        # Update session tracker with current progress
-        self.session_agent.update({"stage": "metadata_extraction", "report": report})
-
         # Generate final summary report for user review
         self.logger.info("Metadata extraction complete:")
         self.logger.info(
@@ -304,7 +322,7 @@ class MetadataPipeline:
 
         # Always get basic info and security analysis
         self.logger.debug("Extracting basic filesystem metadata")
-        result = self._get_enhanced_basic_info(filepath)
+        result = self._get_basic_info(filepath)
 
         if "error" in result:
             self.logger.error(
@@ -353,7 +371,6 @@ class MetadataPipeline:
             ".iiq",
             ".cap",
             ".dcs",
-            ".dcr",
             ".fff",
             ".mdc",
             ".mos",
@@ -368,7 +385,7 @@ class MetadataPipeline:
             ".ani",
         }:
             self.logger.info(f"Processing as image file: {ext}")
-            result.update(self._extract_enhanced_image_metadata(filepath))
+            result.update(self._extract_image_metadata(filepath))
 
         # Document files
         elif ext in {
@@ -388,7 +405,7 @@ class MetadataPipeline:
             ".key",
         }:
             self.logger.info(f"Processing as document file: {ext}")
-            result.update(self._extract_enhanced_document_metadata(filepath))
+            result.update(self._extract_document_metadata(filepath))
 
         # Audio files (new support)
         elif ext in {
@@ -711,7 +728,7 @@ class MetadataPipeline:
         self.logger.info(f"Metadata extraction completed for: {filepath}")
         return result
 
-    def _get_enhanced_basic_info(self, filepath: Path) -> Dict[str, Any]:
+    def _get_basic_info(self, filepath: Path) -> Dict[str, Any]:
         """Extract filesystem metadata with security analysis"""
         try:
             self.logger.debug(f"Reading file stats for: {filepath}")
@@ -781,22 +798,23 @@ class MetadataPipeline:
 
         return hashes
 
-    def _format_file_size(self, size_bytes: int) -> str:
+    def _format_file_size(self, size_bytes: float) -> str:
         """Format file size in human-readable format"""
+        size = float(size_bytes)  # Convert to float at the start
         for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if size_bytes < 1024.0:
-                return f"{size_bytes:.1f} {unit}"
-            size_bytes /= 1024.0
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
         return f"{size_bytes:.1f} PB"
 
-    def _extract_enhanced_image_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_image_metadata(self, filepath: Path) -> Dict[str, Any]:
         """Extract comprehensive image metadata with advanced analysis"""
         result = {"type": "image"}
         self.logger.debug("Starting image metadata extraction")
 
         # PIL metadata with color analysis
         self.logger.debug("Attempting PIL metadata extraction")
-        pil_data = self._get_enhanced_pil_metadata(filepath)
+        pil_data = self._get_pil_metadata(filepath)
         if "error" not in pil_data:
             self.logger.info("PIL metadata extraction successful")
             result.update(pil_data)
@@ -823,7 +841,7 @@ class MetadataPipeline:
 
         return result
 
-    def _get_enhanced_pil_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _get_pil_metadata(self, filepath: Path) -> Dict[str, Any]:
         """Extract PIL-based image metadata with color and quality analysis"""
         try:
             self.logger.debug("Importing PIL dependencies")
@@ -950,7 +968,7 @@ class MetadataPipeline:
             import numpy as np
 
             self.logger.debug("Performing OpenCV image analysis")
-            img = cv2.imread(str(filepath))
+            img = cv2.cv2.imread(str(filepath))
             if img is not None:
                 # Basic image properties
                 height, width, channels = img.shape
@@ -960,7 +978,7 @@ class MetadataPipeline:
                 if channels == 3:  # BGR image
                     colors = ["blue", "green", "red"]
                     for i, color in enumerate(colors):
-                        hist = cv2.calcHist([img], [i], None, [256], [0, 256])
+                        hist = cv2.cv2.calcHist([img], [i], None, [256], [0, 256])
                         hist_data[color] = {
                             "mean": float(np.mean(hist)),
                             "std": float(np.std(hist)),
@@ -1031,17 +1049,17 @@ class MetadataPipeline:
             )
             return {"error": f"Advanced metadata extraction failed: {e}"}
 
-    def _extract_enhanced_document_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_document_metadata(self, filepath: Path) -> Dict[str, Any]:
         """Document extraction with content analysis"""
         result = {"type": "document"}
         ext = filepath.suffix.lower()
 
         # extractors for existing formats
-        enhanced_extractors = {
-            ".pdf": self._extract_enhanced_pdf_metadata,
-            ".docx": self._extract_enhanced_docx_metadata,
-            ".xlsx": self._extract_enhanced_xlsx_metadata,
-            ".pptx": self._extract_enhanced_pptx_metadata,
+        extractors = {
+            ".pdf": self._extract_pdf_metadata,
+            ".docx": self._extract_docx_metadata,
+            ".xlsx": self._extract_xlsx_metadata,
+            ".pptx": self._extract_pptx_metadata,
         }
 
         # Basic extractors for new formats
@@ -1055,9 +1073,9 @@ class MetadataPipeline:
             ".rtf": self._extract_rtf_metadata,
         }
 
-        if ext in enhanced_extractors:
+        if ext in extractors:
             self.logger.info(f"Using {ext} extractor")
-            result.update(enhanced_extractors[ext](filepath))
+            result.update(extractors[ext](filepath))
         elif ext in basic_extractors:
             self.logger.info(f"Using basic {ext} extractor")
             result.update(basic_extractors[ext](filepath))
@@ -1067,12 +1085,12 @@ class MetadataPipeline:
 
         return result
 
-    def _extract_enhanced_pdf_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_pdf_metadata(self, filepath: Path) -> Dict[str, Any]:
         """PDF metadata extraction with content analysis"""
         self.logger.debug("Starting PDF metadata extraction")
 
         # Try PyMuPDF first for comprehensive analysis
-        pymupdf_result = self._try_enhanced_pymupdf(filepath)
+        pymupdf_result = self._try_pymupdf(filepath)
         if "error" not in pymupdf_result:
             self.logger.info("PDF metadata extracted successfully with PyMuPDF")
             return pymupdf_result
@@ -1087,7 +1105,7 @@ class MetadataPipeline:
 
         return result
 
-    def _try_enhanced_pymupdf(self, filepath: Path) -> Dict[str, Any]:
+    def _try_pymupdf(self, filepath: Path) -> Dict[str, Any]:
         """PyMuPDF extraction with content analysis"""
         try:
             import fitz  # PyMuPDF
@@ -1214,7 +1232,7 @@ class MetadataPipeline:
             self.logger.debug(f"PDF structure analysis failed: {e}")
             return {"structure_analysis_error": str(e)}
 
-    def _extract_enhanced_docx_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_docx_metadata(self, filepath: Path) -> Dict[str, Any]:
         """Word document metadata extraction"""
         try:
             from docx import Document
@@ -1288,7 +1306,7 @@ class MetadataPipeline:
             self.logger.debug(f"DOCX content analysis failed: {e}")
             return {"content_analysis_error": str(e)}
 
-    def _extract_enhanced_xlsx_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_xlsx_metadata(self, filepath: Path) -> Dict[str, Any]:
         """Excel metadata extraction"""
         try:
             import openpyxl
@@ -1376,7 +1394,7 @@ class MetadataPipeline:
             self.logger.debug(f"XLSX content analysis failed: {e}")
             return {"content_analysis_error": str(e)}
 
-    def _extract_enhanced_pptx_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_pptx_metadata(self, filepath: Path) -> Dict[str, Any]:
         """PowerPoint metadata extraction"""
         try:
             from pptx import Presentation
@@ -1472,13 +1490,18 @@ class MetadataPipeline:
             audio_file = MutagenFile(str(filepath))
 
             if audio_file is not None:
-                # Basic audio info
+                # Basic audio info - ensure proper types
+                duration_raw = getattr(audio_file.info, "length", 0) or 0
+                bitrate_raw = getattr(audio_file.info, "bitrate", 0) or 0
+                sample_rate_raw = getattr(audio_file.info, "sample_rate", 0) or 0
+                channels_raw = getattr(audio_file.info, "channels", 0) or 0
+
                 audio_info = {
-                    "duration_seconds": getattr(audio_file.info, "length", 0),
-                    "bitrate": getattr(audio_file.info, "bitrate", 0),
-                    "sample_rate": getattr(audio_file.info, "sample_rate", 0),
-                    "channels": getattr(audio_file.info, "channels", 0),
-                    "codec": audio_file.mime[0] if audio_file.mime else "unknown",
+                    "duration_seconds": float(duration_raw),
+                    "bitrate": int(bitrate_raw),
+                    "sample_rate": int(sample_rate_raw),
+                    "channels": int(channels_raw),
+                    "codec": str(audio_file.mime[0]) if audio_file.mime else "unknown",
                 }
 
                 # Format duration nicely
@@ -1490,14 +1513,24 @@ class MetadataPipeline:
                         f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
                     )
 
-                # Extract tags/metadata
+                # Extract tags/metadata with proper string conversion
                 tags = {}
                 if audio_file.tags:
                     for key, value in audio_file.tags.items():
-                        if isinstance(value, list) and len(value) == 1:
-                            tags[key] = value[0]
-                        else:
-                            tags[key] = value
+                        try:
+                            key_str = str(key)
+                            if isinstance(value, list):
+                                if len(value) == 1:
+                                    tags[key_str] = str(value[0])
+                                elif len(value) > 1:
+                                    # Join multiple values with comma
+                                    tags[key_str] = ", ".join(str(v) for v in value)
+                            else:
+                                tags[key_str] = str(value)
+                        except (TypeError, ValueError) as e:
+                            # Skip problematic values
+                            self.logger.debug(f"Skipping tag {key}: {e}")
+                            continue
 
                 result["audio_info"] = audio_info
                 result["tags"] = tags
@@ -1636,39 +1669,43 @@ class MetadataPipeline:
     def _try_opencv_video(self, filepath: Path) -> Dict[str, Any]:
         """Fallback video metadata extraction using OpenCV"""
         try:
-            import cv2
+            from cv2 import VideoCapture
+            from cv2 import (
+                CAP_PROP_FPS,
+                CAP_PROP_FRAME_COUNT,
+                CAP_PROP_FRAME_WIDTH,
+                CAP_PROP_FRAME_HEIGHT,
+            )
 
-            cap = cv2.VideoCapture(str(filepath))
+            cap = VideoCapture(str(filepath))
 
-            if cap.isOpened():
-                # Get basic video properties
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(CAP_PROP_FPS)
+            frame_count = cap.get(CAP_PROP_FRAME_COUNT)
+            width = int(cap.get(CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(CAP_PROP_FRAME_HEIGHT))
+            width = int(cap.get(CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(CAP_PROP_FRAME_HEIGHT))
 
-                duration = frame_count / fps if fps > 0 else 0
+            duration = frame_count / fps if fps > 0 else 0
 
-                video_info = {
-                    "width": width,
-                    "height": height,
-                    "fps": fps,
-                    "frame_count": int(frame_count),
-                    "duration_seconds": duration,
-                }
+            video_info = {
+                "width": width,
+                "height": height,
+                "fps": fps,
+                "frame_count": int(frame_count),
+                "duration_seconds": duration,
+            }
 
-                if duration > 0:
-                    minutes, seconds = divmod(duration, 60)
-                    hours, minutes = divmod(minutes, 60)
-                    video_info["duration_formatted"] = (
-                        f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
-                    )
+            if duration > 0:
+                minutes, seconds = divmod(duration, 60)
+                hours, minutes = divmod(minutes, 60)
+                video_info["duration_formatted"] = (
+                    f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+                )
 
-                cap.release()
+            cap.release()
 
-                return {"video_info": video_info}
-            else:
-                return {"error": "Could not open video file with OpenCV"}
+            return {"video_info": video_info}
 
         except ImportError:
             return {"error": "OpenCV not available"}
@@ -1911,8 +1948,11 @@ class MetadataPipeline:
                 text_stats = self._analyze_text_content(
                     content, filepath.suffix.lower()
                 )
-                result["text_info"] = text_stats
-                result["encoding"] = encoding
+                result = {
+                    "type": "text_code",
+                    "text_info": text_stats,
+                    "encoding": encoding,
+                }
 
                 # Language detection for code files
                 if filepath.suffix.lower() in {
@@ -2079,8 +2119,8 @@ class MetadataPipeline:
                 else:
                     return {"max_depth": depth}
 
-            analysis = count_elements(data)
-            analysis["root_type"] = type(data).__name__
+            count_analysis = count_elements(data)
+            analysis = {**count_analysis, "root_type": type(data).__name__}
 
             return {"json_analysis": analysis}
 
@@ -2257,7 +2297,7 @@ class MetadataPipeline:
 
     def _extract_cad_3d_metadata(self, filepath: Path) -> Dict[str, Any]:
         """Extract CAD and 3D file metadata"""
-        result = {"type": "cad_3d"}
+        result: Dict[str, Any] = {"type": "cad_3d"}
         ext = filepath.suffix.lower()
 
         if ext in {".obj"}:
@@ -2457,7 +2497,7 @@ class MetadataPipeline:
         except Exception as e:
             return {"error": f"Executable analysis failed: {e}"}
 
-    def _detect_executable_platform(self, filepath: Path, ext: str) -> str:
+    def _detect_executable_platform(self, ext: str) -> str:
         """Detect executable platform"""
         platform_map = {
             ".exe": "Windows",
@@ -2538,7 +2578,7 @@ class MetadataPipeline:
             return {"error": f"Generic analysis failed: {e}"}
 
     # Legacy document format extractors
-    def _extract_legacy_doc_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_legacy_doc_metadata(self) -> Dict[str, Any]:
         """Extract legacy DOC file metadata"""
         return {
             "document_info": {
@@ -2547,7 +2587,7 @@ class MetadataPipeline:
             }
         }
 
-    def _extract_legacy_xls_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_legacy_xls_metadata(self) -> Dict[str, Any]:
         """Extract legacy XLS file metadata"""
         return {
             "spreadsheet_info": {
@@ -2556,7 +2596,7 @@ class MetadataPipeline:
             }
         }
 
-    def _extract_legacy_ppt_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_legacy_ppt_metadata(self) -> Dict[str, Any]:
         """Extract legacy PPT file metadata"""
         return {
             "presentation_info": {
@@ -2565,13 +2605,13 @@ class MetadataPipeline:
             }
         }
 
-    def _extract_odt_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_odt_metadata(self) -> Dict[str, Any]:
         """Extract OpenDocument Text metadata"""
         return {
             "document_info": {"format": "OpenDocument Text", "note": "Basic support"}
         }
 
-    def _extract_ods_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_ods_metadata(self) -> Dict[str, Any]:
         """Extract OpenDocument Spreadsheet metadata"""
         return {
             "spreadsheet_info": {
@@ -2580,7 +2620,7 @@ class MetadataPipeline:
             }
         }
 
-    def _extract_odp_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_odp_metadata(self) -> Dict[str, Any]:
         """Extract OpenDocument Presentation metadata"""
         return {
             "presentation_info": {
@@ -2589,7 +2629,7 @@ class MetadataPipeline:
             }
         }
 
-    def _extract_rtf_metadata(self, filepath: Path) -> Dict[str, Any]:
+    def _extract_rtf_metadata(self) -> Dict[str, Any]:
         """Extract RTF file metadata"""
         return {
             "document_info": {"format": "Rich Text Format", "note": "Basic support"}

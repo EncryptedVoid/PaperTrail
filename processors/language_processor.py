@@ -23,7 +23,7 @@ import logging
 import datetime
 from datetime import datetime
 from typing import Dict, Any, Optional, TypedDict
-from config import SYSTEM_PROMPT, FIELD_PROMPTS
+from config import SYSTEM_PROMPT, FIELD_PROMPTS, PREFERRED_LANGUAGE_MODEL
 
 
 class LanguageExtractionReport(TypedDict):
@@ -63,7 +63,7 @@ class LanguageProcessor:
         ...     fields = result["extracted_fields"]
     """
 
-    def __init__(self, logger: logging.Logger, model: str = "mistral:7b") -> None:
+    def __init__(self, logger: logging.Logger) -> None:
         """
         Initialize the LanguageProcessor with proper error handling.
 
@@ -80,7 +80,7 @@ class LanguageProcessor:
         """
         # Initialize ALL instance variables FIRST to ensure consistent object state
         self.logger: logging.Logger = logger
-        self.model: str = model
+        self.model: str = PREFERRED_LANGUAGE_MODEL
 
         self.logger.info("=== Initializing LanguageProcessor ===")
 
@@ -96,7 +96,6 @@ class LanguageProcessor:
             # Log detailed error information for debugging
             self.logger.error(f"Failed to initialize LanguageProcessor: {e}")
             # Re-raise to indicate initialization failure
-            raise ModuleNotFoundError
 
     def extract_fields(
         self,

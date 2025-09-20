@@ -1,74 +1,15 @@
+"""
+Enhanced DatabasePipeline with complete tabulate function implementation
+"""
+
 import pandas as pd
 import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, TypedDict
 from datetime import datetime
 import logging
-
-
-# Update session data with database creation info
-session_data["database_files"] = {}
-
-for file_type, file_path in output_files.items():
-    logger.info(f"  {file_type.upper()}: {file_path}")
-    session_data["database_files"][file_type] = str(file_path)
-
-    # Update stage counts for completed database formation
-    session_data["stage_counts"]["database_formed"] = len(profiles)
-
-# Log database statistics
-logger.info(f"Database contains {len(profiles)} document profiles")
-
-# Calculate some summary statistics
-completed_profiles = 0
-successful_llm_extractions = 0
-
-for profile in profiles:
-    try:
-        with open(profile, "r", encoding="utf-8") as f:
-            profile_data = json.load(f)
-
-        # Count completed profiles
-        if "completed" in profile_data.get("stages", {}):
-            completed_profiles += 1
-
-        # Count successful LLM extractions
-        if profile_data.get("llm_extraction", {}).get("success", False):
-            successful_llm_extractions += 1
-
-    except Exception as e:
-        logger.debug(f"Failed to read profile {profile.name} for statistics: {e}")
-
-logger.info(f"  - {completed_profiles} fully completed documents")
-logger.info(f"  - {successful_llm_extractions} successful LLM field extractions")
-logger.info(
-    f"  - {len(profiles) - completed_profiles} documents with partial processing"
-)
-
-# =====================================================================
-# STAGE 8: ARTIFACT ENCRYPTION AND PASSWORD PROTECTING
-# =====================================================================
-"""
-Security Agent Module
-
-Comprehensive cryptographic and security utilities for file processing pipelines.
-Provides secure checksum generation, encryption, password generation, and UUID creation
-with configurable algorithms and enterprise-grade security practices.
-
-This module implements:
-- Multi-algorithm file checksum calculation with performance optimization
-- Password-based file encryption using PBKDF2 and Fernet symmetric encryption
-- Cryptographically secure password and passphrase generation
-- Multiple UUID generation strategies for different use cases
-- Persistent checksum history management for duplicate detection
-
-Author: Ashiq Gazi
-"""
-
 import base64
 import hashlib
-import json
-import logging
 import os
 import secrets
 import string
@@ -76,15 +17,10 @@ import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Set
-
-# Cryptography imports for secure file encryption operations
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
-# Import all security-related constants from centralized configuration
+from tqdm import tqdm
 from config import (
     DEFAULT_PASSPHRASE_WORD_COUNT,
     DEFAULT_PASSWORD_LENGTH,
@@ -95,61 +31,496 @@ from config import (
     SALT_LENGTH_BYTES,
     SIMILAR_CHARACTERS,
     SYMBOL_CHARACTERS,
-    PASSPHRASE_WORDLIST_PATH
+    PASSPHRASE_WORDLIST_PATH,
+    ARTIFACT_PROFILES_DIR,
+    PROFILE_PREFIX,
+    ARTIFACT_PREFIX,
 )
 
+# Add missing constants that seem to be missing from your config
+MINIMUM_WORD_LENGTH = 3  # Minimum word length for passphrase generation
 
-class EncryptionAgent:
+
+class TabulationReport(TypedDict):
     """
-    Comprehensive security agent providing cryptographic services for file processing pipelines.
+    Type definition for the tabulation report returned by the tabulate method.
+    """
+    processed_files: int
+    total_files: int
+    encrypted_files: int
+    failed_encryptions: int
+    failed_exports: int
+    skipped_files: int
+    spreadsheet_exports: Dict[str, Path]
+    password_vault_created: bool
+    errors: List[str]
+    processing_time: float
 
-    This class encapsulates all security-related operations including file hashing,
-    encryption, secure random generation, and checksum history management. It is
-    designed to be a centralized security service that can be shared across multiple
-    components of a file processing system.
 
-    Key Features:
-    - Multi-algorithm file checksum calculation with memory-efficient streaming
-    - Password-based file encryption using industry-standard PBKDF2 + Fernet
-    - Cryptographically secure password and passphrase generation
-    - Multiple UUID generation strategies optimized for different use cases
-    - Persistent checksum history management with atomic updates
-    - Comprehensive error handling and logging for audit trails
-
-    Security Principles:
-    - All random generation uses cryptographically secure sources (secrets module)
-    - File operations are performed in chunks to handle large files efficiently
-    - Encryption uses strong key derivation (PBKDF2) with configurable iteration counts
-    - All operations are logged for security audit and debugging purposes
-    - Error messages are sanitized to prevent information leakage
+class DatabasePipeline:
+    """
+    Comprehensive database pipeline providing file encryption and spreadsheet export services.
     """
 
     def __init__(self, logger: logging.Logger) -> None:
-        """
-        Initialize the SecurityAgent with logging and persistent storage configuration.
-
-        This constructor establishes the security agent's operational context including
-        logging configuration for audit trails and the location for persistent checksum
-        history storage. All cryptographic operations performed by this agent will be
-        logged through the provided logger.
-
-        Args:
-            logger: Configured logger instance for recording all security operations,
-                   including checksum generation, encryption operations, and error conditions
-
-        Note:
-            The history file will be created automatically if it doesn't exist. The parent
-            directory must exist and be writable. All file operations are performed with
-            appropriate error handling and logging.
-        """
-        # Store core dependencies for use throughout the security agent
+        """Initialize the DatabasePipeline with logging configuration."""
         self.logger: logging.Logger = logger
 
-        # Log successful initialization with configuration details for debugging
-        self.logger.info("EncryptionAgent initialized successfully")
-        self.logger.debug(f"Logger level configured: {self.logger.level}")
+        # Password vault for storing encryption passwords securely
+        self.password_vault_path = Path("data/password_vault.encrypted")
+        self.vault_master_key = None
 
-    def encrypt_file(self, artifact: Path, passphrase: bool = False) -> str:
+        # Define the column mapping from profile data to spreadsheet columns
+        self.column_mapping = {
+            # Core identification
+            "ITEM_ID": "uuid",
+            "Title": ["llm_extraction", "extracted_fields", "title"],
+            "File_Extension": ["metadata", "extension"],
+            # Document classification
+            "Document_Type": ["llm_extraction", "extracted_fields", "document_type"],
+            "Original_Language": ["llm_extraction", "extracted_fields", "original_language"],
+            "Current_Language": ["llm_extraction", "extracted_fields", "current_language"],
+            "Confidentiality_Level": ["llm_extraction", "extracted_fields", "confidentiality_level"],
+            # Technical data
+            "Checksum_SHA256": "checksum",
+            "File_Size_MB": ["metadata", "size_mb"],
+            # People and organizations
+            "Translator_Name": ["llm_extraction", "extracted_fields", "translator_name"],
+            "Issuer_Name": ["llm_extraction", "extracted_fields", "issuer_name"],
+            "Officiater_Name": ["llm_extraction", "extracted_fields", "officiater_name"],
+            # Dates
+            "Date_Added": ["stages", "metadata_extraction", "timestamp"],
+            "Date_Created": ["llm_extraction", "extracted_fields", "date_created"],
+            "Date_of_Reception": ["llm_extraction", "extracted_fields", "date_of_reception"],
+            "Date_of_Issue": ["llm_extraction", "extracted_fields", "date_of_issue"],
+            "Date_of_Expiry": ["llm_extraction", "extracted_fields", "date_of_expiry"],
+            # Content and notes
+            "Tags": ["llm_extraction", "extracted_fields", "tags"],
+            "Version_Notes": ["llm_extraction", "extracted_fields", "version_notes"],
+            "Utility_Notes": ["llm_extraction", "extracted_fields", "utility_notes"],
+            "Additional_Notes": ["llm_extraction", "extracted_fields", "additional_notes"],
+            # Manual entry fields (will be empty for now)
+            "Action_Required": "",
+            "Parent_Document_ID": "",
+            "Off_Site_Storage_ID": "",
+            "On_Site_Storage_ID": "",
+            "Backup_Storage_ID": "",
+            "Project_ID": "",
+            "Version_Number": "",
+            # Processing metadata
+            "Processing_Status": ["llm_extraction", "success"],
+            "OCR_Text_Length": "calculated",
+            "Visual_Description_Length": "calculated",
+            "Fields_Extracted_Count": "calculated",
+            "Processing_Date": ["stages", "llm_field_extraction", "timestamp"],
+            "Original_Filename": "original_artifact_name",
+            "Encryption_Status": "calculated",
+        }
+
+        self.logger.info("DatabasePipeline initialized successfully")
+
+    def tabulate(
+        self,
+        source_dir: Path,
+        review_dir: Path,
+        success_dir: Path,
+        use_passphrase: bool = False,
+        export_spreadsheets: bool = True,
+        encrypt_files: bool = True
+    ) -> TabulationReport:
+        """
+        Main tabulation function that encrypts files, stores passwords, and exports spreadsheets.
+
+        This method performs the complete database pipeline process:
+        1. Discovers all processed artifact files in the source directory
+        2. Encrypts each file with a unique password/passphrase
+        3. Securely stores encryption passwords in an encrypted vault
+        4. Exports all profile data to Excel and CSV spreadsheets
+        5. Moves processed files to appropriate directories
+        6. Generates comprehensive processing report
+
+        Args:
+            source_dir: Directory containing processed artifacts to tabulate
+            review_dir: Directory to move problematic files for manual review
+            success_dir: Directory to move successfully processed files
+            use_passphrase: Whether to use memorable passphrases instead of random passwords
+            export_spreadsheets: Whether to generate Excel/CSV exports
+            encrypt_files: Whether to encrypt the artifact files
+
+        Returns:
+            TabulationReport containing detailed results of the tabulation process
+        """
+        start_time = datetime.now()
+
+        # Validate input directories
+        if not source_dir.exists():
+            error_msg = f"Source directory does not exist: {source_dir}"
+            self.logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+
+        # Create output directories if they don't exist
+        for directory in [review_dir, success_dir]:
+            if not directory.exists():
+                directory.mkdir(parents=True, exist_ok=True)
+                self.logger.info(f"Created directory: {directory}")
+
+        # Initialize report
+        report: TabulationReport = {
+            "processed_files": 0,
+            "total_files": 0,
+            "encrypted_files": 0,
+            "failed_encryptions": 0,
+            "failed_exports": 0,
+            "skipped_files": 0,
+            "spreadsheet_exports": {},
+            "password_vault_created": False,
+            "errors": [],
+            "processing_time": 0.0,
+        }
+
+        # Log tabulation stage header
+        self.logger.info("=" * 80)
+        self.logger.info("DATABASE TABULATION AND ENCRYPTION STAGE")
+        self.logger.info("=" * 80)
+
+        # Discover artifact files
+        try:
+            artifacts = [
+                item for item in source_dir.iterdir()
+                if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
+            ]
+        except Exception as e:
+            error_msg = f"Failed to scan source directory: {e}"
+            self.logger.error(error_msg)
+            report["errors"].append(error_msg)
+            return report
+
+        if not artifacts:
+            self.logger.info("No artifact files found for tabulation")
+            # Still try to export existing profiles if requested
+            if export_spreadsheets:
+                try:
+                    spreadsheet_files = self._export_to_spreadsheet(
+                        ARTIFACT_PROFILES_DIR, success_dir
+                    )
+                    report["spreadsheet_exports"] = spreadsheet_files
+                except Exception as e:
+                    self.logger.error(f"Spreadsheet export failed: {e}")
+                    report["errors"].append(str(e))
+            return report
+
+        report["total_files"] = len(artifacts)
+        self.logger.info(f"Found {len(artifacts)} artifact files to process")
+
+        # Initialize password vault if encryption is enabled
+        if encrypt_files:
+            try:
+                self._initialize_password_vault()
+                report["password_vault_created"] = True
+                self.logger.info("Password vault initialized successfully")
+            except Exception as e:
+                error_msg = f"Failed to initialize password vault: {e}"
+                self.logger.error(error_msg)
+                report["errors"].append(error_msg)
+                # Continue without encryption if vault fails
+                encrypt_files = False
+
+        # Process each artifact
+        for artifact in tqdm(artifacts, desc="Processing artifacts", unit="file"):
+            try:
+                # Extract UUID for profile lookup
+                artifact_id = artifact.stem[len(ARTIFACT_PREFIX):]
+                profile_path = ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
+
+                # Verify profile exists
+                if not profile_path.exists():
+                    error_msg = f"Profile not found for artifact: {artifact.name}"
+                    self.logger.error(error_msg)
+                    report["errors"].append(error_msg)
+                    report["skipped_files"] += 1
+                    self._move_to_review(artifact, review_dir, "missing_profile")
+                    continue
+
+                # Encrypt file if requested
+                encryption_password = None
+                if encrypt_files:
+                    try:
+                        self.logger.info(f"Encrypting artifact: {artifact.name}")
+                        encryption_password = self._encrypt_file(artifact, use_passphrase)
+
+                        # Store password in vault
+                        self._store_password_in_vault(artifact_id, encryption_password)
+                        report["encrypted_files"] += 1
+
+                        self.logger.info(f"Successfully encrypted: {artifact.name}")
+
+                    except Exception as e:
+                        error_msg = f"Encryption failed for {artifact.name}: {e}"
+                        self.logger.error(error_msg)
+                        report["errors"].append(error_msg)
+                        report["failed_encryptions"] += 1
+                        # Continue processing even if encryption fails
+                        encryption_password = None
+
+                # Update profile with encryption status
+                try:
+                    self._update_profile_with_encryption(
+                        profile_path, encryption_password is not None
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to update profile encryption status: {e}")
+
+                # Move artifact to success directory
+                try:
+                    moved_artifact = artifact.rename(success_dir / artifact.name)
+                    report["processed_files"] += 1
+                    self.logger.debug(f"Moved to success directory: {artifact.name}")
+                except Exception as e:
+                    error_msg = f"Failed to move {artifact.name} to success directory: {e}"
+                    self.logger.error(error_msg)
+                    report["errors"].append(error_msg)
+
+            except Exception as e:
+                error_msg = f"Failed to process {artifact.name}: {e}"
+                self.logger.error(error_msg)
+                report["errors"].append(error_msg)
+                self._move_to_review(artifact, review_dir, "processing_error")
+
+        # Export spreadsheets if requested
+        if export_spreadsheets:
+            try:
+                self.logger.info("Exporting profile data to spreadsheets...")
+                spreadsheet_files = self._export_to_spreadsheet(
+                    ARTIFACT_PROFILES_DIR, success_dir
+                )
+                report["spreadsheet_exports"] = spreadsheet_files
+                self.logger.info("Spreadsheet export completed successfully")
+            except Exception as e:
+                error_msg = f"Spreadsheet export failed: {e}"
+                self.logger.error(error_msg)
+                report["errors"].append(error_msg)
+                report["failed_exports"] += 1
+
+        # Finalize report
+        total_time = (datetime.now() - start_time).total_seconds()
+        report["processing_time"] = total_time
+
+        # Log final summary
+        self._log_tabulation_summary(report)
+
+        return report
+
+    def _initialize_password_vault(self) -> None:
+        """Initialize the encrypted password vault for storing encryption passwords."""
+        try:
+            # Create vault directory if it doesn't exist
+            self.password_vault_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Generate or load master key for vault encryption
+            master_key_file = self.password_vault_path.parent / "vault_master.key"
+
+            if master_key_file.exists():
+                # Load existing master key
+                with open(master_key_file, "rb") as f:
+                    self.vault_master_key = f.read()
+                self.logger.debug("Loaded existing vault master key")
+            else:
+                # Generate new master key
+                self.vault_master_key = Fernet.generate_key()
+                with open(master_key_file, "wb") as f:
+                    f.write(self.vault_master_key)
+                os.chmod(master_key_file, 0o600)  # Restrict permissions
+                self.logger.info("Generated new vault master key")
+
+        except Exception as e:
+            error_msg = f"Failed to initialize password vault: {e}"
+            self.logger.error(error_msg)
+            raise
+
+    def _store_password_in_vault(self, artifact_id: str, password: str) -> None:
+        """Store an encryption password in the secure vault."""
+        try:
+            # Load existing vault data or create new
+            vault_data = {}
+            if self.password_vault_path.exists():
+                cipher = Fernet(self.vault_master_key)
+                with open(self.password_vault_path, "rb") as f:
+                    encrypted_data = f.read()
+                decrypted_data = cipher.decrypt(encrypted_data)
+                vault_data = json.loads(decrypted_data.decode())
+
+            # Add new password entry
+            vault_data[artifact_id] = {
+                "password": password,
+                "timestamp": datetime.now().isoformat(),
+                "algorithm": "PBKDF2-SHA256-Fernet"
+            }
+
+            # Encrypt and save vault
+            cipher = Fernet(self.vault_master_key)
+            vault_json = json.dumps(vault_data, indent=2).encode()
+            encrypted_vault = cipher.encrypt(vault_json)
+
+            with open(self.password_vault_path, "wb") as f:
+                f.write(encrypted_vault)
+
+            os.chmod(self.password_vault_path, 0o600)  # Restrict permissions
+            self.logger.debug(f"Stored password for artifact {artifact_id} in vault")
+
+        except Exception as e:
+            error_msg = f"Failed to store password in vault: {e}"
+            self.logger.error(error_msg)
+            raise
+
+    def _update_profile_with_encryption(self, profile_path: Path, encrypted: bool) -> None:
+        """Update profile with encryption status information."""
+        try:
+            with open(profile_path, "r", encoding="utf-8") as f:
+                profile_data = json.load(f)
+
+            # Add encryption information
+            profile_data["encryption"] = {
+                "encrypted": encrypted,
+                "timestamp": datetime.now().isoformat(),
+                "algorithm": "PBKDF2-SHA256-Fernet" if encrypted else None
+            }
+
+            # Update stages
+            profile_data.setdefault("stages", {})
+            profile_data["stages"]["encryption"] = {
+                "status": "completed" if encrypted else "skipped",
+                "timestamp": datetime.now().isoformat(),
+            }
+
+            with open(profile_path, "w", encoding="utf-8") as f:
+                json.dump(profile_data, f, indent=2)
+
+        except Exception as e:
+            self.logger.error(f"Failed to update profile {profile_path}: {e}")
+
+    def _move_to_review(self, artifact: Path, review_dir: Path, reason: str) -> None:
+        """Move an artifact to the review directory with reason categorization."""
+        try:
+            reason_dir = review_dir / reason
+            reason_dir.mkdir(exist_ok=True, parents=True)
+
+            target_path = reason_dir / artifact.name
+            artifact.rename(target_path)
+
+            self.logger.info(f"Moved {artifact.name} to review: {reason}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to move {artifact.name} to review: {e}")
+
+    def _log_tabulation_summary(self, report: TabulationReport) -> None:
+        """Log the final tabulation summary."""
+        self.logger.info("Tabulation complete:")
+        self.logger.info(f"  - {report['processed_files']} files successfully processed")
+        self.logger.info(f"  - {report['encrypted_files']} files encrypted")
+        self.logger.info(f"  - {report['failed_encryptions']} encryption failures")
+        self.logger.info(f"  - {report['skipped_files']} files skipped")
+        self.logger.info(f"  - Processing time: {report['processing_time']:.2f} seconds")
+
+        if report["spreadsheet_exports"]:
+            self.logger.info("  - Spreadsheet exports:")
+            for format_type, file_path in report["spreadsheet_exports"].items():
+                self.logger.info(f"    - {format_type.upper()}: {file_path}")
+
+        if report["password_vault_created"]:
+            self.logger.info(f"  - Password vault: {self.password_vault_path}")
+
+        if report["errors"]:
+            self.logger.warning(f"  - {len(report['errors'])} errors encountered")
+
+    def _generate_passphrase(self) -> str:
+        """Generate memorable passphrase using random word combinations."""
+        self.logger.debug(
+            f"Generating passphrase with {DEFAULT_PASSPHRASE_WORD_COUNT} words"
+        )
+
+        if DEFAULT_PASSPHRASE_WORD_COUNT < 1:
+            error_msg = "Word count must be at least 1"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        wordlist = PASSPHRASE_WORDLIST_PATH
+
+        try:
+            if not wordlist.exists():
+                raise FileNotFoundError(f"Wordlist not found: {wordlist}")
+
+            with open(wordlist, "r", encoding="utf-8") as f:
+                words = [line.strip().lower() for line in f
+                        if line.strip() and len(line.strip()) >= MINIMUM_WORD_LENGTH]
+
+            if len(words) < DEFAULT_PASSPHRASE_WORD_COUNT:
+                raise ValueError(f"Not enough words in wordlist: {len(words)}")
+
+            # Select random words
+            selected_words = [
+                secrets.choice(words).capitalize()
+                for _ in range(DEFAULT_PASSPHRASE_WORD_COUNT)
+            ]
+
+            passphrase = DEFAULT_WORD_SEPARATOR.join(selected_words)
+
+            self.logger.debug(f"Generated passphrase with {len(selected_words)} words")
+            return passphrase
+
+        except Exception as e:
+            # Fallback to built-in words if wordlist fails
+            self.logger.warning(f"Wordlist failed, using built-in words: {e}")
+            builtin_words = [
+                "Forest", "Mountain", "River", "Ocean", "Desert", "Valley",
+                "Garden", "Bridge", "Castle", "Tower", "Village", "Island",
+                "Storm", "Thunder", "Lightning", "Rainbow", "Sunset", "Dawn"
+            ]
+            selected_words = [
+                secrets.choice(builtin_words)
+                for _ in range(DEFAULT_PASSPHRASE_WORD_COUNT)
+            ]
+            return DEFAULT_WORD_SEPARATOR.join(selected_words)
+
+    # Keep all your existing helper methods for spreadsheet export...
+    # (_export_to_spreadsheet, _process_profile, _get_nested_value, etc.)
+
+    def _calculate_special_field(self, field_name: str, profile: Dict) -> Any:
+        """Calculate special fields that need computation."""
+        if field_name == "Fields_Extracted_Count":
+            try:
+                extracted_fields = self._get_nested_value(
+                    profile, ["llm_extraction", "extracted_fields"]
+                )
+                if isinstance(extracted_fields, dict):
+                    return sum(1 for v in extracted_fields.values() if v != "UNKNOWN")
+                return 0
+            except:
+                return 0
+
+        elif field_name == "OCR_Text_Length":
+            try:
+                text = self._get_nested_value(profile, ["semantics", "all_text"])
+                return len(str(text)) if text != "UNKNOWN" else 0
+            except:
+                return 0
+
+        elif field_name == "Visual_Description_Length":
+            try:
+                desc = self._get_nested_value(profile, ["semantics", "all_imagery"])
+                return len(str(desc)) if desc != "UNKNOWN" else 0
+            except:
+                return 0
+
+        elif field_name == "Encryption_Status":
+            try:
+                encrypted = self._get_nested_value(profile, ["encryption", "encrypted"])
+                return "Yes" if encrypted else "No"
+            except:
+                return "No"
+
+        return "UNKNOWN"
+
+    def _encrypt_file(self, artifact: Path, passphrase: bool = False) -> str:
         """
         Encrypt a file using password-based encryption with industry-standard security practices.
 
@@ -606,88 +977,7 @@ class EncryptionAgent:
 
         return passphrase
 
-class DatabasePipeline:
-    def __init__(self, logger: logging.Logger):
-        self.logger = logger
-
-        # Define the column mapping from your original requirements
-        self.column_mapping = {
-            # Core identification
-            "ITEM_ID": "uuid",
-            "Title": ["llm_extraction", "extracted_fields", "title"],
-            "File_Extension": "file_extension",
-            # Document classification
-            "Document_Type": ["llm_extraction", "extracted_fields", "document_type"],
-            "Original_Language": [
-                "llm_extraction",
-                "extracted_fields",
-                "current_language",
-            ],  # Assuming same for now
-            "Current_Language": [
-                "llm_extraction",
-                "extracted_fields",
-                "current_language",
-            ],
-            "Confidentiality_Level": [
-                "llm_extraction",
-                "extracted_fields",
-                "confidentiality_level",
-            ],
-            # Technical data
-            "Checksum_SHA256": "checksum",  # You'll need to add this to profiles
-            "File_Size_MB": ["metadata", "size_mb"],
-            # People and organizations
-            "Translator_Name": [
-                "llm_extraction",
-                "extracted_fields",
-                "translator_name",
-            ],
-            "Issuer_Name": ["llm_extraction", "extracted_fields", "issuer_name"],
-            "Officiater_Name": [
-                "llm_extraction",
-                "extracted_fields",
-                "officiater_name",
-            ],
-            # Dates
-            "Date_Added": ["stages", "renamed", "timestamp"],
-            "Date_Created": ["llm_extraction", "extracted_fields", "date_created"],
-            "Date_of_Reception": [
-                "llm_extraction",
-                "extracted_fields",
-                "date_of_reception",
-            ],
-            "Date_of_Issue": ["llm_extraction", "extracted_fields", "date_of_issue"],
-            "Date_of_Expiry": ["llm_extraction", "extracted_fields", "date_of_expiry"],
-            # Content and notes
-            "Tags": ["llm_extraction", "extracted_fields", "tags"],
-            "Version_Notes": ["llm_extraction", "extracted_fields", "version_notes"],
-            "Utility_Notes": ["llm_extraction", "extracted_fields", "utility_notes"],
-            "Additional_Notes": [
-                "llm_extraction",
-                "extracted_fields",
-                "additional_notes",
-            ],
-            # Manual entry fields (will be empty for now)
-            "Action_Required": "",  # Manual entry
-            "Parent_Document_ID": "",  # Manual entry
-            "Off_Site_Storage_ID": "",  # Manual entry
-            "On_Site_Storage_ID": "",  # Manual entry
-            "Backup_Storage_ID": "",  # Manual entry
-            "Project_ID": "",  # Manual entry
-            "Version_Number": "",  # Manual entry
-            # Processing metadata (bonus columns)
-            "Processing_Status": ["llm_extraction", "success"],
-            "OCR_Text_Length": ["semantics", "all_text"],  # Will calculate length
-            "Visual_Description_Length": [
-                "semantics",
-                "all_imagery",
-            ],  # Will calculate length
-            "Fields_Extracted_Count": "calculated",  # Will calculate
-            "Processing_Date": ["stages", "completed", "timestamp"],
-            "Original_Filename": "original_filename",
-        }
-
-    def export_to_spreadsheet(
+    def _export_to_spreadsheet(
         self,
         profiles_dir: Path,
         output_dir: Path,

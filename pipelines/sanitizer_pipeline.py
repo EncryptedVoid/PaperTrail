@@ -18,7 +18,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Set, TypedDict, Any
 from tqdm import tqdm
-from utilities.session_tracking_agent import SessionTracker
 from processors.conversion_processor import (
     ConversionProcessor,
     ConversionReport,
@@ -32,6 +31,9 @@ from config import (
     CHECKSUM_HISTORY_FILE,
     PROFILE_PREFIX,
     ARTIFACT_PREFIX,
+    UUID_PREFIX,
+    INCLUDE_TIMESTAMP_ON_UUID,
+    UUID_ENTROPY,
 )
 import json
 import datetime
@@ -87,17 +89,14 @@ class SanitizerPipeline:
     def __init__(
         self,
         logger: logging.Logger,
-        session_agent: SessionTracker,
     ):
         """
         Initialize the SanitizerPipeline.
 
         Args:
             logger: Logger instance for recording pipeline operations and errors
-            session_agent: SessionTracker for monitoring pipeline progress and state
         """
         self.logger = logger
-        self.session_agent = session_agent
 
     def sanitize(
         self,
@@ -134,19 +133,18 @@ class SanitizerPipeline:
             initial feedback and optimize processing time for large directories.
         """
 
-        # Validate that the source path exists and is accessible
         if not source_path.exists():
             error_msg = f"Source path does not exist: {source_path}"
             self.logger.error(error_msg)
             raise FileNotFoundError(error_msg)
 
-        # Validate that review and success directories exist and are directories
         if not review_dir.exists() or not review_dir.is_dir():
             error_msg = (
                 f"Review directory does not exist or is not a directory: {review_dir}"
             )
             self.logger.error(error_msg)
             raise FileNotFoundError(error_msg)
+
         if not success_dir.exists() or not success_dir.is_dir():
             error_msg = (
                 f"Success directory does not exist or is not a directory: {success_dir}"
@@ -330,9 +328,6 @@ class SanitizerPipeline:
                 self.logger.error(error_msg)
                 report["errors"].append(error_msg)
                 # Continue processing remaining files despite individual failures
-
-        # Update session tracker with current progress
-        self.session_agent.update({"stage": "sanitization", "report": report})
 
         # Generate final summary report for user review
         self.logger.info("Sanitization complete:")
@@ -627,7 +622,7 @@ class SanitizerPipeline:
                 os.fsync(history_file.fileno())
 
             # Log successful save operation
-            self.logger.debug(f"Successfully saved checksum to history file")
+            self.logger.debug("Successfully saved checksum to history file")
 
         except PermissionError as permission_error:
             self.logger.error(
@@ -642,9 +637,7 @@ class SanitizerPipeline:
                 f"Unexpected error saving checksum to history: {unexpected_error}"
             )
 
-    def _generate_uuid(
-        self, prefix: str = "", include_timestamp: bool = False, entropy: int = 16
-    ) -> str:
+    def _generate_uuid(self) -> str:
         """
         Generate enhanced UUID4 with guaranteed cryptographic security and optional features.
 
@@ -670,11 +663,6 @@ class SanitizerPipeline:
         - Timestamp inclusion for chronological tracking
         - Configurable entropy for specialized requirements
 
-        Args:
-            prefix: Optional string prefix to prepend for namespacing and identification
-            include_timestamp: Whether to include ISO timestamp for traceability
-            entropy: Number of random bytes to use (default 16 for standard UUID)
-
         Returns:
             Cryptographically secure UUID string with optional prefix and timestamp
 
@@ -684,12 +672,12 @@ class SanitizerPipeline:
         """
         # Log UUID generation request for audit trail
         self.logger.debug(
-            f"Generating UUID4+: prefix='{prefix}', timestamp={include_timestamp}, entropy={entropy}"
+            f"Generating UUID4+: prefix='{UUID_PREFIX}', timestamp={INCLUDE_TIMESTAMP_ON_UUID}, entropy={UUID_ENTROPY}"
         )
 
         # Generate cryptographically secure random bytes and convert to UUID format
         try:
-            secure_random_bytes: bytes = secrets.token_bytes(entropy)
+            secure_random_bytes: bytes = secrets.token_bytes(UUID_ENTROPY)
             secure_uuid: str = str(uuid.UUID(bytes=secure_random_bytes, version=4))
 
             self.logger.debug(f"Generated secure UUID: {secure_uuid}")
@@ -703,12 +691,12 @@ class SanitizerPipeline:
         result_components: List[str] = []
 
         # Add prefix if provided
-        if prefix:
-            result_components.append(prefix)
-            self.logger.debug(f"Added prefix: {prefix}")
+        if UUID_PREFIX:
+            result_components.append(UUID_PREFIX)
+            self.logger.debug(f"Added prefix: {UUID_PREFIX}")
 
         # Add timestamp if requested
-        if include_timestamp:
+        if INCLUDE_TIMESTAMP_ON_UUID:
             # Generate ISO format timestamp with UTC timezone for consistency
             timestamp: str = (
                 datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

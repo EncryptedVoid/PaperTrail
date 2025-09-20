@@ -44,6 +44,7 @@ from config import (
     QWEN2VL_7B_CPU_MIN_RAM,
     QWEN2VL_7B_CPU_QUALITY,
     QWEN2VL_7B_CPU_MAX_TOKENS,
+    PREFERRED_VISUAL_MODEL
 )
 
 
@@ -116,11 +117,7 @@ class VisualProcessor:
 
     def __init__(
         self,
-        logger: logging.Logger,
-        max_gpu_vram_gb: Optional[float] = None,
-        max_ram_gb: Optional[float] = None,
-        force_cpu: bool = False,
-        processing_mode: Optional[ProcessingMode] = None,
+        logger: logging.Logger
     ) -> None:
         """
         Initialize the Visual Processor with automatic configuration from constants.
@@ -149,9 +146,7 @@ class VisualProcessor:
         self.logger.info("Initializing VisualProcessor with configuration constants")
 
         # Apply configuration constants for initialization parameters
-        self.processing_mode = processing_mode or ProcessingMode(
-            DEFAULT_PROCESSING_MODE
-        )
+        self.processing_mode = DEFAULT_PROCESSING_MODE
         self.refresh_interval = DEFAULT_REFRESH_INTERVAL
         self.memory_threshold = DEFAULT_MEMORY_THRESHOLD
         self.auto_model_selection = DEFAULT_AUTO_MODEL_SELECTION
@@ -161,194 +156,15 @@ class VisualProcessor:
         self.logger.info(f"Memory threshold: {self.memory_threshold}%")
         self.logger.info(f"Refresh interval: {self.refresh_interval} documents")
 
-        # Initialize hardware constraints using configuration ratios
-        self.hardware_constraints = self._detect_hardware_constraints(
-            max_gpu_vram_gb, max_ram_gb, force_cpu
-        )
-        self.logger.info(f"Hardware constraints detected: {self.hardware_constraints}")
-
         # Initialize processing statistics
         self.stats = ProcessingStats()
         self.logger.debug("Processing statistics initialized")
 
         # Model state variables
-        self.model = None
-        self.processor = None
-        self.current_model_name = None
-        self.device = None
+        self.model = PREFERRED_VISUAL_MODEL
+        self.current_model_name = PREFERRED_VISUAL_MODEL
+        self.device = "cuda"
         self.max_tokens = QWEN2VL_7B_MAX_TOKENS  # Default to 7B model tokens
-
-        # Select and load optimal model based on hardware constraints
-        self._select_and_load_optimal_model()
-
-    def _detect_hardware_constraints(
-        self,
-        max_gpu_vram_gb: Optional[float],
-        max_ram_gb: Optional[float],
-        force_cpu: bool,
-    ) -> HardwareConstraints:
-        """
-        Detect available hardware resources or use provided constraints.
-
-        Uses configuration constants RAM_USAGE_RATIO and VRAM_USAGE_RATIO to determine
-        safe memory limits for model loading and processing.
-
-        Args:
-            max_gpu_vram_gb: Optional override for GPU VRAM limit
-            max_ram_gb: Optional override for RAM limit
-            force_cpu: Whether to force CPU-only processing
-
-        Returns:
-            HardwareConstraints object with detected or provided limits
-        """
-        self.logger.info("Detecting hardware constraints...")
-
-        # RAM detection using configuration ratio
-        if max_ram_gb is None:
-            total_ram = psutil.virtual_memory().total / (1024**3)  # Convert to GB
-            available_ram = total_ram * RAM_USAGE_RATIO  # Use configured ratio
-            self.logger.info(
-                f"Auto-detected RAM: {total_ram:.1f}GB total, using {available_ram:.1f}GB ({RAM_USAGE_RATIO*100}%)"
-            )
-        else:
-            available_ram = max_ram_gb
-            self.logger.info(f"Using provided RAM limit: {available_ram:.1f}GB")
-
-        # GPU detection using configuration ratio
-        if max_gpu_vram_gb is None and not force_cpu:
-            try:
-                if torch.cuda.is_available():
-                    # Get GPU memory from torch
-                    gpu_props = torch.cuda.get_device_properties(0)
-                    total_vram = gpu_props.total_memory / (1024**3)  # Convert to GB
-                    available_vram = (
-                        total_vram * VRAM_USAGE_RATIO
-                    )  # Use configured ratio
-                    gpu_name = torch.cuda.get_device_name(0)
-                    self.logger.info(
-                        f"Auto-detected GPU: {gpu_name} with {total_vram:.1f}GB VRAM, using {available_vram:.1f}GB ({VRAM_USAGE_RATIO*100}%)"
-                    )
-                else:
-                    available_vram = 0
-                    self.logger.warning(
-                        "CUDA not available, falling back to CPU processing"
-                    )
-            except Exception as e:
-                self.logger.warning(f"Could not detect GPU VRAM: {e}")
-                available_vram = 0
-        else:
-            available_vram = max_gpu_vram_gb or 0
-            if max_gpu_vram_gb:
-                self.logger.info(
-                    f"Using provided GPU VRAM limit: {available_vram:.1f}GB"
-                )
-
-        if force_cpu:
-            available_vram = 0
-            self.logger.info("CPU processing forced, ignoring GPU")
-
-        return HardwareConstraints(
-            max_gpu_vram_gb=available_vram,
-            max_ram_gb=available_ram,
-            force_cpu=force_cpu,
-        )
-
-    def _select_and_load_optimal_model(self) -> None:
-        """
-        Select and load the optimal model based on hardware constraints and configuration.
-
-        Uses configuration constants for model requirements and automatically selects
-        the best model that fits within available hardware resources.
-        """
-        self.logger.info("Selecting optimal model based on hardware constraints...")
-
-        # Define model options with configuration constants
-        model_options = [
-            {
-                "name": "Qwen2-VL-72B",
-                "model_id": "Qwen/Qwen2-VL-72B-Instruct",
-                "min_vram": QWEN2VL_72B_MIN_VRAM,
-                "min_ram": QWEN2VL_72B_MIN_RAM,
-                "quality": QWEN2VL_72B_QUALITY,
-                "max_tokens": QWEN2VL_72B_MAX_TOKENS,
-            },
-            {
-                "name": "Qwen2-VL-7B",
-                "model_id": "Qwen/Qwen2-VL-7B-Instruct",
-                "min_vram": QWEN2VL_7B_MIN_VRAM,
-                "min_ram": QWEN2VL_7B_MIN_RAM,
-                "quality": QWEN2VL_7B_QUALITY,
-                "max_tokens": QWEN2VL_7B_MAX_TOKENS,
-            },
-            {
-                "name": "Qwen2-VL-2B",
-                "model_id": "Qwen/Qwen2-VL-2B-Instruct",
-                "min_vram": QWEN2VL_2B_MIN_VRAM,
-                "min_ram": QWEN2VL_2B_MIN_RAM,
-                "quality": QWEN2VL_2B_QUALITY,
-                "max_tokens": QWEN2VL_2B_MAX_TOKENS,
-            },
-            {
-                "name": "Qwen2-VL-7B-CPU",
-                "model_id": "Qwen/Qwen2-VL-7B-Instruct",
-                "min_vram": QWEN2VL_7B_CPU_MIN_VRAM,  # 0.0 for CPU
-                "min_ram": QWEN2VL_7B_CPU_MIN_RAM,
-                "quality": QWEN2VL_7B_CPU_QUALITY,
-                "max_tokens": QWEN2VL_7B_CPU_MAX_TOKENS,
-            },
-        ]
-
-        # Filter models that fit within hardware constraints
-        suitable_models = []
-        for model in model_options:
-            fits_vram = model["min_vram"] <= self.hardware_constraints.max_gpu_vram_gb
-            fits_ram = model["min_ram"] <= self.hardware_constraints.max_ram_gb
-
-            if self.hardware_constraints.force_cpu:
-                # Only CPU models when forced
-                if model["min_vram"] == 0:
-                    suitable_models.append(model)
-                    self.logger.debug(f"CPU model fits constraints: {model['name']}")
-            else:
-                if fits_vram and fits_ram:
-                    suitable_models.append(model)
-                    self.logger.debug(
-                        f"Model fits constraints: {model['name']} (VRAM: {model['min_vram']}GB, RAM: {model['min_ram']}GB)"
-                    )
-
-        if not suitable_models:
-            self.logger.error(
-                "No suitable models found for current hardware constraints"
-            )
-            # Emergency fallback to CPU model with minimal requirements
-            fallback_model = {
-                "name": "Qwen2-VL-7B-CPU-Fallback",
-                "model_id": "Qwen/Qwen2-VL-7B-Instruct",
-                "min_vram": 0.0,
-                "min_ram": 8.0,  # Reduced RAM requirement for emergency fallback
-                "quality": QWEN2VL_7B_CPU_QUALITY,
-                "max_tokens": QWEN2VL_7B_CPU_MAX_TOKENS,
-            }
-            suitable_models = [fallback_model]
-            self.logger.warning(
-                "Using emergency fallback model with reduced RAM requirements"
-            )
-
-        # Select model with highest quality score that fits
-        selected_model = max(suitable_models, key=lambda m: m["quality"])
-        self.current_model_name = selected_model["name"]
-        self.max_tokens = selected_model["max_tokens"]
-
-        self.logger.info(
-            f"Selected optimal model: {selected_model['name']} (quality: {selected_model['quality']}/10)"
-        )
-        self.logger.info(
-            f"Model requirements: VRAM {selected_model['min_vram']}GB, RAM {selected_model['min_ram']}GB"
-        )
-        self.logger.info(f"Max tokens per generation: {self.max_tokens}")
-
-        # Load the selected model
-        self._load_model(selected_model["model_id"])
 
     def _load_model(self, model_id: str) -> None:
         """
@@ -376,18 +192,8 @@ class VisualProcessor:
                 self.logger.debug("Garbage collection completed")
 
             # Determine compute device based on hardware constraints
-            if (
-                self.hardware_constraints.force_cpu
-                or self.hardware_constraints.max_gpu_vram_gb == 0
-            ):
-                self.device = "cpu"
-                self.logger.info("Using CPU for processing")
-            else:
-                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            if (self.device == "cuda" if torch.cuda.is_available()):
                 self.logger.info(f"Using device: {self.device}")
-
-            # Log detailed hardware information
-            if torch.cuda.is_available() and self.device == "cuda":
                 gpu_name = torch.cuda.get_device_name(0)
                 gpu_memory = torch.cuda.get_device_properties(0).total_memory / (
                     1024**3
@@ -396,88 +202,53 @@ class VisualProcessor:
                 self.logger.info(
                     f"GPU Details: {gpu_name} ({gpu_memory:.1f}GB, Compute {compute_capability}.x)"
                 )
+                # Configure model loading parameters based on device
+                model_kwargs = {
+                    "torch_dtype": (
+                        torch.bfloat16 if self.device == "cuda" else torch.float32
+                    ),
+                    "device_map": "auto" if self.device == "cuda" else {"": "cpu"},
+                }
+                self.logger.debug(f"Model loading kwargs: {model_kwargs}")
 
-            # Configure model loading parameters based on device
-            model_kwargs = {
-                "torch_dtype": (
-                    torch.bfloat16 if self.device == "cuda" else torch.float32
-                ),
-                "device_map": "auto" if self.device == "cuda" else {"": "cpu"},
-            }
+                # Load model with progress logging
+                self.logger.info("Loading model from transformers library...")
+                self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                    model_id, **model_kwargs
+                )
+                self.logger.info("Model loaded successfully")
 
-            self.logger.debug(f"Model loading kwargs: {model_kwargs}")
+                # Load processor
+                self.logger.info("Loading processor...")
+                self.processor = AutoProcessor.from_pretrained(model_id)
+                self.logger.info("Processor loaded successfully")
 
-            # Load model with progress logging
-            self.logger.info("Loading model from transformers library...")
-            self.model = Qwen2VLForConditionalGeneration.from_pretrained(
-                model_id, **model_kwargs
-            )
-            self.logger.info("Model loaded successfully")
+                loading_time = time.time() - loading_start_time
+                self.logger.info(f"Model loading completed in {loading_time:.2f} seconds")
 
-            # Load processor
-            self.logger.info("Loading processor...")
-            self.processor = AutoProcessor.from_pretrained(model_id)
-            self.logger.info("Processor loaded successfully")
+                # Log memory usage after loading
+                memory_info = self._monitor_memory_usage()
 
-            loading_time = time.time() - loading_start_time
-            self.logger.info(f"Model loading completed in {loading_time:.2f} seconds")
-
-            # Log memory usage after loading
-            memory_info = self._monitor_memory_usage()
-            if self.device == "cuda":
                 self.logger.info(
                     f"GPU memory usage after loading: {memory_info.get('gpu_memory_percent', 0):.1f}%"
                 )
-            self.logger.info(
-                f"System RAM usage after loading: {memory_info.get('system_ram_percent', 0):.1f}%"
-            )
+            else:
+                self.device = "cpu"
+                self.logger.info("Using CPU for processing")
+
+                # Log memory usage after loading
+                memory_info = self._monitor_memory_usage()
+
+                self.logger.info(
+                    f"System RAM usage after loading: {memory_info.get('system_ram_percent', 0):.1f}%"
+                )
 
             self.stats.last_refresh_time = time.time()
 
         except Exception as e:
             self.logger.error(f"Failed to load model {model_id}: {e}")
             self.logger.error("Model loading failed, attempting fallback strategies...")
-            self._try_fallback_model()
-
-    def _try_fallback_model(self) -> None:
-        """
-        Attempt to load a fallback model if primary model fails.
-
-        Tries progressively smaller models and eventually forces CPU mode
-        if all GPU attempts fail.
-
-        Raises:
-            RuntimeError: If all fallback models fail to load
-        """
-        self.logger.warning("Attempting to load fallback model...")
-
-        # Try CPU mode if not already forced
-        if not self.hardware_constraints.force_cpu:
-            self.logger.info("Attempting CPU fallback...")
-            try:
-                # Force CPU mode temporarily
-                original_force_cpu = self.hardware_constraints.force_cpu
-                self.hardware_constraints.force_cpu = True
-
-                # Try loading with reduced memory requirements
-                self._load_model("Qwen/Qwen2-VL-7B-Instruct")
-                self.current_model_name = "Qwen2-VL-7B-CPU-Fallback"
-                self.max_tokens = QWEN2VL_7B_CPU_MAX_TOKENS
-
-                self.stats.model_switches += 1
-                self.logger.info("Successfully loaded CPU fallback model")
-                return
-
-            except Exception as e:
-                self.logger.error(f"CPU fallback also failed: {e}")
-                # Restore original setting
-                self.hardware_constraints.force_cpu = original_force_cpu
-
-        # If we reach here, all fallback attempts failed
-        self.logger.critical("All fallback models failed to load")
-        raise RuntimeError(
-            "No models could be loaded - check hardware requirements and model availability"
-        )
+            raise ModuleNotFoundError
 
     def _should_refresh_model(self) -> bool:
         """
@@ -1034,7 +805,7 @@ class VisualProcessor:
             self.logger.error(f"Failed to process image: {e}")
             raise
 
-    def extract_article_semantics(self, document: Union[str, Path]) -> Dict[str, str]:
+    def extract_semantics(self, document: Path) -> Dict[str, str]:
         """
         Process document with enhanced monitoring and performance tracking.
 
@@ -1308,7 +1079,7 @@ class VisualProcessor:
             # Current configuration
             "current_model": self.current_model_name,
             "device": self.device,
-            "processing_mode": self.processing_mode.value,
+            "processing_mode": self.processing_mode,
             "max_tokens": self.max_tokens,
             # Configuration constants context
             "configuration": {
@@ -1356,13 +1127,6 @@ class VisualProcessor:
 
         # Add current memory usage
         stats["memory_usage"] = self._monitor_memory_usage()
-
-        # Hardware constraints and utilization
-        stats["hardware_constraints"] = {
-            "max_gpu_vram_gb": self.hardware_constraints.max_gpu_vram_gb,
-            "max_ram_gb": self.hardware_constraints.max_ram_gb,
-            "force_cpu": self.hardware_constraints.force_cpu,
-        }
 
         # Processing efficiency metrics
         if self.stats.total_processing_time > 0:
@@ -1474,13 +1238,6 @@ class VisualProcessor:
             suggestions.append(
                 "Monitor system for memory leaks or resource constraints"
             )
-
-        # Generate hardware utilization recommendations
-        if self.device == "cpu" and not self.hardware_constraints.force_cpu:
-            if self.hardware_constraints.max_gpu_vram_gb > QWEN2VL_2B_MIN_VRAM:
-                suggestions.append(
-                    "GPU is available but not being used - consider enabling GPU processing"
-                )
 
         # Performance optimization based on processing mode
         if (

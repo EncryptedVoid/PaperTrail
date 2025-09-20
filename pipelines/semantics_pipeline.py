@@ -1,432 +1,590 @@
-import torch
-from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-from qwen_vl_utils import process_vision_info
-import fitz
-from PIL import Image
-import io
+"""
+Semantics Pipeline Module
+
+A robust file processing pipeline that handles comprehensive semantic data extraction
+from various document types including PDFs, images, and office files using advanced
+visual processing and LLM-based field extraction techniques.
+
+This module provides functionality to extract semantic data by:
+- Processing documents through visual recognition systems for text and imagery extraction
+- Utilizing large language models for structured field extraction
+- Analyzing document content, layout, and metadata
+- Extracting domain-specific information based on document type
+- Handling extraction failures gracefully with fallback methods
+- Maintaining detailed operation logs and quality metrics
+- Updating artifact profiles with extracted semantic data
+- Moving processed files through appropriate pipeline stages
+
+Author: Ashiq Gazi
+"""
+
 import logging
-import gc
-import psutil
-import time
-from enum import Enum
-from typing import Union, List, Dict, Any, Optional, Tuple
-from pathlib import Path
-from dataclasses import dataclass
-from datetime import datetime
-import requests
-import ollama
 import json
-import re
-import logging
-import psutil
-from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime
-from dataclasses import dataclass
-from enum import Enum
-import subprocess
-import requests
 import time
-from requests.exceptions import RequestException, ConnectionError, Timeout
-import os
-import signal
-from config import ARTIFACT_PREFIX
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Any, TypedDict, Optional
+from tqdm import tqdm
+from utilities.session_tracking_agent import SessionTracker
+from processors.language_processor import LanguageProcessor, LanguageExtractionReport
+from processors.visual_processor import VisualProcessor, OCRReport
+from config import ARTIFACT_PROFILES_DIR, ARTIFACT_PREFIX, PROFILE_PREFIX
 
-for artifact in tqdm(artifacts, desc="Extracting semantic data", unit="artifact"):
-    try:
-        # Extract UUID from filename for profile lookup
-        artifact_id = artifact.stem[len(ARTIFACT_PREFIX) :]  # Remove "ARTIFACT-" prefix
-        profile_path = PATHS["profiles_dir"] / f"PROFILE-{artifact_id}.json"
 
-        # Load existing profile
-        with open(profile_path, "r", encoding="utf-8") as f:
-            profile_data = json.load(f)
+class SemanticExtractionReport(TypedDict):
+    """
+    Type definition for the semantic extraction report returned by the extract_semantics method.
 
-        # Check if file is too corrupted to process
-        file_size = artifact.stat().st_size
-        if file_size < 1024:  # Less than 1KB might be corrupted
-            logger.warning(
-                f"File {artifact.name} is very small ({file_size} bytes), may be corrupted"
-            )
+    Attributes:
+        processed_files: Number of files that had semantic data successfully extracted
+        total_files: Total number of files discovered in the source directory
+        failed_extractions: Count of files where semantic extraction failed
+        skipped_files: Count of files skipped due to validation issues
+        ocr_failures: Count of files where OCR text extraction failed
+        visual_processing_failures: Count of files where visual processing failed
+        llm_extraction_failures: Count of files where LLM field extraction failed
+        successful_text_extractions: Count of files with successful text extraction
+        successful_visual_extractions: Count of files with successful visual extraction
+        successful_field_extractions: Count of files with successful structured field extraction
+        errors: List of error messages encountered during processing
+        quality_metrics: Dictionary containing quality assessment metrics
+        processing_times: Dictionary containing performance timing metrics
+        model_statistics: Dictionary containing model usage and performance statistics
+        profile_updates: Number of artifact profiles successfully updated
+    """
 
-        # Track pre-processing stats to detect model refreshes/switches
-        pre_processing_stats = processor.get_processing_stats()
+    processed_files: int
+    total_files: int
+    failed_extractions: int
+    skipped_files: int
+    ocr_failures: int
+    visual_processing_failures: int
+    llm_extraction_failures: int
+    successful_text_extractions: int
+    successful_visual_extractions: int
+    successful_field_extractions: int
+    errors: List[str]
+    quality_metrics: Dict[str, Any]
+    processing_times: Dict[str, float]
+    model_statistics: Dict[str, Any]
+    profile_updates: int
 
-        # Extract semantic data using enhanced visual processor
-        logger.info(f"Extracting semantics for: {artifact.name}")
-        logger.debug(f"File size: {file_size / (1024*1024):.2f}MB")
 
-        # Get the data we need for LLM processing
-        ocr_text = profile_data.get("semantics", {}).get("all_text", "")
-        visual_description = profile_data.get("semantics", {}).get("all_imagery", "")
-        metadata = profile_data.get("metadata", {})
+class SemanticsPipeline:
+    """
+    A semantic data extraction pipeline for processing directories of document artifacts.
 
-        # Check if we have enough content to process
-        # Check if OCR completely failed
-        if (
-            not ocr_text or ocr_text.strip() in ["No text found in document.", ""]
-        ) and (
-            not visual_description
-            or visual_description.strip() in ["No visual content described.", ""]
-        ):
+    This class handles the extraction of comprehensive semantic information from various
+    document types using advanced visual processing, OCR technology, and large language
+    model-based field extraction. It maintains artifact profiles and provides detailed
+    reporting of all operations with quality metrics and performance analytics.
 
-            logger.error(
-                f"Both OCR text extraction and visual processing failed for {artifact.name} - moving to review"
-            )
+    The pipeline works in the following stages:
+    1. Directory validation and artifact discovery
+    2. Artifact profile loading and validation
+    3. Visual processing for text and imagery extraction
+    4. OCR text extraction with quality assessment
+    5. LLM-based structured field extraction
+    6. Content analysis and quality scoring
+    7. Profile data integration and updates
+    8. Error handling and fallback processing
+    9. File movement through pipeline stages
+    10. Comprehensive reporting and performance metrics
 
-            # Move to review folder instead of processing through LLM
-            review_dir = PATHS["semantics_dir"] / "ocr_failed"
-            review_dir.mkdir(exist_ok=True)
-            artifact.rename(review_dir / artifact.name)
+    Processing Methods:
+    - Visual processing using advanced computer vision models
+    - OCR text extraction with multiple fallback engines
+    - LLM field extraction with context-aware prompting
+    - Quality assessment and validation of extracted data
+    - Performance monitoring and optimization
+    """
 
-            # Update profile to mark as failed
-            profile_data["stages"]["llm_field_extraction"] = {
-                "status": "failed",
-                "reason": "OCR_and_visual_processing_failed",
-            }
-            processing_stats["failed_extractions"] += 1
-            continue  # Skip LLM processing
+    def __init__(
+        self,
+        logger: logging.Logger,
+        session_agent: SessionTracker,
+        visual_processor: VisualProcessor,
+        field_extractor: LanguageProcessor,
+    ):
+        """
+        Initialize the SemanticsPipeline.
 
-        logger.info(f"Extracting structured fields for: {artifact.name}")
-        logger.debug(
-            f"OCR text length: {len(ocr_text)} chars, Visual desc length: {len(visual_description)} chars"
-        )
+        Args:
+            logger: Logger instance for recording pipeline operations and errors
+            session_agent: SessionTracker for monitoring pipeline progress and state
+            visual_processor: Visual processing engine for text and imagery extraction
+            field_extractor: LLM-based field extraction engine for structured data
+        """
+        self.logger = logger
+        self.session_agent = session_agent
+        self.visual_processor = visual_processor
+        self.field_extractor = field_extractor
 
-        # Extract structured fields using enhanced LLM
-        extraction_result = field_extractor.extract_fields(
-            ocr_text=ocr_text,
-            visual_description=visual_description,
-            metadata=metadata,
-            uuid=artifact_id,
-        )
+    def extract_semantics(
+        self,
+        source_dir: Path,
+        review_dir: Path,
+        success_dir: Path,
+    ) -> SemanticExtractionReport:
+        """
+        Extract semantic data from all artifacts in a directory and update their profiles.
 
-        processing_stats["total_processed"] += 1
+        This method performs comprehensive semantic extraction:
+        1. Validates input directories exist and are accessible
+        2. Discovers all artifact files in the source directory
+        3. Loads existing artifact profiles for data integration
+        4. Processes each artifact through visual and LLM extraction
+        5. Extracts text content, visual descriptions, and structured fields
+        6. Performs quality assessment and validation
+        7. Updates artifact profiles with extracted semantic data
+        8. Moves processed files to appropriate target directories
+        9. Generates comprehensive report with quality metrics
 
-        # Update profile with LLM-extracted fields and stage completion
-        profile_data["llm_extraction"] = extraction_result
+        Args:
+            source_dir: Directory containing artifacts to extract semantics from
+            review_dir: Directory to move problematic files for manual review
+            success_dir: Directory to move files to after successful extraction
 
-        # Enhanced stage completion tracking
-        stage_completion_data = {
-            "status": "completed" if extraction_result["success"] else "failed",
-            "timestamp": datetime.now().isoformat(),
-            "model_used": extraction_result.get("model_used", "unknown"),
-            "extraction_mode": extraction_result.get("extraction_mode", "unknown"),
-            "fields_extracted": len(extraction_result.get("extracted_fields", {})),
-            "processing_time_ms": extraction_result.get("processing_time_ms", 0),
+        Returns:
+            SemanticExtractionReport containing detailed results of the extraction process
+
+        Note:
+            This method expects files to follow the ARTIFACT-{uuid}.ext naming convention
+            and looks for corresponding PROFILE-{uuid}.json files for updates.
+        """
+
+        # Validate that input directories exist and are accessible
+        if not source_dir.exists():
+            error_msg = f"Source directory does not exist: {source_dir}"
+            self.logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+
+        if not success_dir.exists():
+            success_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"Created target directory: {success_dir}")
+
+        if not review_dir.exists():
+            review_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"Created review directory: {review_dir}")
+
+        # Initialize report structure with default values
+        report: SemanticExtractionReport = {
+            "processed_files": 0,
+            "total_files": 0,
+            "failed_extractions": 0,
+            "skipped_files": 0,
+            "ocr_failures": 0,
+            "visual_processing_failures": 0,
+            "llm_extraction_failures": 0,
+            "successful_text_extractions": 0,
+            "successful_visual_extractions": 0,
+            "successful_field_extractions": 0,
+            "errors": [],
+            "quality_metrics": {
+                "average_text_length": 0,
+                "average_visual_description_length": 0,
+                "average_fields_extracted": 0,
+                "quality_scores": [],
+            },
+            "processing_times": {
+                "total_time": 0,
+                "average_per_file": 0,
+                "visual_processing_time": 0,
+                "llm_processing_time": 0,
+            },
+            "model_statistics": {
+                "context_refreshes": 0,
+                "model_switches": 0,
+                "current_model": "unknown",
+            },
+            "profile_updates": 0,
         }
 
-        if not extraction_result["success"]:
-            stage_completion_data["error"] = extraction_result.get(
-                "error", "Unknown error"
-            )
+        # Discover all artifact files in the source directory
+        try:
+            unprocessed_artifacts = [
+                item
+                for item in source_dir.iterdir()
+                if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
+            ]
+        except Exception as e:
+            error_msg = f"Failed to scan source directory: {e}"
+            self.logger.error(error_msg)
+            report["errors"].append(error_msg)
+            return report
 
-        profile_data["stages"]["llm_field_extraction"] = stage_completion_data
+        # Handle empty directory case
+        if not unprocessed_artifacts:
+            self.logger.info("No artifact files found in source directory")
+            return report
 
-        # Save updated profile
-        with open(profile_path, "w", encoding="utf-8") as f:
-            json.dump(profile_data, f, indent=2)
+        # Sort files by size for consistent processing order
+        unprocessed_artifacts.sort(key=lambda p: p.stat().st_size)
+        report["total_files"] = len(unprocessed_artifacts)
 
-        # Move artifact to next stage directory
-        moved_artifact = artifact.rename(PATHS["process_completed_dir"] / artifact.name)
-
-        # Update session tracking
-        if extraction_result["success"]:
-            update_stage_counts("semantics", "llm_processed", session_data)
-            processing_stats["successful_extractions"] += 1
-        else:
-            update_stage_counts("semantics", "failed", session_data)
-            processing_stats["failed_extractions"] += 1
-
-        # Log detailed progress
-        file_size = moved_artifact.stat().st_size
-        extraction_status = "successful" if extraction_result["success"] else "failed"
-        log_detailed_progress(
-            artifact.name, file_size, f"llm_extraction_{extraction_status}"
+        # Log semantic extraction stage header for clear progress tracking
+        self.logger.info("=" * 80)
+        self.logger.info("SEMANTIC DATA EXTRACTION AND ANALYSIS STAGE")
+        self.logger.info("=" * 80)
+        self.logger.info(
+            f"Found {len(unprocessed_artifacts)} artifact files to process"
         )
 
-        # Update session JSON after each file
-        update_session_json()
+        # Initialize processing statistics
+        start_time = datetime.now()
+        quality_scores = []
 
-        # Enhanced logging of extraction results
-        if extraction_result["success"]:
-            extracted_fields = extraction_result["extracted_fields"]
+        # Process each file through the sanitization pipeline
+        # Use progress bar only for multiple files
+        if len(unprocessed_artifacts) > 1:
+            artifact_iterator: Any = tqdm(
+                unprocessed_artifacts,
+                desc="Extracting semantic data",
+                unit="artifacts",
+            )
+        else:
+            artifact_iterator = unprocessed_artifacts
+
+        # Process each artifact through the semantic extraction pipeline
+        for artifact in artifact_iterator:
+            try:
+                # STAGE 1: Extract UUID from filename for profile lookup
+                artifact_id = artifact.stem[
+                    len(ARTIFACT_PREFIX) :
+                ]  # Remove "ARTIFACT-" prefix
+                profile_path = (
+                    ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
+                )
+
+                # STAGE 2: Load existing profile
+                if not profile_path.exists():
+                    error_msg = f"Profile not found for artifact: {artifact.name}"
+                    self.logger.error(error_msg)
+                    report["errors"].append(error_msg)
+                    report["skipped_files"] += 1
+
+                    # Move file to review directory for manual inspection
+                    self._move_to_review(artifact, review_dir, "missing_profile")
+                    continue
+
+                with open(profile_path, "r", encoding="utf-8") as f:
+                    profile_data = json.load(f)
+
+                # STAGE 3: Extract semantic data using visual processor
+                self.logger.info(f"Extracting semantics for: {artifact.name}")
+
+                visual_extraction_start = time.time()
+                extracted_semantics = self.visual_processor.extract_semantics(
+                    document=artifact
+                )
+                visual_processing_time = time.time() - visual_extraction_start
+
+                report["processing_times"][
+                    "visual_processing_time"
+                ] += visual_processing_time
+
+                # STAGE 4: Validate extraction results
+                ocr_text = extracted_semantics.get("all_text", "")
+                visual_description = extracted_semantics.get("all_imagery", "")
+
+                # Check if extraction completely failed
+                if self._is_extraction_failed(ocr_text, visual_description):
+                    self.logger.error(
+                        f"Both OCR text extraction and visual processing failed for {artifact.name}"
+                    )
+                    report["failed_extractions"] += 1
+                    report["ocr_failures"] += 1
+                    report["visual_processing_failures"] += 1
+
+                    # Move to review folder instead of processing through LLM
+                    self._move_to_review(artifact, review_dir, "extraction_failed")
+                    self._update_profile_failed(
+                        profile_data, profile_path, "OCR_and_visual_processing_failed"
+                    )
+                    continue
+
+                # STAGE 5: Track successful extractions
+                if ocr_text and not self._is_empty_extraction(ocr_text):
+                    report["successful_text_extractions"] += 1
+
+                if visual_description and not self._is_empty_extraction(
+                    visual_description
+                ):
+                    report["successful_visual_extractions"] += 1
+
+                # STAGE 6: Extract structured fields using LLM
+                llm_extraction_start = time.time()
+                field_extraction_result = self.field_extractor.extract_fields(
+                    ocr_text=ocr_text,
+                    visual_description=visual_description,
+                )
+                llm_processing_time = time.time() - llm_extraction_start
+
+                report["processing_times"]["llm_processing_time"] += llm_processing_time
+
+                # STAGE 7: Process extraction results
+                if field_extraction_result.get("success", False):
+                    report["successful_field_extractions"] += 1
+
+                    # Calculate quality metrics
+                    quality_score = self._calculate_quality_score(
+                        ocr_text, visual_description, field_extraction_result
+                    )
+                    quality_scores.append(quality_score)
+
+                    # Update profile with successful extraction
+                    self._update_profile_success(
+                        profile_data,
+                        profile_path,
+                        extracted_semantics,
+                        field_extraction_result,
+                        quality_score,
+                    )
+
+                    # Move artifact to success directory
+                    moved_artifact = artifact.rename(success_dir / artifact.name)
+                    report["processed_files"] += 1
+                    report["profile_updates"] += 1
+
+                    self.logger.info(f"Successfully processed: {artifact.name}")
+
+                else:
+                    report["llm_extraction_failures"] += 1
+                    self._move_to_review(artifact, review_dir, "llm_extraction_failed")
+                    self._update_profile_failed(
+                        profile_data,
+                        profile_path,
+                        field_extraction_result.get("error", "LLM extraction failed"),
+                    )
+
+            except Exception as e:
+                error_msg = f"Failed to process {artifact.name}: {e}"
+                self.logger.error(error_msg)
+                report["errors"].append(error_msg)
+                report["failed_extractions"] += 1
+
+                # Move to review directory
+                self._move_to_review(artifact, review_dir, "processing_error")
+
+        # STAGE 8: Calculate final metrics and statistics
+        total_time = (datetime.now() - start_time).total_seconds()
+        report["processing_times"]["total_time"] = total_time
+
+        if report["processed_files"] > 0:
+            report["processing_times"]["average_per_file"] = (
+                total_time / report["processed_files"]
+            )
+
+        if quality_scores:
+            report["quality_metrics"]["quality_scores"] = quality_scores
+            report["quality_metrics"]["average_quality_score"] = sum(
+                quality_scores
+            ) / len(quality_scores)
+
+        # Update model statistics if available
+        if self.field_extractor:
+            model_stats = self._get_model_statistics()
+            report["model_statistics"].update(model_stats)
+
+        # Update session tracker with current progress
+        self.session_agent.update({"stage": "semantic_extraction", "report": report})
+
+        # Generate final summary report for user review
+        self._log_final_summary(report)
+
+        return report
+
+    def _is_extraction_failed(self, ocr_text: str, visual_description: str) -> bool:
+        """
+        Check if both OCR and visual extraction completely failed.
+
+        Args:
+            ocr_text: Extracted text content
+            visual_description: Visual description
+
+        Returns:
+            True if both extractions failed, False otherwise
+        """
+        ocr_failed = (
+            not ocr_text
+            or ocr_text.strip() in ["No text found in document.", ""]
+            or self._is_empty_extraction(ocr_text)
+        )
+
+        visual_failed = (
+            not visual_description
+            or visual_description.strip() in ["No visual content described.", ""]
+            or self._is_empty_extraction(visual_description)
+        )
+
+        return ocr_failed and visual_failed
+
+    def _is_empty_extraction(self, content: str) -> bool:
+        """
+        Check if extracted content is effectively empty.
+
+        Args:
+            content: Content to check
+
+        Returns:
+            True if content is empty or contains only error messages
+        """
+        if not content or not content.strip():
+            return True
+
+        # Check for common error patterns
+        error_patterns = [
+            "no text found",
+            "extraction failed",
+            "processing failed",
+            "error occurred",
+            "unable to extract",
+        ]
+
+        content_lower = content.lower().strip()
+        return any(pattern in content_lower for pattern in error_patterns)
+
+    def _calculate_quality_score(
+        self,
+        ocr_text: str,
+        visual_description: str,
+        field_extraction_result: Dict[str, Any],
+    ) -> float:
+        """
+        Calculate a quality score for the extraction.
+
+        Args:
+            ocr_text: Extracted text content
+            visual_description: Visual description
+            field_extraction_result: LLM extraction results
+
+        Returns:
+            Quality score between 0 and 100
+        """
+        score = 0.0
+
+        # Text quality (40% of score)
+        if ocr_text and len(ocr_text.strip()) > 50:
+            score += 40.0
+        elif ocr_text and len(ocr_text.strip()) > 10:
+            score += 20.0
+
+        # Visual description quality (30% of score)
+        if visual_description and len(visual_description.strip()) > 100:
+            score += 30.0
+        elif visual_description and len(visual_description.strip()) > 25:
+            score += 15.0
+
+        # Field extraction quality (30% of score)
+        extracted_fields = field_extraction_result.get("extracted_fields", {})
+        if extracted_fields:
             non_unknown_fields = sum(
-                1 for v in extracted_fields.values() if v != "UNKNOWN"
+                1
+                for v in extracted_fields.values()
+                if v and str(v).upper() != "UNKNOWN"
             )
             total_fields = len(extracted_fields)
+            if total_fields > 0:
+                field_ratio = non_unknown_fields / total_fields
+                score += 30.0 * field_ratio
 
-            logger.info(
-                f"LLM extraction successful for {artifact.name}: {non_unknown_fields}/{total_fields} fields extracted "
-                f"using {extraction_result.get('extraction_mode', 'unknown')} mode"
-            )
+        return min(100.0, score)
 
-            # Log some key extracted fields for verification
-            key_fields = ["title", "document_type", "issuer_name", "date_of_issue"]
-            extracted_sample = {
-                k: extracted_fields.get(k, "UNKNOWN") for k in key_fields
-            }
-            logger.debug(f"Key fields extracted: {extracted_sample}")
+    def _update_profile_success(
+        self,
+        profile_data: Dict[str, Any],
+        profile_path: Path,
+        semantics: Dict[str, str],
+        field_results: Dict[str, Any],
+        quality_score: float,
+    ) -> None:
+        """
+        Update profile with successful extraction results.
 
-            # Log field extraction quality score
-            quality_score = (non_unknown_fields / total_fields) * 100
-            logger.debug(f"Field extraction quality: {quality_score:.1f}%")
-
-        else:
-            logger.warning(
-                f"LLM extraction failed for {artifact.name}: {extraction_result.get('error', 'Unknown error')}"
-            )
-
-        # Log progress every 50 files
-        if processing_stats["total_processed"] % 50 == 0:
-            current_stats = field_extractor.get_stats()
-            elapsed_time = datetime.now() - processing_stats["start_time"]
-
-            logger.info(f"=== Processing Progress Update ===")
-            logger.info(f"Files processed: {processing_stats['total_processed']}")
-            logger.info(
-                f"Success rate: {(processing_stats['successful_extractions'] / max(processing_stats['total_processed'], 1)) * 100:.1f}%"
-            )
-            logger.info(f"Context refreshes: {processing_stats['context_refreshes']}")
-            logger.info(f"Model switches: {processing_stats['model_switches']}")
-            logger.info(f"Current model: {current_stats['model']}")
-            logger.info(f"Elapsed time: {elapsed_time}")
-            logger.info(
-                f"Prompts since last refresh: {current_stats['prompts_since_refresh']}"
-            )
-            logger.info("=" * 35)
-
-    except Exception as e:
-        logger.error(f"Failed to process LLM extraction for {artifact.name}: {e}")
-        processing_stats["failed_extractions"] += 1
-
-        # Create failed subdirectory if needed and move file there
-        failed_dir = PATHS["semantics_dir"] / "failed"
-        failed_dir.mkdir(exist_ok=True)
-
+        Args:
+            profile_data: Profile data dictionary
+            profile_path: Path to profile file
+            semantics: Extracted semantic data
+            field_results: LLM field extraction results
+            quality_score: Calculated quality score
+        """
         try:
-            artifact.rename(failed_dir / artifact.name)
-            update_stage_counts("semantics", "failed", session_data)
-            logger.info(f"Moved failed file to: {failed_dir / artifact.name}")
-        except Exception as move_error:
-            logger.error(
-                f"Failed to move {artifact.name} to failed directory: {move_error}"
-            )
+            # Update profile with extraction results
+            profile_data["semantics"] = semantics
+            profile_data["llm_extraction"] = field_results
 
-        session_data["errors"].append(
-            {
-                "file": artifact.name,
-                "stage": "llm_field_extraction",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat(),
-            }
-        )
-
-        try:
-            extracted_semantics: Dict[str, str] = processor.extract_article_semantics(
-                document=artifact
-            )
-
-            # Track post-processing stats
-            post_processing_stats = processor.get_processing_stats()
-            processing_stats["total_processed"] += 1
-            processing_stats["successful_extractions"] += 1
-
-            # Check if model was refreshed or switched during processing
-            if (
-                pre_processing_stats["memory_refreshes"]
-                < post_processing_stats["memory_refreshes"]
-            ):
-                processing_stats["model_refreshes"] += 1
-                logger.info(f"Model was refreshed during processing of {artifact.name}")
-
-            if (
-                pre_processing_stats["model_switches"]
-                < post_processing_stats["model_switches"]
-            ):
-                processing_stats["model_switches"] += 1
-                logger.info(f"Model was switched during processing of {artifact.name}")
-
-            # Calculate quality score for this extraction
-            text_length = len(extracted_semantics.get("all_text", ""))
-            imagery_length = len(extracted_semantics.get("all_imagery", ""))
-
-            # Simple quality heuristic
-            has_meaningful_text = (
-                text_length > 50
-                and "No text found" not in extracted_semantics.get("all_text", "")
-            )
-            has_meaningful_imagery = (
-                imagery_length > 100
-                and "No visual content"
-                not in extracted_semantics.get("all_imagery", "")
-            )
-
-            quality_score = 0
-            if has_meaningful_text:
-                quality_score += 50
-            if has_meaningful_imagery:
-                quality_score += 50
-
-            processing_stats["quality_scores"].append(quality_score)
-
-            # Enhanced stage completion data
-            stage_completion_data = {
+            # Update stages tracking
+            profile_data.setdefault("stages", {})
+            profile_data["stages"]["semantic_extraction"] = {
                 "status": "completed",
                 "timestamp": datetime.now().isoformat(),
-                "model_used": post_processing_stats["current_model"]["name"],
-                "device": post_processing_stats["device"],
-                "processing_mode": post_processing_stats["processing_mode"],
-                "text_length": text_length,
-                "imagery_length": imagery_length,
                 "quality_score": quality_score,
-                "model_refreshed": pre_processing_stats["memory_refreshes"]
-                < post_processing_stats["memory_refreshes"],
+                "text_length": len(semantics.get("all_text", "")),
+                "visual_length": len(semantics.get("all_imagery", "")),
+                "fields_extracted": len(field_results.get("extracted_fields", {})),
             }
 
-            # Update profile with semantics and enhanced stage completion
-            profile_data["semantics"] = extracted_semantics
-            profile_data["stages"]["semantic_extraction"] = stage_completion_data
+            profile_data["stages"]["llm_field_extraction"] = {
+                "status": "completed",
+                "timestamp": datetime.now().isoformat(),
+                "model_used": field_results.get("model_used", "unknown"),
+                "extraction_mode": field_results.get("extraction_mode", "unknown"),
+                "processing_time_ms": field_results.get("processing_time_ms", 0),
+            }
 
             # Save updated profile
             with open(profile_path, "w", encoding="utf-8") as f:
                 json.dump(profile_data, f, indent=2)
 
-            # Move artifact to next stage directory
-            moved_artifact = artifact.rename(PATHS["semantics_dir"] / artifact.name)
+        except Exception as e:
+            self.logger.error(f"Failed to update profile {profile_path}: {e}")
 
-            # Update session tracking
-            update_stage_counts("metadata", "semantics", session_data)
+    def _update_profile_failed(
+        self,
+        profile_data: Dict[str, Any],
+        profile_path: Path,
+        error_reason: str,
+    ) -> None:
+        """
+        Update profile with failed extraction information.
 
-            # Log detailed progress
-            file_size = moved_artifact.stat().st_size
-            log_detailed_progress(artifact.name, file_size, "semantic_extraction")
-
-            # Update session JSON after each file
-            update_session_json()
-
-            # Enhanced logging
-            logger.info(f"Semantics extracted successfully for {artifact.name}")
-            logger.debug(
-                f"Text extracted: {text_length} chars, Imagery: {imagery_length} chars, Quality: {quality_score}%"
-            )
-
-            # Log memory usage occasionally
-            if processing_stats["total_processed"] % 5 == 0:
-                current_stats = processor.get_processing_stats()
-                memory_info = current_stats.get("memory_usage", {})
-                if "gpu_memory_percent" in memory_info:
-                    logger.debug(
-                        f"GPU memory: {memory_info['gpu_memory_percent']:.1f}%, "
-                        f"RAM: {memory_info['system_ram_percent']:.1f}%"
-                    )
-
-        except Exception as extraction_error:
-            logger.error(
-                f"Semantic extraction failed for {artifact.name}: {extraction_error}"
-            )
-            processing_stats["failed_extractions"] += 1
-
-            # Check if we should try a different model for persistent failures
-            if (
-                processing_stats["failed_extractions"] > 3
-                and processing_stats["failed_extractions"] % 5 == 0
-            ):
-
-                available_models = processor.get_available_models()
-                current_model = processor.current_model_spec.model_id
-
-                # Try switching to a different model
-                other_models = [
-                    m
-                    for m in available_models
-                    if m["fits_constraints"] and m["model_id"] != current_model
-                ]
-                if other_models:
-                    new_model = other_models[0]["model_id"]
-                    logger.info(
-                        f"High failure rate detected. Attempting to switch from {current_model} to {new_model}"
-                    )
-
-                    if processor.switch_model(new_model):
-                        processing_stats["model_switches"] += 1
-                        logger.info(f"Successfully switched to model: {new_model}")
-                    else:
-                        logger.warning(f"Failed to switch to model: {new_model}")
-
-            # Create failed entry in profile
+        Args:
+            profile_data: Profile data dictionary
+            profile_path: Path to profile file
+            error_reason: Reason for failure
+        """
+        try:
+            # Update stages tracking with failure information
+            profile_data.setdefault("stages", {})
             profile_data["stages"]["semantic_extraction"] = {
                 "status": "failed",
                 "timestamp": datetime.now().isoformat(),
-                "error": str(extraction_error),
+                "error": error_reason,
             }
 
+            # Save updated profile
             with open(profile_path, "w", encoding="utf-8") as f:
                 json.dump(profile_data, f, indent=2)
 
-            # Move to failed directory
-            failed_dir = PATHS["metadata_dir"] / "failed"
-            failed_dir.mkdir(exist_ok=True)
-            artifact.rename(failed_dir / artifact.name)
-            update_stage_counts("metadata", "failed", session_data)
+        except Exception as e:
+            self.logger.error(f"Failed to update failed profile {profile_path}: {e}")
 
-            session_data["errors"].append(
-                {
-                    "file": artifact.name,
-                    "stage": "semantic_extraction",
-                    "error": str(extraction_error),
-                    "timestamp": datetime.now().isoformat(),
-                }
-            )
+    def _get_model_statistics(self) -> Dict[str, Any]:
+        """
+        Get current model usage statistics.
 
-            continue
-
-        # Progress reporting every 20 files
-        if processing_stats["total_processed"] % 20 == 0:
-            current_stats = processor.get_processing_stats()
-            elapsed_time = datetime.now() - processing_stats["start_time"]
-            avg_quality = (
-                sum(processing_stats["quality_scores"])
-                / len(processing_stats["quality_scores"])
-                if processing_stats["quality_scores"]
-                else 0
-            )
-
-            logger.info(f"=== Processing Progress Update ===")
-            logger.info(f"Files processed: {processing_stats['total_processed']}")
-            logger.info(
-                f"Success rate: {(processing_stats['successful_extractions'] / max(processing_stats['total_processed'], 1)) * 100:.1f}%"
-            )
-            logger.info(f"Average quality score: {avg_quality:.1f}%")
-            logger.info(f"Model refreshes: {processing_stats['model_refreshes']}")
-            logger.info(f"Model switches: {processing_stats['model_switches']}")
-            logger.info(f"Current model: {current_stats['current_model']['name']}")
-            logger.info(f"Elapsed time: {elapsed_time}")
-            logger.info(
-                f"Avg time per document: {current_stats.get('avg_processing_time_per_doc', 0):.2f}s"
-            )
-            logger.info("=" * 35)
-
-    except Exception as e:
-        logger.error(f"Failed to process {artifact.name}: {e}")
-        processing_stats["failed_extractions"] += 1
-
-        # Create failed subdirectory if needed and move file there
-        failed_dir = PATHS["metadata_dir"] / "failed"
-        failed_dir.mkdir(exist_ok=True)
-
+        Returns:
+            Dictionary containing model statistics
+        """
         try:
-            artifact.rename(failed_dir / artifact.name)
-            update_stage_counts("metadata", "failed", session_data)
-            logger.info(f"Moved failed file to: {failed_dir / artifact.name}")
-        except Exception as move_error:
-            logger.error(
-                f"Failed to move {artifact.name} to failed directory: {move_error}"
-            )
-
-        session_data["errors"].append(
-            {
-                "file": artifact.name,
-                "stage": "semantic_extraction",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat(),
-            }
-        )
+            if hasattr(self.field_extractor, "get_stats"):
+                return self.field_extractor.get_stats()
+            else:
+                return {
+                    "context_refreshes": 0,
+                    "model_switches": 0,
+                    "current_model": "unknown",
+                }
+        except Exception as e:
+            self.logger.debug(f"Failed to get model statistics: {e}")
+            return {}
