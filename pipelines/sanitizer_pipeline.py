@@ -18,18 +18,24 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Set, TypedDict, Any
 from tqdm import tqdm
-from utilities.security_agent import SecurityAgent, HashAlgorithm
 from utilities.session_tracking_agent import SessionTracker
+from processors.conversion_processor import (
+    ConversionProcessor,
+    ConversionReport,
+    ConversionStatus,
+)
 from config import (
     CHECKSUM_ALGORITHM,
     UNSUPPORTED_EXTENSIONS,
     ARTIFACT_PROFILES_DIR,
     CHECKSUM_CHUNK_SIZE_BYTES,
     CHECKSUM_HISTORY_FILE,
+    PROFILE_PREFIX,
+    ARTIFACT_PREFIX,
 )
 import json
 import datetime
-from utilities.common_utils import move_file_safely
+from common_utils import move_file_safely
 import hashlib
 import os
 import secrets
@@ -94,7 +100,11 @@ class SanitizerPipeline:
         self.session_agent = session_agent
 
     def sanitize(
-        self, source_path: Path, review_dir: Path, success_dir: Path
+        self,
+        conversion_agent: ConversionProcessor,
+        source_path: Path,
+        review_dir: Path,
+        success_dir: Path,
     ) -> SanitizationReport:
         """
         Sanitize a directory or single file by detecting duplicates, zero-byte files, and unsupported files.
@@ -267,16 +277,27 @@ class SanitizerPipeline:
                         )
                     continue  # Skip to next file, duplicate handled
 
-                # STAGE 5: File passed all sanitization checks
+                # STAGE 5: Convert file format to a common file type
+                conversion_report: ConversionReport = conversion_agent.process_file(
+                    artifact
+                )
+                if (
+                    conversion_report.status == ConversionStatus.SUCCESS
+                    and conversion_report.converted_file_path is not None
+                ):
+                    artifact: Path = conversion_report.converted_file_path
+
+                # STAGE 6: File passed all sanitization checks
                 # Add checksum to history to prevent future duplicates
+                checksum = self._generate_checksum(artifact)
                 checksum_history.add(checksum)
                 self._save_checksum(checksum)
 
-                # STAGE 6: Generate profile and move to success directory
+                # STAGE 7: Generate profile and move to success directory
                 # Generate unique identifier for this artifact
                 artifact_id: str = self._generate_uuid()
                 original_name = artifact.name
-                new_name = f"ARTIFACT-{artifact_id}{artifact.suffix}"
+                new_name = f"{ARTIFACT_PREFIX}-{artifact_id}{artifact.suffix}"
                 file_size = artifact.stat().st_size
 
                 # Create initial profile data
@@ -289,7 +310,7 @@ class SanitizerPipeline:
                     "timestamp": datetime.now().isoformat(),
                 }
                 # Create corresponding profile file
-                artifact_profile_name = f"PROFILE-{artifact_id}.json"
+                artifact_profile_name = f"{PROFILE_PREFIX}-{artifact_id}.json"
                 artifact_profile = ARTIFACT_PROFILES_DIR / artifact_profile_name
 
                 # Save final profile

@@ -22,6 +22,9 @@ dependencies = [
     "psutil>=5.9.0",                   # System and process utilities
     "ollama>=0.1.0",                   # Ollama API client
     "pandas>=2.0.0",                   # Data manipulation
+    "ffmpeg-python>=0.2.0",           # FFmpeg wrapper for audio/video conversion
+    "rawpy>=0.18.0",                   # RAW image file processing (CR2, ARW, NEF)
+    "pillow-heif>=0.13.0",            # HEIC image format support
 ]
 
 [project.optional-dependencies]
