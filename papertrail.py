@@ -1,74 +1,35 @@
-#!C:/Users/UserX/AppData/Local/Programs/Python/Python313/python.exe
-
-from tqdm import tqdm
-import logging
-import json
-import subprocess
-import requests
-import time
 import os
-import signal
 from datetime import datetime
-from pathlib import Path
-from typing import List, Set, Dict, Any
-from collections import defaultdict
-from checksum_utils import HashAlgorithm, generate_checksum
-from uuid_utils import generate_uuid4plus
-from encryption_utils import (
-    generate_passphrase,
-    generate_password,
-    encrypt_file,
-    decrypt_file,
+import logging
+from pipelines.sanitizer_pipeline import SanitizerPipeline, SanitizationReport
+from pipelines.metadata_pipeline import MetadataPipeline, MetadataReport
+from config import LOG_DIR, SYSTEM_DIRECTORIES, UNPROCESSED_ARTIFACTS_DIR, FOR_REVIEW_ARTIFACTS_DIR, SANITIZED_ARTIFACTS_DIR
+
+
+for path in SYSTEM_DIRECTORIES:
+    path.mkdir(parents=True, exist_ok=True)
+
+# Setup comprehensive logging (both console and file)
+session_timestamp = datetime.now().strftime(r"%Y-%m-%d_%H-%M-%S_%Z%z")
+log_filename = f"PAPERTRAIL-SESSION-{session_timestamp}.log"
+handlers = [
+    logging.FileHandler(f"{LOG_DIR/{log_filename}", encoding="utf-8"),
+]
+logging.basicConfig(
+    level=getattr(logging, "INFO"),
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=handlers,
 )
-from metadata_processor import MetadataExtractor
-from visual_processor import (
-    VisualProcessor,
-    ProcessingMode,
-    VisionModelSpec,
-    HardwareConstraints,
-    ProcessingStats,
-)
-from language_processor import LanguageProcessor
-from database_processor import create_final_spreadsheet
 
-# =====================================================================
-# INITIAL SETUP - DIRECTORIES, LOGGING, SESSION TRACKING
-# =====================================================================
+logger = logging.getLogger(__name__)
 
-# Create all required directories - but preserve existing ones
-try:
-    for name, path in PATHS.items():
-        if name.endswith("_dir"):
-            if not path.exists():
-                path.mkdir(parents=True, exist_ok=True)
+security_agent: SecurityAgent = SecurityAgent()
+session_agent: SessionTracker = SessionTracker()
+sanitizer_agent: SanitizerPipeline = SanitizerPipeline(logger=logger, session_agent=session_agent)
+metadata_agent: MetadataPipeline = MetadataPipeline(logger=logger,  session_agent=session_agent)
 
-    # Setup comprehensive logging (both console and file)
-    session_timestamp = datetime.now().strftime(r"%Y-%m-%d_%H-%M-%S_%Z%z")
-    log_filename = f"PAPERTRAIL-SESSION-{session_timestamp}.log"
+sanitization_report: SanitizationReport = sanitizer_agent.sanitize(source_path=UNPROCESSED_ARTIFACTS_DIR, review_dir=FOR_REVIEW_ARTIFACTS_DIR, success_dir=SANITIZED_ARTIFACTS_DIR)
+session_agent.update(sanitization_report)
 
-    handlers = [
-        logging.FileHandler(
-            f"{str(PATHS['logs_dir'])}/{log_filename}", encoding="utf-8"
-        ),
-    ]
-
-    logging.basicConfig(
-        level=getattr(logging, "INFO"),
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=handlers,
-    )
-
-    logger = logging.getLogger(__name__)
-except Exception as e:
-    raise e
-
-
-logger.info("=" * 80)
-logger.info("PAPERTRAIL DOCUMENT PROCESSING PIPELINE STARTED")
-logger.info("=" * 80)
-logger.info(f"Session ID: {session_timestamp}")
-logger.info(f"Logging initialized. Log file: {log_filename}")
-logger.info(f"Session JSON: {session_json_path.name}")
-logger.info(f"Base directory: {PATHS['base_dir']}")
-logger.info(f"Supported extensions: {SUPPORTED_EXTENSIONS}")
-logger.info(f"Unsupported extensions: {UNSUPPORTED_EXTENSIONS}")
+metadata_report: MetadataReport = metadata_agent.extract_metadata(source_dir=SANITIZED_ARTIFACTS_DIR, review_dir=FOR_REVIEW_ARTIFACTS_DIR, success_dir=METADATA_EXTRACTED_DIR)
+session_agent.update(metadata_report)
