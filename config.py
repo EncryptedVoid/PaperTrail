@@ -9,74 +9,112 @@ Author: Ashiq Gazi
 """
 
 from pathlib import Path
-from typing import Set
+from typing import Set, Dict, Any
 from enum import Enum
 
 
-# Import HashAlgorithm enum (assuming it's defined in security_agent module)
+# ============================================================================
+# HASH ALGORITHMS
+# ============================================================================
+
+
 class HashAlgorithm(Enum):
     """
     Comprehensive enumeration of supported cryptographic hash algorithms.
-
-    This enum provides access to all major cryptographic hash algorithms available
-    in Python's hashlib module, organized by family and security characteristics.
-    Each CHECKSUM_ALGORITHM is suitable for different use cases based on security requirements
-    and performance constraints.
 
     Security Classification:
         RECOMMENDED: SHA-2, SHA-3, BLAKE2 families - suitable for all security applications
         LEGACY: MD5, SHA1 - deprecated for security-critical applications
         SPECIALIZED: SHAKE functions - for applications requiring variable-length output
-
-    Performance Characteristics:
-        FASTEST: MD5, SHA1 (but cryptographically broken)
-        BALANCED: SHA256, BLAKE2S/BLAKE2B (recommended for most use cases)
-        HIGHEST_SECURITY: SHA512, SHA3_512 (for maximum security requirements)
-
-    Algorithm Selection Guidelines:
-        - Use SHA256 for general-purpose security applications (default choice)
-        - Use BLAKE2B for high-performance applications on 64-bit systems
-        - Use SHA3 family for applications requiring resistance to length extension attacks
-        - Use SHA512 for applications requiring maximum security margin
-        - Avoid MD5/SHA1 except for non-security purposes like simple file integrity
     """
 
     # SHA-2 family - Industry standard, FIPS approved, widely supported
-    SHA256 = "sha256"  # Most commonly used, optimal security/performance balance
-    SHA384 = "sha384"  # Truncated SHA-512, faster on 32-bit systems than SHA-512
-    SHA512 = "sha512"  # Highest security in SHA-2 family, best for sensitive data
-    SHA224 = (
-        "sha224"  # Truncated SHA-256, compatible with systems requiring shorter hashes
-    )
+    SHA256 = "sha256"
+    SHA384 = "sha384"
+    SHA512 = "sha512"
+    SHA224 = "sha224"
 
-    # SHA-3 family - Modern Keccak-based algorithms, resistant to length extension
-    SHA3_256 = "sha3_256"  # SHA-3 with 256-bit output, equivalent security to SHA256
-    SHA3_384 = "sha3_384"  # SHA-3 with 384-bit output, equivalent security to SHA384
-    SHA3_512 = "sha3_512"  # SHA-3 with 512-bit output, maximum security available
-    SHA3_224 = "sha3_224"  # SHA-3 with 224-bit output, compact hash for space-constrained systems
+    # SHA-3 family - Modern Keccak-based algorithms
+    SHA3_256 = "sha3_256"
+    SHA3_384 = "sha3_384"
+    SHA3_512 = "sha3_512"
+    SHA3_224 = "sha3_224"
 
-    # BLAKE2 family - Modern, fast, and secure alternative to SHA-2
-    BLAKE2B = "blake2b"  # Optimized for 64-bit platforms, excellent performance
-    BLAKE2S = "blake2s"  # Optimized for 32-bit platforms, mobile-friendly
+    # BLAKE2 family - Modern, fast, and secure
+    BLAKE2B = "blake2b"
+    BLAKE2S = "blake2s"
 
-    # SHAKE family - Extendable output functions based on SHA-3 internals
-    SHAKE_128 = "shake_128"  # Variable-length output, 128-bit security level
-    SHAKE_256 = "shake_256"  # Variable-length output, 256-bit security level
+    # SHAKE family - Extendable output functions
+    SHAKE_128 = "shake_128"
+    SHAKE_256 = "shake_256"
 
     # Legacy algorithms - Deprecated for security-critical applications
-    MD5 = "md5"  # Fast but cryptographically broken, only for non-security checksums
-    SHA1 = "sha1"  # Deprecated due to collision vulnerabilities, avoid for new systems
+    MD5 = "md5"
+    SHA1 = "sha1"
 
 
-# Model settings
-GPU_MEMORY_LIMIT_PERCENT: float = 75.0
-MODEL_REFRESH_INTERVAL: int = 20
-MAX_MEMORY_THRESHOLD_PERCENT: float = 75.0
+# ============================================================================
+# BASE DIRECTORIES AND PATHS
+# ============================================================================
 
-# Checksum algorithm for duplicate detection and integrity verification
-CHECKSUM_ALGORITHM: HashAlgorithm = HashAlgorithm.SHA3_512
+BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run")
+LOG_DIR: Path = BASE_DIR / "logs"
+ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "profiles"
 
-# Enhanced supported extensions
+# Resource directories
+WORDLISTS_DIR: Path = Path("assets/mit_wordlist.txt")
+PASSPHRASE_WORDLIST_PATH: Path = (
+    BASE_DIR / "resources" / "wordlists" / "common_words.txt"
+)
+
+# Session and tracking files
+SESSION_TRACKING_FILE: Path = BASE_DIR / "session_tracking.json"
+PROCESSING_HISTORY_FILE: Path = BASE_DIR / "processing_history.json"
+CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "checksum_history.txt"
+
+
+# ============================================================================
+# PROCESSING PIPELINE DIRECTORIES
+# ============================================================================
+
+# Main processing pipeline stages
+UNPROCESSED_ARTIFACTS_DIR: Path = BASE_DIR / "01_unprocessed"
+FOR_REVIEW_ARTIFACTS_DIR: Path = BASE_DIR / "02_for_review"
+SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "03_sanitized"
+RENAMED_ARTIFACTS_DIR: Path = BASE_DIR / "04_renamed"
+METADATA_ARTIFACTS_DIR: Path = BASE_DIR / "05_metadata"
+ANALYZED_ARTIFACTS_DIR: Path = BASE_DIR / "06_analyzed"
+COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "07_completed"
+
+# Additional processing directories
+ARCHIVE_DIR: Path = BASE_DIR / "archive"
+METADATA_EXTRACTED_DIR: Path = METADATA_ARTIFACTS_DIR  # Alias for consistency
+SEMANTICS_EXTRACTED_DIR: Path = ANALYZED_ARTIFACTS_DIR  # Alias for consistency
+ENCRYPTED_DIR: Path = BASE_DIR / "08_encrypted"
+PROCESSING_COMPLETED_DIR: Path = BASE_DIR / "09_final"
+
+# System directories collection
+SYSTEM_DIRECTORIES: Set[Path] = {
+    UNPROCESSED_ARTIFACTS_DIR,
+    FOR_REVIEW_ARTIFACTS_DIR,
+    SANITIZED_ARTIFACTS_DIR,
+    RENAMED_ARTIFACTS_DIR,
+    METADATA_ARTIFACTS_DIR,
+    ANALYZED_ARTIFACTS_DIR,
+    COMPLETED_ARTIFACTS_DIR,
+    ARCHIVE_DIR,
+    ENCRYPTED_DIR,
+    PROCESSING_COMPLETED_DIR,
+    ARTIFACT_PROFILES_DIR,
+    LOG_DIR,
+}
+
+
+# ============================================================================
+# FILE TYPE DEFINITIONS
+# ============================================================================
+
+# Supported file extensions
 SUPPORTED_EXTENSIONS: Set[str] = {
     # Text & Documents
     ".txt",
@@ -126,7 +164,7 @@ SUPPORTED_EXTENSIONS: Set[str] = {
     ".vcs",
 }
 
-# Enhanced unsupported extensions
+# Unsupported file extensions
 UNSUPPORTED_EXTENSIONS: Set[str] = {
     # Audio
     ".mp3",
@@ -182,7 +220,7 @@ UNSUPPORTED_EXTENSIONS: Set[str] = {
     ".sas7bdat",
     ".mat",
     ".hdf5",
-    # Archives (if extraction not implemented)
+    # Archives
     ".zip",
     ".rar",
     ".7z",
@@ -190,11 +228,55 @@ UNSUPPORTED_EXTENSIONS: Set[str] = {
     ".gz",
 }
 
-# File names for permanent storage
-CHECKSUM_HISTORY_FILE: Path = Path("checksum_history.txt")
+# File type mappings for conversion
+EXTENSION_MAPPING: Dict[str, str] = {
+    # Images
+    ".jpeg": "image",
+    ".jpg": "image",
+    ".png": "image",
+    ".heic": "image",
+    ".cr2": "image",
+    ".arw": "image",
+    ".nef": "image",
+    ".webp": "image",
+    # Videos
+    ".mov": "video",
+    ".mp4": "video",
+    ".webm": "video",
+    ".amv": "video",
+    ".3gp": "video_audio",  # Special case - need to probe
+    # Audio
+    ".wav": "audio",
+    ".mp3": "audio",
+    ".m4a": "audio",
+    ".ogg": "audio",
+    # Documents
+    ".pptx": "document",
+    ".doc": "document",
+    ".docx": "document",
+    ".rtf": "document",
+    ".epub": "document",
+    ".pub": "document",
+    ".djvu": "document",
+    ".pdf": "document",
+}
 
-# Base directory for all processing
-BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run")
+# Target formats for each type
+TARGET_FORMATS: Dict[str, str] = {
+    "image": ".png",
+    "video": ".mp4",
+    "audio": ".mp3",
+    "document": ".pdf",
+}
+
+
+# ============================================================================
+# SECURITY AND ENCRYPTION SETTINGS
+# ============================================================================
+
+# Checksum algorithm for duplicate detection and integrity verification
+CHECKSUM_ALGORITHM: HashAlgorithm = HashAlgorithm.SHA3_512
+CHECKSUM_CHUNK_SIZE_BYTES: int = 8192
 
 # File encryption constants
 SALT_LENGTH_BYTES: int = 16
@@ -205,79 +287,181 @@ ENCRYPTED_FILE_EXTENSION: str = ".encrypted"
 DEFAULT_PASSWORD_LENGTH: int = 16
 DEFAULT_PASSPHRASE_WORD_COUNT: int = 6
 DEFAULT_WORD_SEPARATOR: str = "-"
-SIMILAR_CHARACTERS: str = "0O1lI|"  # Characters that look similar and cause confusion
-SYMBOL_CHARACTERS: str = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+SIMILAR_CHARACTERS: str = "0O1lI|"  # Characters that look similar
+SYMBOL_CHARACTERS: str = r"!@#$%^&*()_+-=[]{}|;:,.<>?"
 MINIMUM_WORD_LENGTH: int = 3
 RANDOM_NUMBER_MIN: int = 10
 RANDOM_NUMBER_MAX: int = 99
 MAX_PASSWORD_GENERATION_ATTEMPTS: int = 50
 
-# Wordlist path for passphrase generation
-PASSPHRASE_WORDLIST_PATH: Path = (
-    BASE_DIR / "resources" / "wordlists" / "common_words.txt"
-)
 
-# Profile and artifact tracking directories
-ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "profiles"
+# ============================================================================
+# ARTIFACT AND PROFILE NAMING
+# ============================================================================
 
-# Logging configuration
-LOG_DIR: Path = BASE_DIR / "logs"
+ARTIFACT_PREFIX: str = "ARTIFACT"
+PROFILE_PREFIX: str = "PROFILE"
 
-# System directories to exclude from processing
-SYSTEM_DIRECTORIES: Set[Path] = {
-    UNPROCESSED_ARTIFACTS_DIR,
-    FOR_REVIEW_ARTIFACTS_DIR,
-    SANITIZED_ARTIFACTS_DIR,
-    RENAMED_ARTIFACTS_DIR,
-    METADATA_ARTIFACTS_DIR,
-    ANALYZED_ARTIFACTS_DIR,
-    COMPLETED_ARTIFACTS_DIR,
-}
+# UUID generation settings
+UUID_PREFIX: str = ""
+INCLUDE_TIMESTAMP_ON_UUID: bool = False
+UUID_ENTROPY: int = 16
 
-# Processing pipeline directories
-UNPROCESSED_ARTIFACTS_DIR: Path = BASE_DIR / "01_unprocessed"
-FOR_REVIEW_ARTIFACTS_DIR: Path = BASE_DIR / "02_for_review"
-SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "03_sanitized"
-RENAMED_ARTIFACTS_DIR: Path = BASE_DIR / "04_renamed"
-METADATA_ARTIFACTS_DIR: Path = BASE_DIR / "05_metadata"
-ANALYZED_ARTIFACTS_DIR: Path = BASE_DIR / "06_analyzed"
-COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "07_completed"
 
-# Resource directories
-WORDLISTS_DIR: Path = "assets/mit_wordlist.txt"
-
-# Session and tracking files
-SESSION_TRACKING_FILE: Path = BASE_DIR / "session_tracking.json"
-PROCESSING_HISTORY_FILE: Path = BASE_DIR / "processing_history.json"
+# ============================================================================
+# PROCESSING LIMITS AND THRESHOLDS
+# ============================================================================
 
 # Performance and processing limits
 MAX_FILE_SIZE_MB: int = 500
 MAX_FILES_PER_BATCH: int = 1000
-CHECKSUM_CHUNK_SIZE: int = 8192
 METADATA_EXTRACTION_TIMEOUT: int = 300  # seconds
 
-# Logging configuration
+# GPU and memory settings
+GPU_MEMORY_LIMIT_PERCENT: float = 75.0
+MODEL_REFRESH_INTERVAL: int = 20
+MAX_MEMORY_THRESHOLD_PERCENT: float = 75.0
+
+# Processing thresholds
+MAX_PROCESSING_TIME_PER_DOC: float = 60.0  # seconds
+MIN_TEXT_SUCCESS_RATE: float = 0.8
+MIN_DESCRIPTION_SUCCESS_RATE: float = 0.8
+MAX_AVERAGE_PROCESSING_TIME: float = 30.0  # seconds
+MAX_GPU_MEMORY_PERCENT: float = 90.0
+
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
 LOG_LEVEL: str = "INFO"
 LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 LOG_FILE_MAX_SIZE: int = 10 * 1024 * 1024  # 10MB
 LOG_FILE_BACKUP_COUNT: int = 5
+SESSION_LOG_FILE_PREFIX: str = "PAPERTRAIL-SESSION"
 
-# Processing flags
+
+# ============================================================================
+# PROCESSING FLAGS
+# ============================================================================
+
 ENABLE_ADVANCED_METADATA: bool = True
 ENABLE_INTEGRITY_VERIFICATION: bool = True
 ENABLE_ROLLBACK_RECORDS: bool = True
 ENABLE_PROGRESS_TRACKING: bool = True
 ENABLE_DETAILED_LOGGING: bool = True
 
-METADATA_EXTRACTED_DIR
 
-max_gpu_vram = 100.0
-max_ram = 75.0
-max_cpu_cores = 0.0
-PREFERRED_VISUAL_MODEL = "Qwen/Qwen2-VL-2B-Instruct"
+# ============================================================================
+# CONVERSION AND ENHANCEMENT SETTINGS
+# ============================================================================
+
+# File detection settings
+USE_CONTENT_DETECTION: bool = True
+REQUIRE_DETECTION_AGREEMENT: bool = True
+
+# Quality enhancement settings
+ENABLE_IMAGE_ENHANCEMENT: bool = True
+ENABLE_VIDEO_ENHANCEMENT: bool = True
+ENABLE_AUDIO_ENHANCEMENT: bool = True
+ENABLE_UPSCALING: bool = True
+
+# Image processing settings
+IMAGE_TARGET_SIZE: int = 1920  # HD minimum for upscaling
+IMAGE_SHARPENING_FACTOR: float = 1.1
+IMAGE_CONTRAST_FACTOR: float = 1.05
+IMAGE_UPSCALE_THRESHOLD: int = 1920
+PNG_COMPRESS_LEVEL: int = 0  # 0 = no compression, 9 = max compression
+
+# Video processing settings
+VIDEO_CRF: int = 18  # Lower = better quality (0-51 scale)
+VIDEO_PRESET: str = "slow"
+VIDEO_CODEC: str = "libx264"
+VIDEO_PIXEL_FORMAT: str = "yuv420p"
+VIDEO_UPSCALE_THRESHOLD: int = 1920
+VIDEO_4K_THRESHOLD: int = 3840
+VIDEO_TARGET_1080P: int = 1080
+VIDEO_TARGET_4K: int = 2160
+
+# Audio processing settings
+AUDIO_BITRATE: str = "320k"
+AUDIO_SAMPLE_RATE: int = 48000
+AUDIO_CODEC: str = "libmp3lame"
+
+# Document processing settings
+LIBREOFFICE_TIMEOUT: int = 60  # seconds
 
 
-FIELD_PROMPTS = {
+# ============================================================================
+# AI MODEL CONFIGURATION
+# ============================================================================
+
+# Preferred models
+PREFERRED_VISUAL_MODEL: str = "Qwen/Qwen2-VL-2B-Instruct"
+PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
+
+# Visual processing settings
+DEFAULT_REFRESH_INTERVAL: int = 5
+DEFAULT_MEMORY_THRESHOLD: float = 80.0
+DEFAULT_AUTO_MODEL_SELECTION: bool = True
+DEFAULT_PROCESSING_MODE: str = "balanced"
+
+# Hardware resource allocation ratios
+RAM_USAGE_RATIO: float = 0.7  # Use 70% of total RAM
+VRAM_USAGE_RATIO: float = 0.8  # Use 80% of total VRAM
+
+# PDF processing zoom factors
+ZOOM_FACTOR_FAST: float = 1.5
+ZOOM_FACTOR_BALANCED: float = 2.0
+ZOOM_FACTOR_HIGH_QUALITY: float = 3.0
+
+# Model specifications
+QWEN2VL_2B_MIN_VRAM: float = 4.0
+QWEN2VL_2B_MIN_RAM: float = 8.0
+QWEN2VL_2B_QUALITY: int = 7
+QWEN2VL_2B_MAX_TOKENS: int = 512
+
+QWEN2VL_7B_MIN_VRAM: float = 14.0
+QWEN2VL_7B_MIN_RAM: float = 16.0
+QWEN2VL_7B_QUALITY: int = 9
+QWEN2VL_7B_MAX_TOKENS: int = 512
+
+QWEN2VL_72B_MIN_VRAM: float = 144.0
+QWEN2VL_72B_MIN_RAM: float = 200.0
+QWEN2VL_72B_QUALITY: int = 10
+QWEN2VL_72B_MAX_TOKENS: int = 1024
+
+QWEN2VL_7B_CPU_MIN_VRAM: float = 0.0
+QWEN2VL_7B_CPU_MIN_RAM: float = 32.0
+QWEN2VL_7B_CPU_QUALITY: int = 8
+QWEN2VL_7B_CPU_MAX_TOKENS: int = 512
+
+
+# ============================================================================
+# LLM FIELD EXTRACTION PROMPTS
+# ============================================================================
+
+SYSTEM_PROMPT: str = """You are a document extraction tool. Extract ONLY the requested information.
+
+CRITICAL RULES:
+- Return ONLY the answer, nothing else
+- NO explanations, NO reasoning, NO "based on", NO "therefore"
+- NO sentences, just the raw information
+- If not found, return exactly: UNKNOWN
+
+Examples:
+GOOD: "Immigration and Refugee Board of Canada"
+BAD: "The document appears to be issued by the Immigration and Refugee Board of Canada"
+
+GOOD: "UNKNOWN"
+BAD: "document does not appear to have any official authority validating, certifying, witnessing, or authorizing it. Therefore, the answer is: UNKNOWN"
+
+Extract the information. Nothing else.
+
+Return ONLY the requested information. Any additional text, explanation, or reasoning will be considered an error and rejected causing immediate shutdown
+"""
+
+FIELD_PROMPTS: Dict[str, str] = {
     "title": """Create a descriptive title that captures the document's purpose and content.
 
     If the document has an official title, use it. If not, synthesize a descriptive title based on:
@@ -304,7 +488,7 @@ Examples of document types:
 - property_deed, mortgage_document, warranty
 
 Return ONLY the specific document type in lowercase with underscores. If uncertain, return "UNKNOWN".""",
-    "language": """Analyze the document text and identify ALL languages present.
+    "original_language": """Analyze the document text and identify ALL languages present.
 
 Document contains sections in multiple languages. List ALL languages found.
 Examples:
@@ -314,6 +498,9 @@ Examples:
 - If trilingual: "English, French, Spanish"
 
 Return ONLY language names, comma-separated.""",
+    "current_language": """Identify the primary language this document is currently written in.
+
+Return ONLY the primary language name. If multiple languages, return the dominant one.""",
     "confidentiality_level": """Determine the confidentiality or security classification of this document.
 
 Look for markings or indicators such as:
@@ -440,165 +627,3 @@ Note:
 
 Present observations in formal, official terminology suitable for administrative records.""",
 }
-
-SYSTEM_PROMPT = """You are a document extraction tool. Extract ONLY the requested information.
-
-CRITICAL RULES:
-- Return ONLY the answer, nothing else
-- NO explanations, NO reasoning, NO "based on", NO "therefore"
-- NO sentences, just the raw information
-- If not found, return exactly: UNKNOWN
-
-Examples:
-GOOD: "Immigration and Refugee Board of Canada"
-BAD: "The document appears to be issued by the Immigration and Refugee Board of Canada"
-
-GOOD: "UNKNOWN"
-BAD: "document does not appear to have any official authority validating, certifying, witnessing, or authorizing it. Therefore, the answer is: UNKNOWN"
-
-Extract the information. Nothing else.
-
-Return ONLY the requested information. Any additional text, explanation, or reasoning will be considered an error and rejected causing immediate shutdown
-"""
-
-
-ARTIFACT_PREFIX = "ARTIFACT"
-PROFILE_PREFIX = "PROFILE"
-
-# Image Processing Settings
-IMAGE_TARGET_SIZE = 1920  # HD minimum for upscaling
-IMAGE_SHARPENING_FACTOR = 1.1  # Slight sharpening enhancement
-IMAGE_CONTRAST_FACTOR = 1.05  # Slight contrast boost
-IMAGE_UPSCALE_THRESHOLD = 1920  # Only upscale if smaller than this
-PNG_COMPRESS_LEVEL = 0  # 0 = no compression, 9 = max compression
-
-# Video Processing Settings
-VIDEO_CRF = 18  # Lower = better quality (0-51 scale)
-VIDEO_PRESET = "slow"  # FFmpeg preset: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
-VIDEO_CODEC = "libx264"
-VIDEO_PIXEL_FORMAT = "yuv420p"
-VIDEO_UPSCALE_THRESHOLD = 1920  # Upscale videos smaller than this
-VIDEO_4K_THRESHOLD = 3840  # Don't upscale beyond 4K if source is smaller
-VIDEO_TARGET_1080P = 1080
-VIDEO_TARGET_4K = 2160
-
-# Audio Processing Settings
-AUDIO_BITRATE = "320k"  # Highest quality MP3
-AUDIO_SAMPLE_RATE = 48000  # High sample rate
-AUDIO_CODEC = "libmp3lame"
-
-# Document Processing Settings
-LIBREOFFICE_TIMEOUT = 60  # Seconds before timing out LibreOffice conversion
-
-# File Detection Settings
-USE_CONTENT_DETECTION = True  # Enable magic number detection
-REQUIRE_DETECTION_AGREEMENT = True  # Both extension and content must agree
-
-# Quality Enhancement Settings
-ENABLE_IMAGE_ENHANCEMENT = True
-ENABLE_VIDEO_ENHANCEMENT = True
-ENABLE_AUDIO_ENHANCEMENT = True
-ENABLE_UPSCALING = True
-
-# File type mappings
-EXTENSION_MAPPING = {
-    # Images
-    ".jpeg": "image",
-    ".jpg": "image",
-    ".png": "image",
-    ".heic": "image",
-    ".cr2": "image",
-    ".arw": "image",
-    ".nef": "image",
-    ".webp": "image",
-    # Videos
-    ".mov": "video",
-    ".mp4": "video",
-    ".webm": "video",
-    ".amv": "video",
-    ".3gp": "video_audio",  # Special case - need to probe
-    # Audio
-    ".wav": "audio",
-    ".mp3": "audio",
-    ".m4a": "audio",
-    ".ogg": "audio",
-    # Documents
-    ".pptx": "document",
-    ".doc": "document",
-    ".docx": "document",
-    ".rtf": "document",
-    ".epub": "document",
-    ".pub": "document",
-    ".djvu": "document",
-    ".pdf": "document",
-}
-
-# Target formats for each type
-TARGET_FORMATS = {
-    "image": ".png",
-    "video": ".mp4",
-    "audio": ".mp3",
-    "document": ".pdf",
-}
-
-# Default processing settings
-DEFAULT_REFRESH_INTERVAL = 5
-DEFAULT_MEMORY_THRESHOLD = 80.0
-DEFAULT_AUTO_MODEL_SELECTION = True
-DEFAULT_PROCESSING_MODE = "balanced"
-
-# Hardware resource allocation ratios
-RAM_USAGE_RATIO = 0.7  # Use 70% of total RAM
-VRAM_USAGE_RATIO = 0.8  # Use 80% of total VRAM
-
-# PDF processing zoom factors
-ZOOM_FACTOR_FAST = 1.5
-ZOOM_FACTOR_BALANCED = 2.0
-ZOOM_FACTOR_HIGH_QUALITY = 3.0
-
-# Performance thresholds
-MAX_PROCESSING_TIME_PER_DOC = 60.0  # seconds
-MIN_TEXT_SUCCESS_RATE = 0.8
-MIN_DESCRIPTION_SUCCESS_RATE = 0.8
-MAX_AVERAGE_PROCESSING_TIME = 30  # seconds
-MAX_GPU_MEMORY_PERCENT = 90
-
-# Model specifications
-QWEN2VL_2B_MIN_VRAM = 4.0
-QWEN2VL_2B_MIN_RAM = 8.0
-QWEN2VL_2B_QUALITY = 7
-QWEN2VL_2B_MAX_TOKENS = 512
-
-QWEN2VL_7B_MIN_VRAM = 14.0
-QWEN2VL_7B_MIN_RAM = 16.0
-QWEN2VL_7B_QUALITY = 9
-QWEN2VL_7B_MAX_TOKENS = 512
-
-QWEN2VL_72B_MIN_VRAM = 144.0
-QWEN2VL_72B_MIN_RAM = 200.0
-QWEN2VL_72B_QUALITY = 10
-QWEN2VL_72B_MAX_TOKENS = 1024
-
-QWEN2VL_7B_CPU_MIN_VRAM = 0.0
-QWEN2VL_7B_CPU_MIN_RAM = 32.0
-QWEN2VL_7B_CPU_QUALITY = 8
-QWEN2VL_7B_CPU_MAX_TOKENS = 512
-
-SESSION_LOG_FILE_PREFIX = "PAPERTRAIL-SESSION"
-
-UUID_PREFIX: str = ""
-INCLUDE_TIMESTAMP_ON_UUID: bool = False
-UUID_ENTROPY: int = 16
-
-CHECKSUM_ALGORITHM,
-UNSUPPORTED_EXTENSIONS,
-ARTIFACT_PROFILES_DIR,
-CHECKSUM_CHUNK_SIZE_BYTES,
-CHECKSUM_HISTORY_FILE,
-PROFILE_PREFIX,
-ARTIFACT_PREFIX,
-UUID_PREFIX,
-INCLUDE_TIMESTAMP_ON_UUID,
-UUID_ENTROPY,
-
-PREFERRED_LANGUAGE_MODEL = "mistral:7b"
