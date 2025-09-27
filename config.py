@@ -358,7 +358,7 @@ ENABLE_DETAILED_LOGGING: bool = True
 
 # File detection settings
 USE_CONTENT_DETECTION: bool = True
-REQUIRE_DETECTION_AGREEMENT: bool = True
+REQUIRE_DETECTION_AGREEMENT: bool = False
 
 # Quality enhancement settings
 ENABLE_IMAGE_ENHANCEMENT: bool = True
@@ -397,7 +397,7 @@ LIBREOFFICE_TIMEOUT: int = 60  # seconds
 # ============================================================================
 
 # Preferred models
-PREFERRED_VISUAL_MODEL: str = "Qwen/Qwen2-VL-2B-Instruct"
+PREFERRED_VISUAL_MODEL: str = "Qwen/Qwen2-VL-7B-Instruct"
 PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
 
 # Visual processing settings
@@ -475,57 +475,47 @@ FIELD_PROMPTS: Dict[str, str] = {
     - "IRB Document Submission Requirements and Procedures"
 
     Return ONLY the title. No quotes, no explanations.""",
-    "document_type": """Identify the specific type of document this is.
-
-Examples of document types:
-- birth_certificate, passport_us, driver_license_ca
-- invoice, receipt, bank_statement, credit_report
-- contract, lease_agreement, employment_contract
-- medical_record, prescription, insurance_policy
-- w2_tax_form, 1099, tax_return
-- court_order, legal_notice, business_license
-- university_transcript, diploma, certificate
-- property_deed, mortgage_document, warranty
-
-Return ONLY the specific document type in lowercase with underscores. If uncertain, return "UNKNOWN".""",
-    "original_language": """Analyze the document text and identify ALL languages present.
-
-Document contains sections in multiple languages. List ALL languages found.
-Examples:
-- If English only: "English"
-- If French only: "French"
-- If both: "English, French"
-- If trilingual: "English, French, Spanish"
-
-Return ONLY language names, comma-separated.""",
-    "current_language": """Identify the primary language this document is currently written in.
-
-Return ONLY the primary language name. If multiple languages, return the dominant one.""",
-    "confidentiality_level": """Determine the confidentiality or security classification of this document.
-
-Look for markings or indicators such as:
-- CONFIDENTIAL, CLASSIFIED, SECRET, TOP SECRET
-- INTERNAL USE ONLY, PROPRIETARY, RESTRICTED
-- PUBLIC, FOR PUBLIC RELEASE
-- Security stamps, watermarks, or headers
-
-Classification levels:
-- Public: No restrictions, can be freely shared
-- Internal: Internal use within organization
-- Confidential: Sensitive information, restricted access
-- Restricted: Highly sensitive, top-secret information
-
-Return ONLY one of these words: Public, Internal, Confidential, Restricted""",
-    "translator_name": """If this document has been translated, identify the translator's name.
-
-Look for:
-- Translator certifications or signatures
-- Translation agency information
-- "Translated by" notices
-- Official translation stamps or seals
-- Translator contact information
-
-Return ONLY the translator's full name. If this is not a translated document or no translator is identified, return "UNKNOWN".""",
+    #     "document_type": """Identify the specific type of document this is.
+    # Examples of document types:
+    # - birth_certificate, passport_us, driver_license_ca
+    # - invoice, receipt, bank_statement, credit_report
+    # - contract, lease_agreement, employment_contract
+    # - medical_record, prescription, insurance_policy
+    # - w2_tax_form, 1099, tax_return
+    # - court_order, legal_notice, business_license
+    # - university_transcript, diploma, certificate
+    # - property_deed, mortgage_document, warranty
+    # Return ONLY the specific document type in lowercase with underscores. If uncertain, return "UNKNOWN".""",
+    #     "original_language": """Analyze the document text and identify ALL languages present.
+    # Document contains sections in multiple languages. List ALL languages found.
+    # Examples:
+    # - If English only: "English"
+    # - If French only: "French"
+    # - If both: "English, French"
+    # - If trilingual: "English, French, Spanish"
+    # Return ONLY language names, comma-separated.""",
+    #     "current_language": """Identify the primary language this document is currently written in.
+    # Return ONLY the primary language name. If multiple languages, return the dominant one.""",
+    #     "confidentiality_level": """Determine the confidentiality or security classification of this document.
+    # Look for markings or indicators such as:
+    # - CONFIDENTIAL, CLASSIFIED, SECRET, TOP SECRET
+    # - INTERNAL USE ONLY, PROPRIETARY, RESTRICTED
+    # - PUBLIC, FOR PUBLIC RELEASE
+    # - Security stamps, watermarks, or headers
+    # Classification levels:
+    # - Public: No restrictions, can be freely shared
+    # - Internal: Internal use within organization
+    # - Confidential: Sensitive information, restricted access
+    # - Restricted: Highly sensitive, top-secret information
+    # Return ONLY one of these words: Public, Internal, Confidential, Restricted""",
+    #     "translator_name": """If this document has been translated, identify the translator's name.
+    # Look for:
+    # - Translator certifications or signatures
+    # - Translation agency information
+    # - "Translated by" notices
+    # - Official translation stamps or seals
+    # - Translator contact information
+    # Return ONLY the translator's full name. If this is not a translated document or no translator is identified, return "UNKNOWN".""",
     "issuer_name": """Identify who issued, created, or published this document.
 
 Look for:
@@ -536,64 +526,52 @@ Look for:
 - Official stamps or seals with issuer information
 
 Return ONLY the full official name of the issuer. If unclear, return "UNKNOWN".""",
-    "officiater_name": """Identify any official authority that validated, certified, witnessed, or authorized this document.
-
-Look for:
-- Notary public names and seals
-- Certifying agency names
-- Official witnesses or authorizing bodies
-- Government officials who signed or stamped
-- Licensing boards or regulatory authorities
-
-Return ONLY the name of the official authority. If no official validation exists, return "UNKNOWN".""",
-    "date_created": """Find when this document was originally created, written, or authored.
-
-Look for:
-- Creation dates, authored dates, written dates
-- "Created on", "Date created", "Authored"
-- Document composition or drafting dates
-
-Return the date in YYYY-MM-DD format. If no creation date is found, return "UNKNOWN".""",
-    "date_of_reception": """Find when this document was received by the current holder.
-
-Look for:
-- "Received", "Date received", "Arrival date"
-- Postal stamps or delivery confirmations
-- Filing dates or intake dates
-- "Delivered on" stamps
-
-Return the date in YYYY-MM-DD format. If no reception date is found, return "UNKNOWN".""",
-    "date_of_issue": """Find the official issue, publication, or release date of this document.
-
-Look for:
-- "Issued", "Date of issue", "Publication date"
-- "Released", "Effective date"
-- Official dating stamps or seals
-- Government or agency issue dates
-
-Return the date in YYYY-MM-DD format. If no issue date is found, return "UNKNOWN".""",
-    "date_of_expiry": """Find when this document expires, becomes invalid, or requires renewal.
-
-Look for:
-- "Expires", "Expiration date", "Valid until"
-- "Renewal required", "Valid through"
-- License or certification expiry dates
-- "Not valid after" dates
-
-Return the date in YYYY-MM-DD format. If no expiration date exists, return "UNKNOWN".""",
-    "tags": """Create comprehensive keywords that describe this document for search and categorization purposes.
-
-Include keywords for:
-- Document category (legal, medical, financial, educational, personal, business, government, technical)
-- Subject matter (taxes, healthcare, employment, education, property, travel, identification, insurance)
-- Content type (contract, certificate, statement, report, application, notice, invoice, receipt)
-- Industry/field (healthcare, legal, finance, education, technology, government, military)
-- Geographic relevance (federal, state, local, international, specific regions)
-- Time relevance (annual, quarterly, monthly, historical, current)
-- Action items (renewal_required, payment_due, action_needed, informational_only)
-- Format type (official, certified, notarized, electronic, handwritten, typed)
-
-Return 15-25 comma-separated keywords. If document content is unclear, return "UNKNOWN".""",
+    #     "officiater_name": """Identify any official authority that validated, certified, witnessed, or authorized this document.
+    # Look for:
+    # - Notary public names and seals
+    # - Certifying agency names
+    # - Official witnesses or authorizing bodies
+    # - Government officials who signed or stamped
+    # - Licensing boards or regulatory authorities
+    # Return ONLY the name of the official authority. If no official validation exists, return "UNKNOWN".""",
+    #     "date_created": """Find when this document was originally created, written, or authored.
+    # Look for:
+    # - Creation dates, authored dates, written dates
+    # - "Created on", "Date created", "Authored"
+    # - Document composition or drafting dates
+    # Return the date in YYYY-MM-DD format. If no creation date is found, return "UNKNOWN".""",
+    #     "date_of_reception": """Find when this document was received by the current holder.
+    # Look for:
+    # - "Received", "Date received", "Arrival date"
+    # - Postal stamps or delivery confirmations
+    # - Filing dates or intake dates
+    # - "Delivered on" stamps
+    # Return the date in YYYY-MM-DD format. If no reception date is found, return "UNKNOWN".""",
+    #     "date_of_issue": """Find the official issue, publication, or release date of this document.
+    # Look for:
+    # - "Issued", "Date of issue", "Publication date"
+    # - "Released", "Effective date"
+    # - Official dating stamps or seals
+    # - Government or agency issue dates
+    # Return the date in YYYY-MM-DD format. If no issue date is found, return "UNKNOWN".""",
+    #     "date_of_expiry": """Find when this document expires, becomes invalid, or requires renewal.
+    # Look for:
+    # - "Expires", "Expiration date", "Valid until"
+    # - "Renewal required", "Valid through"
+    # - License or certification expiry dates
+    # - "Not valid after" dates
+    # Return the date in YYYY-MM-DD format. If no expiration date exists, return "UNKNOWN".""",
+    #     "tags": """Create comprehensive keywords that describe this document for search and categorization purposes.
+    # Include keywords for:
+    # - Document category (legal, medical, financial, educational, personal, business, government, technical)
+    # - Subject matter (taxes, healthcare, employment, education, property, travel, identification, insurance)
+    # - Content type (contract, certificate, statement, report, application, notice, invoice, receipt)
+    # - Industry/field (healthcare, legal, finance, education, technology, government, military)
+    # - Geographic relevance (federal, state, local, international, specific regions)
+    # - Time relevance (annual, quarterly, monthly, historical, current)
+    # - Action items (renewal_required, payment_due, action_needed, informational_only)
+    # - Format type (official, certified, notarized, electronic, handwritten, typed)
+    # Return 15-25 comma-separated keywords. If document content is unclear, return "UNKNOWN".""",
     "version_notes": """Analyze document versioning, revision history, and administrative metadata.
 
 Look for:
@@ -616,7 +594,7 @@ Analyze:
 - Compliance requirements it addresses
 
 Write in formal, bureaucratic language appropriate for government documentation.""",
-    "additional_notes": """Document significant administrative, security, or procedural characteristics not covered elsewhere.
+    "executive_summary": """Summarize significant administrative, security, or procedural characteristics not covered elsewhere.
 
 Note:
 - Security classifications, handling restrictions

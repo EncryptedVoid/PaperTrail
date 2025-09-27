@@ -199,7 +199,7 @@ class MetadataPipeline:
             try:
                 # STAGE 1: Extract UUID from filename for profile lookup
                 artifact_id = artifact.stem[
-                    len(ARTIFACT_PREFIX) :
+                    (len(ARTIFACT_PREFIX) + 1) :
                 ]  # Remove "ARTIFACT-" prefix
                 profile_path = (
                     ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"

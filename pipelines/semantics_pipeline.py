@@ -15,9 +15,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, TypedDict, Optional
 from tqdm import tqdm
-from processors.session_tracking_agent import SessionTracker
-from processors.language_processor import LanguageProcessor, LanguageExtractionReport
-from processors.visual_processor import VisualProcessor
+from utilities.language_model import LanguageProcessor, LanguageExtractionReport
+from utilities.visual_model import VisualProcessor
 from common_utils import move_file_safely
 from config import ARTIFACT_PROFILES_DIR, ARTIFACT_PREFIX, PROFILE_PREFIX
 
@@ -60,23 +59,18 @@ class SemanticsPipeline:
     def __init__(
         self,
         logger: logging.Logger,
-        session_agent: SessionTracker,
-        visual_processor: VisualProcessor,
-        field_extractor: LanguageProcessor,
     ) -> None:
         """
         Initialize the SemanticsPipeline.
 
         Args:
             logger: Logger instance for recording pipeline operations and errors
-            session_agent: SessionTracker for monitoring pipeline progress and state
             visual_processor: Visual processing engine for text and imagery extraction
             field_extractor: LLM-based field extraction engine for structured data
         """
         self.logger: logging.Logger = logger
-        self.session_agent: SessionTracker = session_agent
-        self.visual_processor: VisualProcessor = visual_processor
-        self.field_extractor: LanguageProcessor = field_extractor
+        self.visual_processor: VisualProcessor = VisualProcessor(logger=logger)
+        self.field_extractor: LanguageProcessor = LanguageProcessor(logger=logger)
 
     def extract_semantics(
         self,
@@ -195,8 +189,8 @@ class SemanticsPipeline:
             try:
                 # STAGE 1: Extract UUID from filename for profile lookup
                 artifact_id: str = artifact.stem[
-                    len(ARTIFACT_PREFIX) + 1 :  # Remove "ARTIFACT-" prefix
-                ]
+                    (len(ARTIFACT_PREFIX) + 1) :
+                ]  # Remove "ARTIFACT-" prefix
                 profile_path: Path = (
                     ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
                 )

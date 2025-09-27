@@ -18,7 +18,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Set, TypedDict, Any
 from tqdm import tqdm
-from processors.conversion_processor import (
+from utilities.type_conversion import (
     ConversionProcessor,
     ConversionReport,
     ConversionStatus,
@@ -34,6 +34,8 @@ from config import (
     UUID_PREFIX,
     INCLUDE_TIMESTAMP_ON_UUID,
     UUID_ENTROPY,
+    FOR_REVIEW_ARTIFACTS_DIR,
+    ARCHIVE_DIR,
 )
 import json
 import datetime
@@ -97,10 +99,12 @@ class SanitizerPipeline:
             logger: Logger instance for recording pipeline operations and errors
         """
         self.logger = logger
+        self.conversion_agent = ConversionProcessor(
+            logger=logger, archive_dir=ARCHIVE_DIR, review_dir=FOR_REVIEW_ARTIFACTS_DIR
+        )
 
     def sanitize(
         self,
-        conversion_agent: ConversionProcessor,
         source_path: Path,
         review_dir: Path,
         success_dir: Path,
@@ -276,51 +280,119 @@ class SanitizerPipeline:
                     continue  # Skip to next file, duplicate handled
 
                 # STAGE 5: Convert file format to a common file type
-                conversion_report: ConversionReport = conversion_agent.process_file(
-                    artifact
-                )
-                if (
-                    conversion_report.status == ConversionStatus.SUCCESS
-                    and conversion_report.converted_file_path is not None
-                ):
-                    artifact: Path = conversion_report.converted_file_path
+                try:
+                    conversion_report: ConversionReport = (
+                        self.conversion_agent.process_file(artifact)
+                    )
 
-                # STAGE 6: File passed all sanitization checks
+                    # Check conversion status and handle accordingly
+                    if conversion_report.status == ConversionStatus.SUCCESS:
+                        # Update artifact path to point to converted file
+                        if conversion_report.converted_file_path is not None:
+                            artifact = conversion_report.converted_file_path
+                            self.logger.debug(
+                                f"Conversion successful, updated artifact path to: {artifact}"
+                            )
+                        # Continue to next stages with converted file
+
+                    elif conversion_report.status == ConversionStatus.FAILURE:
+                        # Conversion failed - file should already be moved to review by conversion_agent
+                        self.logger.info(
+                            f"Conversion failed for {artifact.name}, file moved to review"
+                        )
+                        continue  # Skip to next file, don't process further
+
+                    else:
+                        # Handle any other status codes
+                        self.logger.warning(
+                            f"Unexpected conversion status for {artifact.name}: {conversion_report.status}"
+                        )
+                        continue  # Skip to next file to be safe
+
+                except Exception as conversion_error:
+                    error_msg = (
+                        f"Conversion error for {artifact.name}: {conversion_error}"
+                    )
+                    self.logger.error(error_msg)
+                    report["errors"].append(error_msg)
+                    continue  # Skip to next file
+
+                # STAGE 6: File passed all sanitization checks (only reached if conversion was successful)
+                # Verify the file still exists at the expected location
+                if not artifact.exists():
+                    error_msg = f"File disappeared after conversion: {artifact}"
+                    self.logger.error(error_msg)
+                    report["errors"].append(error_msg)
+                    continue
+
                 # Add checksum to history to prevent future duplicates
-                checksum = self._generate_checksum(artifact)
-                checksum_history.add(checksum)
-                self._save_checksum(checksum)
+                try:
+                    checksum = self._generate_checksum(artifact)
+                    checksum_history.add(checksum)
+                    self._save_checksum(checksum)
+                except Exception as checksum_error:
+                    error_msg = f"Checksum generation failed for {artifact.name}: {checksum_error}"
+                    self.logger.error(error_msg)
+                    report["errors"].append(error_msg)
+                    continue
 
                 # STAGE 7: Generate profile and move to success directory
-                # Generate unique identifier for this artifact
-                artifact_id: str = self._generate_uuid()
-                original_name = artifact.name
-                new_name = f"{ARTIFACT_PREFIX}-{artifact_id}{artifact.suffix}"
-                file_size = artifact.stat().st_size
+                try:
+                    # Generate unique identifier for this artifact
+                    artifact_id: str = self._generate_uuid()
+                    original_name = artifact.name
+                    new_name = f"{ARTIFACT_PREFIX}-{artifact_id}{artifact.suffix}"
+                    file_size = artifact.stat().st_size
 
-                # Create initial profile data
-                profile_data = {
-                    "uuid": artifact_id,
-                    "checksum": checksum,
-                    "original_artifact_name": original_name,
-                    "artifact_size": file_size,
-                    "artifact_type": artifact.suffix.lower(),
-                    "timestamp": datetime.now().isoformat(),
-                }
-                # Create corresponding profile file
-                artifact_profile_name = f"{PROFILE_PREFIX}-{artifact_id}.json"
-                artifact_profile = ARTIFACT_PROFILES_DIR / artifact_profile_name
+                    # Create initial profile data
+                    profile_data = {
+                        "uuid": artifact_id,
+                        "checksum": checksum,
+                        "original_artifact_name": original_name,
+                        "artifact_size": file_size,
+                        "artifact_type": artifact.suffix.lower(),
+                        "timestamp": datetime.now().isoformat(),
+                    }
 
-                # Save final profile
-                with open(artifact_profile, "w", encoding="utf-8") as f:
-                    json.dump(profile_data, f, indent=2)
+                    # Create corresponding profile file
+                    artifact_profile_name = f"{PROFILE_PREFIX}-{artifact_id}.json"
+                    artifact_profile = ARTIFACT_PROFILES_DIR / artifact_profile_name
 
-                # Move artifact to success directory
-                artifact = artifact.rename(success_dir / new_name)
+                    # Ensure profile directory exists
+                    ARTIFACT_PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 
-                # Track this file as successfully processed
-                report["remaining_artifacts"].append(str(artifact))
-                report["processed_artifacts"] += 1
+                    # Save final profile
+                    with open(artifact_profile, "w", encoding="utf-8") as f:
+                        json.dump(profile_data, f, indent=2)
+
+                    # Move artifact to success directory with error handling
+                    success_path = success_dir / new_name
+                    if success_path.exists():
+                        # Handle naming conflict
+                        base_name = success_path.stem
+                        extension = success_path.suffix
+                        counter = 1
+                        while success_path.exists():
+                            new_name = f"{base_name}_{counter}{extension}"
+                            success_path = success_dir / new_name
+                            counter += 1
+
+                    # Perform the move
+                    moved_artifact = artifact.rename(success_path)
+
+                    # Track this file as successfully processed
+                    report["remaining_artifacts"].append(str(moved_artifact))
+                    report["processed_artifacts"] += 1
+
+                    self.logger.info(
+                        f"Successfully processed {original_name} -> {new_name}"
+                    )
+
+                except Exception as profile_error:
+                    error_msg = f"Profile generation/move failed for {artifact.name}: {profile_error}"
+                    self.logger.error(error_msg)
+                    report["errors"].append(error_msg)
+                    continue
 
             except Exception as e:
                 # Capture and log any unexpected errors during file processing

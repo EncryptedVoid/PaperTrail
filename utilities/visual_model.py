@@ -44,7 +44,7 @@ from config import (
     QWEN2VL_7B_CPU_MIN_RAM,
     QWEN2VL_7B_CPU_QUALITY,
     QWEN2VL_7B_CPU_MAX_TOKENS,
-    PREFERRED_VISUAL_MODEL
+    PREFERRED_VISUAL_MODEL,
 )
 
 
@@ -115,24 +115,9 @@ class VisualProcessor:
     - Robust error handling and fallback mechanisms
     """
 
-    def __init__(
-        self,
-        logger: logging.Logger
-    ) -> None:
+    def __init__(self, logger: logging.Logger) -> None:
         """
         Initialize the Visual Processor with automatic configuration from constants.
-
-        Args:
-            logger: Logger instance for tracking operations and debugging
-            max_gpu_vram_gb: Override for maximum GPU VRAM (auto-detected if None)
-            max_ram_gb: Override for maximum RAM (auto-detected if None)
-            force_cpu: Force CPU-only processing regardless of GPU availability
-            processing_mode: Processing quality mode (uses DEFAULT_PROCESSING_MODE if None)
-
-        Raises:
-            ValueError: If logger is None
-            TypeError: If logger is not a logging.Logger instance
-            RuntimeError: If no suitable model can be loaded
         """
         # Validate required logger parameter
         if logger is None:
@@ -146,7 +131,14 @@ class VisualProcessor:
         self.logger.info("Initializing VisualProcessor with configuration constants")
 
         # Apply configuration constants for initialization parameters
-        self.processing_mode = DEFAULT_PROCESSING_MODE
+        # Convert string to enum
+        if DEFAULT_PROCESSING_MODE == "fast":
+            self.processing_mode = ProcessingMode.FAST
+        elif DEFAULT_PROCESSING_MODE == "high_quality":
+            self.processing_mode = ProcessingMode.HIGH_QUALITY
+        else:
+            self.processing_mode = ProcessingMode.BALANCED  # Default
+
         self.refresh_interval = DEFAULT_REFRESH_INTERVAL
         self.memory_threshold = DEFAULT_MEMORY_THRESHOLD
         self.auto_model_selection = DEFAULT_AUTO_MODEL_SELECTION
@@ -160,11 +152,22 @@ class VisualProcessor:
         self.stats = ProcessingStats()
         self.logger.debug("Processing statistics initialized")
 
-        # Model state variables
-        self.model = PREFERRED_VISUAL_MODEL
+        # Model state variables - initialize to None until loaded
+        self.model = None
+        self.processor = None
         self.current_model_name = PREFERRED_VISUAL_MODEL
-        self.device = "cuda"
-        self.max_tokens = QWEN2VL_7B_MAX_TOKENS  # Default to 7B model tokens
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.max_tokens = QWEN2VL_2B_MAX_TOKENS  # Default to 2B model tokens since that's the preferred model
+
+        # Actually load the model
+        try:
+            self.logger.info("Loading initial visual model...")
+            self._load_model(PREFERRED_VISUAL_MODEL)
+            self.logger.info("Visual model initialization completed successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to load initial model: {e}")
+            # Don't raise here - let individual processing methods handle it
+            self.logger.warning("Model will be loaded on first use")
 
     def _load_model(self, model_id: str) -> None:
         """
@@ -192,7 +195,7 @@ class VisualProcessor:
                 self.logger.debug("Garbage collection completed")
 
             # Determine compute device based on hardware constraints
-            if (self.device == "cuda" if torch.cuda.is_available()):
+            if self.device == "cuda":
                 self.logger.info(f"Using device: {self.device}")
                 gpu_name = torch.cuda.get_device_name(0)
                 gpu_memory = torch.cuda.get_device_properties(0).total_memory / (
@@ -224,7 +227,9 @@ class VisualProcessor:
                 self.logger.info("Processor loaded successfully")
 
                 loading_time = time.time() - loading_start_time
-                self.logger.info(f"Model loading completed in {loading_time:.2f} seconds")
+                self.logger.info(
+                    f"Model loading completed in {loading_time:.2f} seconds"
+                )
 
                 # Log memory usage after loading
                 memory_info = self._monitor_memory_usage()
@@ -631,6 +636,20 @@ class VisualProcessor:
             FileNotFoundError: If image file doesn't exist
             Exception: If image processing fails completely
         """
+        start_time = time.time()
+        self.logger.debug("Starting single image processing...")
+
+        # Check if model is loaded
+        if self.model is None or self.processor is None:
+            self.logger.error(
+                "Model or processor not loaded. Attempting to load now..."
+            )
+            try:
+                self._load_model(self.current_model_name)
+            except Exception as e:
+                self.logger.error(f"Failed to load model: {e}")
+                raise RuntimeError("Visual model not available for processing")
+
         start_time = time.time()
         self.logger.debug("Starting single image processing...")
 

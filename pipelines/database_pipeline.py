@@ -229,7 +229,7 @@ class DatabasePipeline:
         for artifact in tqdm(artifacts, desc="Processing artifacts", unit="file"):
             try:
                 # Extract UUID for profile lookup
-                artifact_id = artifact.stem[len(ARTIFACT_PREFIX):]
+                artifact_id = artifact.stem[(len(ARTIFACT_PREFIX)+1):]
                 profile_path = ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
 
                 # Verify profile exists

@@ -5,6 +5,7 @@ from PIL import Image, ImageEnhance
 import ffmpeg
 import rawpy
 from pillow_heif import register_heif_opener
+from dataclasses import dataclass, field
 import magic
 import time
 from dataclasses import dataclass
@@ -57,7 +58,7 @@ class ConversionReport:
     original_file_path: Optional[Path] = None  # Final location of original file
     converted_file_path: Optional[Path] = None  # Final location of converted file
     error_message: Optional[str] = None
-    quality_enhancements_applied: List[str] = []
+    quality_enhancements_applied: List[str] = field(default_factory=list)
     detection_method: str = "extension"
 
     def __post_init__(self):
@@ -567,6 +568,12 @@ class ConversionProcessor:
         """Convert documents to PDF using LibreOffice"""
         enhancements = []
 
+        # If already PDF, return as-is
+        if file_path.suffix.lower() == ".pdf":
+            self.logger.info(f"File already PDF, skipping conversion: {file_path}")
+            enhancements.append("already_pdf_format")
+            return file_path, enhancements
+
         try:
             output_path = file_path.with_suffix(".pdf")
             self.logger.info(
@@ -575,7 +582,7 @@ class ConversionProcessor:
 
             # Use LibreOffice for conversion
             cmd = [
-                "libreoffice",
+                r"C:\Program Files\LibreOffice\program\soffice.exe",
                 "--headless",
                 "--convert-to",
                 "pdf",
