@@ -103,7 +103,7 @@ class MetadataPipeline:
         self.logger = logger
 
     def extract_metadata(
-        self, source_dir: Path, review_dir: Path, success_dir: Path
+        self, source_dir: Path, failure_dir: Path, success_dir: Path
     ) -> MetadataReport:
         """
         Extract metadata from all files in a directory and update their profiles.
@@ -214,7 +214,7 @@ class MetadataPipeline:
 
                     # Move file to review directory for manual inspection
                     try:
-                        review_location = review_dir / artifact.name
+                        review_location = failure_dir / artifact.name
                         artifact.rename(review_location)
                         self.logger.info(
                             f"Moved file with missing profile to review: {review_location}"

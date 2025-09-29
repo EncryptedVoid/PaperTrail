@@ -8,14 +8,15 @@ and system parameters.
 Author: Ashiq Gazi
 """
 
-from pathlib import Path
-from typing import Set, Dict, Any
 from enum import Enum
+from pathlib import Path
+from typing import Dict, Set
 
 
-# ============================================================================
-# HASH ALGORITHMS
-# ============================================================================
+class PipelineStatus(Enum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    INCOMPLETE = "incomplete"
 
 
 class HashAlgorithm(Enum):
@@ -58,55 +59,35 @@ class HashAlgorithm(Enum):
 # ============================================================================
 
 BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run")
-LOG_DIR: Path = BASE_DIR / "logs"
-ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "profiles"
 
 # Resource directories
-WORDLISTS_DIR: Path = Path("assets/mit_wordlist.txt")
-PASSPHRASE_WORDLIST_PATH: Path = (
-    BASE_DIR / "resources" / "wordlists" / "common_words.txt"
-)
-
-# Session and tracking files
-SESSION_TRACKING_FILE: Path = BASE_DIR / "session_tracking.json"
-PROCESSING_HISTORY_FILE: Path = BASE_DIR / "processing_history.json"
+PASSPHRASE_WORDLIST_PATH: Path = Path("assets/mit_wordlist.txt")
 CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "checksum_history.txt"
 
-
-# ============================================================================
-# PROCESSING PIPELINE DIRECTORIES
-# ============================================================================
-
 # Main processing pipeline stages
-UNPROCESSED_ARTIFACTS_DIR: Path = BASE_DIR / "01_unprocessed"
-FOR_REVIEW_ARTIFACTS_DIR: Path = BASE_DIR / "02_for_review"
-SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "03_sanitized"
-RENAMED_ARTIFACTS_DIR: Path = BASE_DIR / "04_renamed"
-METADATA_ARTIFACTS_DIR: Path = BASE_DIR / "05_metadata"
-ANALYZED_ARTIFACTS_DIR: Path = BASE_DIR / "06_analyzed"
-COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "07_completed"
-
-# Additional processing directories
+ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "artifact_profiles"
+LOG_DIR: Path = BASE_DIR / "logs"
+UNPROCESSED_ARTIFACTS_DIR: Path = BASE_DIR / "unprocessed_artifacts"
 ARCHIVE_DIR: Path = BASE_DIR / "archive"
-METADATA_EXTRACTED_DIR: Path = METADATA_ARTIFACTS_DIR  # Alias for consistency
-SEMANTICS_EXTRACTED_DIR: Path = ANALYZED_ARTIFACTS_DIR  # Alias for consistency
-ENCRYPTED_DIR: Path = BASE_DIR / "08_encrypted"
-PROCESSING_COMPLETED_DIR: Path = BASE_DIR / "09_final"
+FOR_REVIEW_ARTIFACTS_DIR: Path = BASE_DIR / "for_review"
+SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "01_sanitized"
+METADATA_EXTRACTED_DIR: Path = BASE_DIR / "02_metadata"
+SEMANTICS_EXTRACTED_DIR: Path = BASE_DIR / "03_semantics"
+CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "04_converted"
+COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "05_completed"
 
 # System directories collection
 SYSTEM_DIRECTORIES: Set[Path] = {
-    UNPROCESSED_ARTIFACTS_DIR,
-    FOR_REVIEW_ARTIFACTS_DIR,
-    SANITIZED_ARTIFACTS_DIR,
-    RENAMED_ARTIFACTS_DIR,
-    METADATA_ARTIFACTS_DIR,
-    ANALYZED_ARTIFACTS_DIR,
-    COMPLETED_ARTIFACTS_DIR,
-    ARCHIVE_DIR,
-    ENCRYPTED_DIR,
-    PROCESSING_COMPLETED_DIR,
     ARTIFACT_PROFILES_DIR,
     LOG_DIR,
+    UNPROCESSED_ARTIFACTS_DIR,
+    ARCHIVE_DIR,
+    FOR_REVIEW_ARTIFACTS_DIR,
+    SANITIZED_ARTIFACTS_DIR,
+    METADATA_EXTRACTED_DIR,
+    SEMANTICS_EXTRACTED_DIR,
+    CONVERTED_ARTIFACT_DIR,
+    COMPLETED_ARTIFACTS_DIR,
 }
 
 
@@ -293,7 +274,7 @@ MINIMUM_WORD_LENGTH: int = 3
 RANDOM_NUMBER_MIN: int = 10
 RANDOM_NUMBER_MAX: int = 99
 MAX_PASSWORD_GENERATION_ATTEMPTS: int = 50
-
+MINIMUM_WORD_LENGTH = 3  # Minimum word length for passphrase generation
 
 # ============================================================================
 # ARTIFACT AND PROFILE NAMING
@@ -397,7 +378,7 @@ LIBREOFFICE_TIMEOUT: int = 60  # seconds
 # ============================================================================
 
 # Preferred models
-PREFERRED_VISUAL_MODEL: str = "Qwen/Qwen2-VL-7B-Instruct"
+PREFERRED_VISUAL_MODEL: str = "Qwen/Qwen2-VL-2B-Instruct"
 PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
 
 # Visual processing settings
@@ -605,3 +586,131 @@ Note:
 
 Present observations in formal, official terminology suitable for administrative records.""",
 }
+
+# Password vault for storing encryption passwords securely
+PASSWORD_VAULT_PATH = Path("data/password_vault.encrypted")
+VAULT_MASTER_KEY: str = "password"
+
+# Define the column mapping from profile data to spreadsheet columns
+DATABASE_COLUMN_MAPPING = {
+    # Core identification
+    "ITEM_ID": "uuid",
+    "Title": ["llm_extraction", "extracted_fields", "title"],
+    "File_Extension": ["metadata", "extension"],
+    # Document classification
+    "Document_Type": ["llm_extraction", "extracted_fields", "document_type"],
+    "Original_Language": [
+        "llm_extraction",
+        "extracted_fields",
+        "original_language",
+    ],
+    "Current_Language": [
+        "llm_extraction",
+        "extracted_fields",
+        "current_language",
+    ],
+    "Confidentiality_Level": [
+        "llm_extraction",
+        "extracted_fields",
+        "confidentiality_level",
+    ],
+    # Technical data
+    "Checksum_SHA256": "checksum",
+    "File_Size_MB": ["metadata", "size_mb"],
+    # People and organizations
+    "Translator_Name": [
+        "llm_extraction",
+        "extracted_fields",
+        "translator_name",
+    ],
+    "Issuer_Name": ["llm_extraction", "extracted_fields", "issuer_name"],
+    "Officiater_Name": [
+        "llm_extraction",
+        "extracted_fields",
+        "officiater_name",
+    ],
+    # Dates
+    "Date_Added": ["stages", "metadata_extraction", "timestamp"],
+    "Date_Created": ["llm_extraction", "extracted_fields", "date_created"],
+    "Date_of_Reception": [
+        "llm_extraction",
+        "extracted_fields",
+        "date_of_reception",
+    ],
+    "Date_of_Issue": ["llm_extraction", "extracted_fields", "date_of_issue"],
+    "Date_of_Expiry": ["llm_extraction", "extracted_fields", "date_of_expiry"],
+    # Content and notes
+    "Tags": ["llm_extraction", "extracted_fields", "tags"],
+    "Version_Notes": ["llm_extraction", "extracted_fields", "version_notes"],
+    "Utility_Notes": ["llm_extraction", "extracted_fields", "utility_notes"],
+    "Additional_Notes": [
+        "llm_extraction",
+        "extracted_fields",
+        "additional_notes",
+    ],
+    # Manual entry fields (will be empty for now)
+    "Action_Required": "",
+    "Parent_Document_ID": "",
+    "Off_Site_Storage_ID": "",
+    "On_Site_Storage_ID": "",
+    "Backup_Storage_ID": "",
+    "Project_ID": "",
+    "Version_Number": "",
+    # Processing metadata
+    "Processing_Status": ["llm_extraction", "success"],
+    "OCR_Text_Length": "calculated",
+    "Visual_Description_Length": "calculated",
+    "Fields_Extracted_Count": "calculated",
+    "Processing_Date": ["stages", "llm_field_extraction", "timestamp"],
+    "Original_Filename": "original_artifact_name",
+    "Encryption_Status": "calculated",
+}
+
+USE_PASSPHRASE_ENCRYPTION: bool = False
+ENCRYPT_ARTIFACTS: bool = True
+
+# File type mappings
+EXTENSION_MAPPING = {
+    # Images
+    ".jpeg": "image",
+    ".jpg": "image",
+    ".png": "image",
+    ".heic": "image",
+    ".cr2": "image",
+    ".arw": "image",
+    ".nef": "image",
+    ".webp": "image",
+    # Videos
+    ".mov": "video",
+    ".mp4": "video",
+    ".webm": "video",
+    ".amv": "video",
+    ".3gp": "video_audio",  # Special case - need to probe
+    # Audio
+    ".wav": "audio",
+    ".mp3": "audio",
+    ".m4a": "audio",
+    ".ogg": "audio",
+    # Documents
+    ".pptx": "document",
+    ".doc": "document",
+    ".docx": "document",
+    ".rtf": "document",
+    ".epub": "document",
+    ".pub": "document",
+    ".djvu": "document",
+    ".pdf": "document",
+}
+
+# Target formats for each type
+TARGET_FORMATS = {
+    "image": ".png",
+    "video": ".mp4",
+    "audio": ".mp3",
+    "document": ".pdf",
+}
+
+
+LIBREOFFICE_EXECUTABLE_LOCATION: str = (
+    r"C:\Program Files\LibreOffice\program\soffice.exe"
+)

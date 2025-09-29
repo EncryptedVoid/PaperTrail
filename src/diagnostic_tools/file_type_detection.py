@@ -251,14 +251,14 @@ if __name__ == "__main__":
 
 # def main():
 #     # Test files in your review directory (files that failed)
-#     review_dir = Path(r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run")
+#     failure_dir = Path(r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run")
 
-#     if not review_dir.exists():
-#         print(f"❌ Review directory not found: {review_dir}")
+#     if not failure_dir.exists():
+#         print(f"❌ Review directory not found: {failure_dir}")
 #         print("Update the path to match your directory structure")
 #         return
 
-#     files = list(review_dir.glob("*"))
+#     files = list(failure_dir.glob("*"))
 #     if not files:
 #         print("No files found in review directory")
 #         return

@@ -82,15 +82,15 @@ def inspect_docx_file(file_path: Path):
 
 def main():
     """Inspect all DOCX files in review directory"""
-    review_dir = Path(
+    failure_dir = Path(
         r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run\01_unprocessed"
     )
 
-    if not review_dir.exists():
+    if not failure_dir.exists():
         print("Review directory not found")
         return
 
-    docx_files = list(review_dir.glob("*.docx"))
+    docx_files = list(failure_dir.glob("*.docx"))
 
     if not docx_files:
         print("No .docx files found in review directory")

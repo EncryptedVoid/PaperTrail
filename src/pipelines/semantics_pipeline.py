@@ -8,17 +8,19 @@ visual processing and LLM-based field extraction techniques.
 Author: Ashiq Gazi
 """
 
-import logging
 import json
+import logging
 import time
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, TypedDict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, TypedDict
+
 from tqdm import tqdm
-from utilities.language_model import LanguageProcessor, LanguageExtractionReport
-from utilities.visual_model import VisualProcessor
-from common_utils import move_file_safely
-from config import ARTIFACT_PROFILES_DIR, ARTIFACT_PREFIX, PROFILE_PREFIX
+
+from config import ARTIFACT_PREFIX, ARTIFACT_PROFILES_DIR, PROFILE_PREFIX
+from src.utilities.common import move
+from src.utilities.language_model import LanguageExtractionReport, LanguageProcessor
+from src.utilities.visual_model import VisualProcessor
 
 
 class SemanticExtractionReport(TypedDict):
@@ -75,7 +77,7 @@ class SemanticsPipeline:
     def extract_semantics(
         self,
         source_dir: Path,
-        review_dir: Path,
+        failure_dir: Path,
         success_dir: Path,
     ) -> SemanticExtractionReport:
         """
@@ -83,7 +85,7 @@ class SemanticsPipeline:
 
         Args:
             source_dir: Directory containing artifacts to extract semantics from
-            review_dir: Directory to move problematic files for manual review
+            failure_dir: Directory to move problematic files for manual review
             success_dir: Directory to move files to after successful extraction
 
         Returns:
@@ -100,9 +102,9 @@ class SemanticsPipeline:
             success_dir.mkdir(parents=True, exist_ok=True)
             self.logger.info(f"Created target directory: {success_dir}")
 
-        if not review_dir.exists():
-            review_dir.mkdir(parents=True, exist_ok=True)
-            self.logger.info(f"Created review directory: {review_dir}")
+        if not failure_dir.exists():
+            failure_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"Created review directory: {failure_dir}")
 
         # Initialize report structure with default values
         report: SemanticExtractionReport = {
@@ -204,10 +206,10 @@ class SemanticsPipeline:
 
                     # Move file to review directory for manual inspection
                     review_location: Path = (
-                        review_dir / "missing_profile" / artifact.name
+                        failure_dir / "missing_profile" / artifact.name
                     )
                     review_location.parent.mkdir(parents=True, exist_ok=True)
-                    if move_file_safely(artifact, review_location):
+                    if move(artifact, review_location):
                         self.logger.info(
                             f"Moved {artifact.name} to review: missing_profile"
                         )
@@ -248,9 +250,9 @@ class SemanticsPipeline:
                     report["visual_processing_failures"] += 1
 
                     # Move to review folder
-                    review_location = review_dir / "extraction_failed" / artifact.name
+                    review_location = failure_dir / "extraction_failed" / artifact.name
                     review_location.parent.mkdir(parents=True, exist_ok=True)
-                    if move_file_safely(artifact, review_location):
+                    if move(artifact, review_location):
                         self.logger.info(
                             f"Moved {artifact.name} to review: extraction_failed"
                         )
@@ -317,7 +319,7 @@ class SemanticsPipeline:
 
                     # Move artifact to success directory
                     success_location: Path = success_dir / artifact.name
-                    if move_file_safely(artifact, success_location):
+                    if move(artifact, success_location):
                         report["processed_files"] += 1
                         report["profile_updates"] += 1
                         self.logger.info(f"Successfully processed: {artifact.name}")
@@ -327,10 +329,10 @@ class SemanticsPipeline:
 
                     # Move to review directory
                     review_location = (
-                        review_dir / "llm_extraction_failed" / artifact.name
+                        failure_dir / "llm_extraction_failed" / artifact.name
                     )
                     review_location.parent.mkdir(parents=True, exist_ok=True)
-                    if move_file_safely(artifact, review_location):
+                    if move(artifact, review_location):
                         self.logger.info(
                             f"Moved {artifact.name} to review: llm_extraction_failed"
                         )
@@ -348,9 +350,9 @@ class SemanticsPipeline:
                 report["failed_extractions"] += 1
 
                 # Move to review directory
-                review_location = review_dir / "processing_error" / artifact.name
+                review_location = failure_dir / "processing_error" / artifact.name
                 review_location.parent.mkdir(parents=True, exist_ok=True)
-                if move_file_safely(artifact, review_location):
+                if move(artifact, review_location):
                     self.logger.info(
                         f"Moved {artifact.name} to review: processing_error"
                     )
