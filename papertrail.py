@@ -12,29 +12,27 @@ from datetime import datetime
 
 # Configuration imports
 from config import (
-	ARCHIVE_DIR ,
-	COMPLETED_ARTIFACTS_DIR ,
-	CONVERTED_ARTIFACT_DIR ,
-	FOR_REVIEW_ARTIFACTS_DIR ,
-	LOG_DIR ,
-	METADATA_EXTRACTED_DIR ,
-	SANITIZED_ARTIFACTS_DIR ,
-	SEMANTICS_EXTRACTED_DIR ,
-	SESSION_LOG_FILE_PREFIX ,
-	SYSTEM_DIRECTORIES ,
-	UNPROCESSED_ARTIFACTS_DIR ,
+    ARCHIVE_DIR,
+    CONVERTED_ARTIFACT_DIR,
+    FOR_REVIEW_ARTIFACTS_DIR,
+    LOG_DIR,
+    METADATA_EXTRACTED_DIR,
+    SANITIZED_ARTIFACTS_DIR,
+    SEMANTICS_EXTRACTED_DIR,
+    SESSION_LOG_FILE_PREFIX,
+    SYSTEM_DIRECTORIES,
+    UNPROCESSED_ARTIFACTS_DIR,
 )
+
 # Pipeline imports
 from src.pipelines import (
-	ConversionPipeline ,
-	DatabasePipeline ,
-	MetadataPipeline ,
-	MetadataReport ,
-	SanitizationReport ,
-	SanitizerPipeline ,
-	SemanticExtractionReport ,
-	SemanticsPipeline ,
-	TabulationReport ,
+    ConversionPipeline,
+    MetadataPipeline,
+    MetadataReport,
+    SanitizationReport,
+    SanitizerPipeline,
+    SemanticExtractionReport,
+    SemanticsPipeline,
 )
 
 # subprocess.check_call(
@@ -95,10 +93,21 @@ try:
     )
     print(metadata_report)
 
+    logger.info("Starting artifact file type conversion stage...")
+    conversion_agent: ConversionPipeline = ConversionPipeline(
+        logger=logger, archive_dir=ARCHIVE_DIR
+    )
+    conversion_report = conversion_agent.convert(
+        source_dir=METADATA_EXTRACTED_DIR,
+        failure_dir=FOR_REVIEW_ARTIFACTS_DIR,
+        success_dir=CONVERTED_ARTIFACT_DIR,
+    )
+    print(conversion_report)
+
     logger.info("Starting semantic extraction stage...")
     semantics_agent: SemanticsPipeline = SemanticsPipeline(logger=logger)
     semantics_report: SemanticExtractionReport = semantics_agent.extract_semantics(
-        source_dir=METADATA_EXTRACTED_DIR,
+        source_dir=CONVERTED_ARTIFACT_DIR,
         failure_dir=FOR_REVIEW_ARTIFACTS_DIR,
         success_dir=SEMANTICS_EXTRACTED_DIR,
     )
@@ -115,14 +124,14 @@ try:
     )
     print(conversion_report)
 
-    logger.info("Starting database tabulation stage...")
-    database_agent: DatabasePipeline = DatabasePipeline(logger=logger)
-    database_report: TabulationReport = database_agent.tabulate(
-        source_dir=CONVERTED_ARTIFACT_DIR,
-        failure_dir=FOR_REVIEW_ARTIFACTS_DIR / "tabulation_failures",
-        success_dir=COMPLETED_ARTIFACTS_DIR,
-    )
-    print(database_report)
+    # logger.info("Starting database tabulation stage...")
+    # database_agent: DatabasePipeline = DatabasePipeline(logger=logger)
+    # database_report: TabulationReport = database_agent.tabulate(
+    #     source_dir=CONVERTED_ARTIFACT_DIR,
+    #     failure_dir=FOR_REVIEW_ARTIFACTS_DIR / "tabulation_failures",
+    #     success_dir=COMPLETED_ARTIFACTS_DIR,
+    # )
+    # print(database_report)
 
     logger.info("All processing stages completed successfully!")
 

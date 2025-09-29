@@ -58,7 +58,7 @@ class HashAlgorithm(Enum):
 # BASE DIRECTORIES AND PATHS
 # ============================================================================
 
-BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\test_run")
+BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail")
 
 # Resource directories
 PASSPHRASE_WORDLIST_PATH: Path = Path("assets/mit_wordlist.txt")
@@ -67,7 +67,7 @@ CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "checksum_history.txt"
 # Main processing pipeline stages
 ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "artifact_profiles"
 LOG_DIR: Path = BASE_DIR / "logs"
-UNPROCESSED_ARTIFACTS_DIR: Path = BASE_DIR / "unprocessed_artifacts"
+UNPROCESSED_ARTIFACTS_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail-Load")
 ARCHIVE_DIR: Path = BASE_DIR / "archive"
 FOR_REVIEW_ARTIFACTS_DIR: Path = BASE_DIR / "for_review"
 SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "01_sanitized"

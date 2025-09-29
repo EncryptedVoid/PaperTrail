@@ -20,23 +20,23 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List , Set , TypedDict
+from typing import Any, Dict, List, Set, TypedDict
 
 from tqdm import tqdm
 
 from config import (
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	PROFILE_PREFIX ,
-	UNSUPPORTED_EXTENSIONS ,
-	UUID_ENTROPY ,
-	UUID_PREFIX ,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    PROFILE_PREFIX,
+    UNSUPPORTED_EXTENSIONS,
+    UUID_ENTROPY,
+    UUID_PREFIX,
 )
 from src.utilities.common import (
-	generate_checksum ,
-	load_checksum_history ,
-	move ,
-	save_checksum ,
+    generate_checksum,
+    load_checksum_history,
+    move,
+    save_checksum,
 )
 
 
