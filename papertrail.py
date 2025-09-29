@@ -13,6 +13,7 @@ from datetime import datetime
 # Configuration imports
 from config import (
 	ARCHIVE_DIR ,
+	COMPLETED_ARTIFACTS_DIR ,
 	CONVERTED_ARTIFACT_DIR ,
 	FOR_REVIEW_ARTIFACTS_DIR ,
 	LOG_DIR ,
@@ -26,13 +27,28 @@ from config import (
 # Pipeline imports
 from src.pipelines import (
 	ConversionPipeline ,
+	DatabasePipeline ,
 	MetadataPipeline ,
 	MetadataReport ,
 	SanitizationReport ,
 	SanitizerPipeline ,
 	SemanticExtractionReport ,
 	SemanticsPipeline ,
+	TabulationReport ,
 )
+
+# subprocess.check_call(
+#     [
+#         sys.executable,
+#         "-m",
+#         "pip",
+#         "install",
+#         "--extra-index-url",
+#         "https://download.pytorch.org/whl/cu128",
+#         "-e",
+#         ".",
+#     ]
+# )
 
 # Ensure all directories exist
 for directory in SYSTEM_DIRECTORIES:
@@ -64,7 +80,7 @@ try:
     logger.info("Starting sanitization stage...")
     sanitizer_agent: SanitizerPipeline = SanitizerPipeline(logger=logger)
     sanitization_report: SanitizationReport = sanitizer_agent.sanitize(
-        source_path=UNPROCESSED_ARTIFACTS_DIR,
+        source_dir=UNPROCESSED_ARTIFACTS_DIR,
         failure_dir=FOR_REVIEW_ARTIFACTS_DIR,
         success_dir=SANITIZED_ARTIFACTS_DIR,
     )
@@ -99,14 +115,14 @@ try:
     )
     print(conversion_report)
 
-    # logger.info("Starting database tabulation stage...")
-    # database_agent: DatabasePipeline = DatabasePipeline(logger=logger)
-    # database_report: TabulationReport = database_agent.tabulate(
-    #     source_dir=CONVERTED_ARTIFACT_DIR,
-    #     failure_dir=FOR_REVIEW_ARTIFACTS_DIR / "tabulation_failures",
-    #     success_dir=COMPLETED_ARTIFACTS_DIR,
-    # )
-    # print(database_report)
+    logger.info("Starting database tabulation stage...")
+    database_agent: DatabasePipeline = DatabasePipeline(logger=logger)
+    database_report: TabulationReport = database_agent.tabulate(
+        source_dir=CONVERTED_ARTIFACT_DIR,
+        failure_dir=FOR_REVIEW_ARTIFACTS_DIR / "tabulation_failures",
+        success_dir=COMPLETED_ARTIFACTS_DIR,
+    )
+    print(database_report)
 
     logger.info("All processing stages completed successfully!")
 

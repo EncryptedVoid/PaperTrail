@@ -1,50 +1,36 @@
-import torch
-from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-from qwen_vl_utils import process_vision_info
-import fitz
-from PIL import Image
+import gc
 import io
 import logging
-import gc
-import psutil
 import time
-from enum import Enum
-from typing import Union, List, Dict, Any, Optional, Tuple
-from pathlib import Path
 from dataclasses import dataclass
-from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any , Dict , List , Union
+
+import fitz
+import psutil
+import torch
+from PIL import Image
+from qwen_vl_utils import process_vision_info
+from transformers import AutoProcessor , Qwen2VLForConditionalGeneration
+
 from config import (
-    DEFAULT_REFRESH_INTERVAL,
-    DEFAULT_MEMORY_THRESHOLD,
-    DEFAULT_AUTO_MODEL_SELECTION,
-    DEFAULT_PROCESSING_MODE,
-    RAM_USAGE_RATIO,
-    VRAM_USAGE_RATIO,
-    ZOOM_FACTOR_FAST,
-    ZOOM_FACTOR_BALANCED,
-    ZOOM_FACTOR_HIGH_QUALITY,
-    MAX_PROCESSING_TIME_PER_DOC,
-    MIN_TEXT_SUCCESS_RATE,
-    MIN_DESCRIPTION_SUCCESS_RATE,
-    MAX_AVERAGE_PROCESSING_TIME,
-    MAX_GPU_MEMORY_PERCENT,
-    QWEN2VL_2B_MIN_VRAM,
-    QWEN2VL_2B_MIN_RAM,
-    QWEN2VL_2B_QUALITY,
-    QWEN2VL_2B_MAX_TOKENS,
-    QWEN2VL_7B_MIN_VRAM,
-    QWEN2VL_7B_MIN_RAM,
-    QWEN2VL_7B_QUALITY,
-    QWEN2VL_7B_MAX_TOKENS,
-    QWEN2VL_72B_MIN_VRAM,
-    QWEN2VL_72B_MIN_RAM,
-    QWEN2VL_72B_QUALITY,
-    QWEN2VL_72B_MAX_TOKENS,
-    QWEN2VL_7B_CPU_MIN_VRAM,
-    QWEN2VL_7B_CPU_MIN_RAM,
-    QWEN2VL_7B_CPU_QUALITY,
-    QWEN2VL_7B_CPU_MAX_TOKENS,
-    PREFERRED_VISUAL_MODEL,
+	DEFAULT_AUTO_MODEL_SELECTION ,
+	DEFAULT_MEMORY_THRESHOLD ,
+	DEFAULT_PROCESSING_MODE ,
+	DEFAULT_REFRESH_INTERVAL ,
+	MAX_AVERAGE_PROCESSING_TIME ,
+	MAX_GPU_MEMORY_PERCENT ,
+	MAX_PROCESSING_TIME_PER_DOC ,
+	MIN_DESCRIPTION_SUCCESS_RATE ,
+	MIN_TEXT_SUCCESS_RATE ,
+	PREFERRED_VISUAL_MODEL ,
+	QWEN2VL_2B_MAX_TOKENS ,
+	RAM_USAGE_RATIO ,
+	VRAM_USAGE_RATIO ,
+	ZOOM_FACTOR_BALANCED ,
+	ZOOM_FACTOR_FAST ,
+	ZOOM_FACTOR_HIGH_QUALITY ,
 )
 
 
@@ -207,7 +193,7 @@ class VisualProcessor:
                 )
                 # Configure model loading parameters based on device
                 model_kwargs = {
-                    "torch_dtype": (
+                    "dtype": (
                         torch.bfloat16 if self.device == "cuda" else torch.float32
                     ),
                     "device_map": "auto" if self.device == "cuda" else {"": "cpu"},

@@ -2,21 +2,23 @@
 Enhanced DatabasePipeline with complete tabulate function implementation
 """
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List , Optional , TypedDict
+from typing import Dict , List , TypedDict
 
-import pandas as pd
 from tqdm import tqdm
 
 from config import (
-	ARCHIVE_DIR ,
 	ARTIFACT_PREFIX ,
 	ARTIFACT_PROFILES_DIR ,
-	FOR_REVIEW_ARTIFACTS_DIR ,
+	PASSWORD_VAULT_PATH ,
 	PROFILE_PREFIX ,
+)
+from utilities.common import (
+	generate_checksum ,
+	move ,
+	save_checksum ,
 )
 
 
@@ -45,11 +47,6 @@ class DatabasePipeline:
     def _init__(self, logger: logging.Logger) -> None:
         """Initialize the DatabasePipeline with logging configuration."""
         self.logger: logging.Logger = logger
-        self.conversion_agent: ConversionProcessor = ConversionProcessor(
-            logger=logger, archive_dir=ARCHIVE_DIR, failure_dir=FOR_REVIEW_ARTIFACTS_DIR
-        )
-
-        self.logger.info("DatabasePipeline initialized successfully")
 
     def tabulate(
         self,
@@ -157,7 +154,6 @@ class DatabasePipeline:
                 # Add checksum to history to prevent future duplicates
                 try:
                     checksum = generate_checksum(artifact)
-                    checksum_history.add(checksum)
                     save_checksum(checksum)
                 except Exception as checksum_error:
                     error_msg = f"Checksum generation failed for {artifact.name}: {checksum_error}"
@@ -181,7 +177,7 @@ class DatabasePipeline:
                 error_msg = f"Failed to process {artifact.name}: {e}"
                 self.logger.error(error_msg)
                 report["errors"].append(error_msg)
-                move(artifact, failure_dir, "processing_error")
+                move(artifact, failure_dir)
 
             # Finalize report
             total_time = (datetime.now() - start_time).total_seconds()
@@ -211,138 +207,4 @@ class DatabasePipeline:
                 self.logger.warning(f"  - {len(report['errors'])} errors encountered")
 
             return report
-
-    def _process_profile(profile_file: Path) -> Optional[Dict[str, Any]]:
-        """Process a single profile JSON file into a spreadsheet row"""
-        try:
-            with open(profile_file, "r", encoding="utf-8") as f:
-                profile = json.load(f)
-        except Exception as e:
-            self.logger.error(f"Failed to load profile {profile_file.name}: {e}")
-            return None
-
-        row = {}
-
-        for column_name, field_path in column_mapping.items():
-            try:
-                if field_path == "":
-                    # Manual entry field - leave empty
-                    row[column_name] = ""
-                elif field_path == "calculated":
-                    # Special calculated field
-                    row[column_name] = _calculate_special_field(column_name, profile)
-                elif isinstance(field_path, str):
-                    # Simple field path
-                    row[column_name] = profile.get(field_path, "UNKNOWN")
-                elif isinstance(field_path, list):
-                    # Nested field path
-                    row[column_name] = _get_nested_value(profile, field_path)
-                else:
-                    row[column_name] = "UNKNOWN"
-
-            except Exception as e:
-                self.logger.debug(
-                    f"Failed to extract {column_name} from {profile_file.name}: {e}"
-                )
-                row[column_name] = "UNKNOWN"
-
-        # Clean up the row
-        row = _clean_row_data(row)
-
-        return row
-
-    def _get_nested_value(data: Dict, path: List[str]) -> Any:
-        """Navigate nested dictionary using path list"""
-        current = data
-        for key in path:
-            if isinstance(current, dict) and key in current:
-                current = current[key]
-            else:
-                return "UNKNOWN"
-        return current if current is not None else "UNKNOWN"
-
-    def _calculate_special_field(field_name: str, profile: Dict) -> Any:
-        """Calculate special fields that need computation"""
-        if field_name == "Fields_Extracted_Count":
-            try:
-                extracted_fields = _get_nested_value(
-                    profile, ["llm_extraction", "extracted_fields"]
-                )
-                if isinstance(extracted_fields, dict):
-                    return sum(1 for v in extracted_fields.values() if v != "UNKNOWN")
-                return 0
-            except:
-                return 0
-
-        elif field_name == "OCR_Text_Length":
-            try:
-                text = _get_nested_value(profile, ["semantics", "all_text"])
-                return len(str(text)) if text != "UNKNOWN" else 0
-            except:
-                return 0
-
-        elif field_name == "Visual_Description_Length":
-            try:
-                desc = _get_nested_value(profile, ["semantics", "all_imagery"])
-                return len(str(desc)) if desc != "UNKNOWN" else 0
-            except:
-                return 0
-
-        return "UNKNOWN"
-
-    def _clean_row_data(row: Dict[str, Any]) -> Dict[str, Any]:
-        """Clean and standardize row data"""
-        cleaned = {}
-        for key, value in row.items():
-            # Convert None to UNKNOWN
-            if value is None:
-                cleaned[key] = "UNKNOWN"
-            # Clean up strings
-            elif isinstance(value, str):
-                cleaned[key] = value.strip() if value.strip() else "UNKNOWN"
-            # Convert booleans
-            elif isinstance(value, bool):
-                cleaned[key] = "Yes" if value else "No"
-            # Keep numbers as-is
-            else:
-                cleaned[key] = value
-
-        return cleaned
-
-    def _export_to_excel(df: pd.DataFrame, output_path: Path):
-        """Export DataFrame to Excel with formatting"""
-        try:
-            with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-                df.to_excel(writer, sheet_name="Documents", index=False)
-
-                # Get the workbook and worksheet
-                workbook = writer.book
-                worksheet = writer.sheets["Documents"]
-
-                # Auto-adjust column widths
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-
-                    adjusted_width = min(max_length + 2, 50)  # Cap at 50 chars
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-
-            self.logger.info(f"Excel file exported: {output_path}")
-
-        except Exception as e:
-            self.logger.error(f"Failed to export Excel file: {e}")
-
-    def _export_to_csv(df: pd.DataFrame, output_path: Path):
-        """Export DataFrame to CSV"""
-        try:
-            df.to_csv(output_path, index=False, encoding="utf-8")
-            self.logger.info(f"CSV file exported: {output_path}")
-        except Exception as e:
-            self.logger.error(f"Failed to export CSV file: {e}")
+        return None

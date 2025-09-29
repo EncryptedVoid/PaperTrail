@@ -4,7 +4,8 @@
 
 ## 🤔 What Even Is This Thing?
 
-PaperTrail is an **absolutely bonkers** document processing pipeline that takes your messy pile of files and transforms them into a beautifully organized spreadsheet database! 🗂️➡️📊
+PaperTrail is an **absolutely bonkers** document processing pipeline that takes your messy pile of files and transforms
+them into a beautifully organized spreadsheet database! 🗂️➡️📊
 
 Think of it as a digital filing assistant that:
 
@@ -89,6 +90,7 @@ The final spreadsheet includes columns like:
 ## 📁 The Folder Structure Dance
 
 The pipeline creates this beautiful folder hierarchy:
+
 ```
 📂 test_run/
 ├── 📁 unprocessed_artifacts/     (Drop files here!)
@@ -130,6 +132,10 @@ This is a **functional prototype** that:
 
 ## 🎊 The Bottom Line
 
-PaperTrail is a surprisingly capable document processing pipeline that actually works! It's like having a very patient digital assistant that never gets tired of organizing your paperwork. Drop in your documents, wait for the AI magic to happen, and get back a professional database spreadsheet.
+PaperTrail is a surprisingly capable document processing pipeline that actually works! It's like having a very patient
+digital assistant that never gets tired of organizing your paperwork. Drop in your documents, wait for the AI magic to
+happen, and get back a professional database spreadsheet.
 
 *Perfect for anyone drowning in documents and wanting to bring some order to the chaos!* 🌪️➡️📋✨
+
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128

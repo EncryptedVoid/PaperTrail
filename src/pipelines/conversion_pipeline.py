@@ -22,34 +22,34 @@ from typing import Optional
 import ffmpeg
 import filetype
 import rawpy
-from PIL import Image, ImageEnhance
+from PIL import Image , ImageEnhance
 from pillow_heif import register_heif_opener
 from tqdm import tqdm
 
 from config import (
-    AUDIO_BITRATE,
-    AUDIO_CODEC,
-    AUDIO_SAMPLE_RATE,
-    ENABLE_IMAGE_ENHANCEMENT,
-    ENABLE_UPSCALING,
-    ENABLE_VIDEO_ENHANCEMENT,
-    EXTENSION_MAPPING,
-    IMAGE_CONTRAST_FACTOR,
-    IMAGE_SHARPENING_FACTOR,
-    IMAGE_TARGET_SIZE,
-    LIBREOFFICE_EXECUTABLE_LOCATION,
-    LIBREOFFICE_TIMEOUT,
-    PNG_COMPRESS_LEVEL,
-    REQUIRE_DETECTION_AGREEMENT,
-    USE_CONTENT_DETECTION,
-    VIDEO_4K_THRESHOLD,
-    VIDEO_CODEC,
-    VIDEO_CRF,
-    VIDEO_PIXEL_FORMAT,
-    VIDEO_PRESET,
-    VIDEO_TARGET_1080P,
-    VIDEO_TARGET_4K,
-    VIDEO_UPSCALE_THRESHOLD,
+	AUDIO_BITRATE ,
+	AUDIO_CODEC ,
+	AUDIO_SAMPLE_RATE ,
+	ENABLE_IMAGE_ENHANCEMENT ,
+	ENABLE_UPSCALING ,
+	ENABLE_VIDEO_ENHANCEMENT ,
+	EXTENSION_MAPPING ,
+	IMAGE_CONTRAST_FACTOR ,
+	IMAGE_SHARPENING_FACTOR ,
+	IMAGE_TARGET_SIZE ,
+	LIBREOFFICE_EXECUTABLE_LOCATION ,
+	LIBREOFFICE_TIMEOUT ,
+	PNG_COMPRESS_LEVEL ,
+	REQUIRE_DETECTION_AGREEMENT ,
+	USE_CONTENT_DETECTION ,
+	VIDEO_4K_THRESHOLD ,
+	VIDEO_CODEC ,
+	VIDEO_CRF ,
+	VIDEO_PIXEL_FORMAT ,
+	VIDEO_PRESET ,
+	VIDEO_TARGET_1080P ,
+	VIDEO_TARGET_4K ,
+	VIDEO_UPSCALE_THRESHOLD ,
 )
 
 register_heif_opener()
@@ -107,7 +107,7 @@ class ConversionPipeline:
         4. Manages file organization and cleanup
 
         Args:
-            source_path: Directory containing files to process OR a single file to process
+            source_dir: Directory containing files to process OR a single file to process
             failure_dir: Directory to move files that cannot be converted
             success_dir: Directory to move successfully converted files
 
@@ -118,8 +118,8 @@ class ConversionPipeline:
             FileNotFoundError: If source_path, failure_dir, or success_dir don't exist
         """
 
-        if not source_path.exists():
-            error_msg = f"Source path does not exist: {source_path}"
+        if not source_dir.exists():
+            error_msg = f"Source path does not exist: {source_dir}"
             self.logger.error(error_msg)
             raise FileNotFoundError(error_msg)
 
@@ -139,17 +139,17 @@ class ConversionPipeline:
 
         # Determine if source_path is a directory or single file and get file list
         try:
-            if source_path.is_dir():
+            if source_dir.is_dir():
                 unprocessed_files = [
-                    item for item in source_path.iterdir() if item.is_file()
+                    item for item in source_dir.iterdir() if item.is_file()
                 ]
-                self.logger.info(f"Processing directory: {source_path}")
-            elif source_path.is_file():
-                unprocessed_files = [source_path]
-                self.logger.info(f"Processing single file: {source_path}")
+                self.logger.info(f"Processing directory: {source_dir}")
+            elif source_dir.is_file():
+                unprocessed_files = [source_dir]
+                self.logger.info(f"Processing single file: {source_dir}")
             else:
                 error_msg = (
-                    f"Source path is neither a file nor a directory: {source_path}"
+                    f"Source path is neither a file nor a directory: {source_dir}"
                 )
                 self.logger.error(error_msg)
                 return 0

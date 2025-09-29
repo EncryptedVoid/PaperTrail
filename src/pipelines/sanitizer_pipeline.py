@@ -20,23 +20,23 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Set, TypedDict
+from typing import Any , Dict , List , Set , TypedDict
 
 from tqdm import tqdm
 
 from config import (
-    ARTIFACT_PREFIX,
-    ARTIFACT_PROFILES_DIR,
-    PROFILE_PREFIX,
-    UNSUPPORTED_EXTENSIONS,
-    UUID_ENTROPY,
-    UUID_PREFIX,
+	ARTIFACT_PREFIX ,
+	ARTIFACT_PROFILES_DIR ,
+	PROFILE_PREFIX ,
+	UNSUPPORTED_EXTENSIONS ,
+	UUID_ENTROPY ,
+	UUID_PREFIX ,
 )
 from src.utilities.common import (
-    generate_checksum,
-    load_checksum_history,
-    move,
-    save_checksum,
+	generate_checksum ,
+	load_checksum_history ,
+	move ,
+	save_checksum ,
 )
 
 
@@ -95,7 +95,7 @@ class SanitizerPipeline:
 
     def sanitize(
         self,
-        source_path: Path,
+        source_dir: Path,
         failure_dir: Path,
         success_dir: Path,
     ) -> SanitizationReport:
@@ -115,7 +115,7 @@ class SanitizerPipeline:
         7. Generates comprehensive report of all operations
 
         Args:
-            source_path: Directory containing files to process OR a single file to process
+            source_dir: Directory containing files to process OR a single file to process
             failure_dir: Directory to move problematic files to for manual review
             success_dir: Directory to move successfully processed files to
 
@@ -127,8 +127,8 @@ class SanitizerPipeline:
             initial feedback and optimize processing time for large directories.
         """
 
-        if not source_path.exists():
-            error_msg = f"Source path does not exist: {source_path}"
+        if not source_dir.exists():
+            error_msg = f"Source path does not exist: {source_dir}"
             self.logger.error(error_msg)
             raise FileNotFoundError(error_msg)
 
@@ -160,19 +160,19 @@ class SanitizerPipeline:
 
         # Determine if source_path is a directory or a single file and get file list
         try:
-            if source_path.is_dir():
+            if source_dir.is_dir():
                 # Source is a directory - get all files in it
                 unprocessed_artifacts = [
-                    item for item in source_path.iterdir() if item.is_file()
+                    item for item in source_dir.iterdir() if item.is_file()
                 ]
-                self.logger.info(f"Processing directory: {source_path}")
-            elif source_path.is_file():
+                self.logger.info(f"Processing directory: {source_dir}")
+            elif source_dir.is_file():
                 # Source is a single file
-                unprocessed_artifacts = [source_path]
-                self.logger.info(f"Processing single file: {source_path}")
+                unprocessed_artifacts = [source_dir]
+                self.logger.info(f"Processing single file: {source_dir}")
             else:
                 error_msg = (
-                    f"Source path is neither a file nor a directory: {source_path}"
+                    f"Source path is neither a file nor a directory: {source_dir}"
                 )
                 self.logger.error(error_msg)
                 report["errors"].append(error_msg)
