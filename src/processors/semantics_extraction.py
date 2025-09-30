@@ -37,9 +37,16 @@ from config import (
 	DOCUMENT_TYPES ,
 	IMAGE_TYPES ,
 	PROFILE_PREFIX ,
+	TEMP_DIR ,
 	VIDEO_TYPES ,
 )
-from utilities import AudioProcessor , LanguageProcessor , VisualProcessor
+from utilities import (
+	AudioProcessor ,
+	LanguageProcessor ,
+	VisualProcessor ,
+	compile_doc_subset ,
+	compile_video_snapshot_subset ,
+)
 
 
 def extract_semantics(
@@ -175,8 +182,12 @@ def extract_semantics(
             # Documents and images use visual processing with OCR
             if artifact.suffix in DOCUMENT_TYPES or artifact.suffix in IMAGE_TYPES:
                 # Extract both OCR text and visual descriptions from the document
+                if artifact.pages > 10:
+                    subset: Path = compile_doc_subset(set_size=10, temp_dir=TEMP_DIR)
+                else:
+                    subset: Path = artifact
                 ocr_text, visual_description = visual_processor.extract_semantics(
-                    document=artifact
+                    document=subset
                 )
 
                 # Process the extracted text and visual data to create structured descriptors
@@ -188,10 +199,15 @@ def extract_semantics(
             elif (
                 artifact.suffix in VIDEO_TYPES or artifact.suffix in AUDIO_TYPES
             ) and (audio_processor.has_audio(artifact)):
-                # Extract transcription from audio/video and visual descriptions from video frames
-                transcription, visual_description = audio_processor.extract_semantics(
-                    document=artifact
+                snapshots: Path = compile_video_snapshot_subset(
+                    set_size=6, temp_dir=TEMP_DIR
                 )
+                ocr_text, visual_description = visual_processor.extract_semantics(
+                    document=snapshots
+                )
+
+                # Extract transcription from audio/video and visual descriptions from video frames
+                transcription = audio_processor.transcribe_audio(document=artifact)
 
                 # Process the transcription and visual data to create structured descriptors
                 artifact_descriptors = language_processor.extract_fields(
