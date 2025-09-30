@@ -710,7 +710,7 @@ TARGET_FORMATS = {
     "document": ".pdf",
 }
 
-
-LIBREOFFICE_EXECUTABLE_LOCATION: str = (
-    r"C:\Program Files\LibreOffice\program\soffice.exe"
-)
+JAVA_PATH: str = "java"
+TIKA_APP_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
+TIKA_SERVER_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
+TIKA_SERVER_STANDARD_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
