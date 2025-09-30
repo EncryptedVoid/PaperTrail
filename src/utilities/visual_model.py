@@ -5,32 +5,32 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any , Dict , List , Union
+from typing import Any, Dict, List, Union
 
 import fitz
 import psutil
 import torch
 from PIL import Image
 from qwen_vl_utils import process_vision_info
-from transformers import AutoProcessor , Qwen2VLForConditionalGeneration
+from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
 from config import (
-	DEFAULT_AUTO_MODEL_SELECTION ,
-	DEFAULT_MEMORY_THRESHOLD ,
-	DEFAULT_PROCESSING_MODE ,
-	DEFAULT_REFRESH_INTERVAL ,
-	MAX_AVERAGE_PROCESSING_TIME ,
-	MAX_GPU_MEMORY_PERCENT ,
-	MAX_PROCESSING_TIME_PER_DOC ,
-	MIN_DESCRIPTION_SUCCESS_RATE ,
-	MIN_TEXT_SUCCESS_RATE ,
-	PREFERRED_VISUAL_MODEL ,
-	QWEN2VL_2B_MAX_TOKENS ,
-	RAM_USAGE_RATIO ,
-	VRAM_USAGE_RATIO ,
-	ZOOM_FACTOR_BALANCED ,
-	ZOOM_FACTOR_FAST ,
-	ZOOM_FACTOR_HIGH_QUALITY ,
+    DEFAULT_AUTO_MODEL_SELECTION,
+    DEFAULT_MEMORY_THRESHOLD,
+    DEFAULT_PROCESSING_MODE,
+    DEFAULT_REFRESH_INTERVAL,
+    MAX_AVERAGE_PROCESSING_TIME,
+    MAX_GPU_MEMORY_PERCENT,
+    MAX_PROCESSING_TIME_PER_DOC,
+    MIN_DESCRIPTION_SUCCESS_RATE,
+    MIN_TEXT_SUCCESS_RATE,
+    PREFERRED_VISUAL_MODEL,
+    QWEN2VL_2B_MAX_TOKENS,
+    RAM_USAGE_RATIO,
+    VRAM_USAGE_RATIO,
+    ZOOM_FACTOR_BALANCED,
+    ZOOM_FACTOR_FAST,
+    ZOOM_FACTOR_HIGH_QUALITY,
 )
 
 
@@ -69,11 +69,11 @@ class ProcessingStats:
     """
     Comprehensive tracking of processing performance and quality metrics.
 
-    This class maintains statistics across all document processing operations
+    This class maintains statistics across all file_path processing operations
     to enable performance monitoring and optimization decisions.
     """
 
-    documents_processed: int = 0
+    file_paths_processed: int = 0
     pages_processed: int = 0
     text_extractions_successful: int = 0
     descriptions_successful: int = 0
@@ -89,7 +89,7 @@ class VisualProcessor:
     """
     Enhanced Visual Processor with hardware optimization and intelligent resource management.
 
-    This processor handles document analysis using vision-language models with automatic
+    This processor handles file_path analysis using vision-language models with automatic
     hardware detection, memory management, and performance optimization. It supports
     both PDF and image file processing with configurable quality modes.
 
@@ -132,7 +132,7 @@ class VisualProcessor:
         self.logger.info(f"Processing mode set to: {self.processing_mode.value}")
         self.logger.info(f"Auto model selection: {self.auto_model_selection}")
         self.logger.info(f"Memory threshold: {self.memory_threshold}%")
-        self.logger.info(f"Refresh interval: {self.refresh_interval} documents")
+        self.logger.info(f"Refresh interval: {self.refresh_interval} file_paths")
 
         # Initialize processing statistics
         self.stats = ProcessingStats()
@@ -255,10 +255,10 @@ class VisualProcessor:
         """
         current_time = time.time()
 
-        # Check document count trigger using configuration constant
-        if self.stats.documents_processed >= self.refresh_interval:
+        # Check file_path count trigger using configuration constant
+        if self.stats.file_paths_processed >= self.refresh_interval:
             self.logger.info(
-                f"Refresh triggered: processed {self.stats.documents_processed} documents (limit: {self.refresh_interval})"
+                f"Refresh triggered: processed {self.stats.file_paths_processed} file_paths (limit: {self.refresh_interval})"
             )
             return True
 
@@ -287,9 +287,9 @@ class VisualProcessor:
                 )
 
         # Check processing time degradation using configuration constant
-        if self.stats.documents_processed > 0:
+        if self.stats.file_paths_processed > 0:
             avg_time_per_doc = (
-                self.stats.total_processing_time / self.stats.documents_processed
+                self.stats.total_processing_time / self.stats.file_paths_processed
             )
             if avg_time_per_doc > MAX_AVERAGE_PROCESSING_TIME:
                 self.logger.warning(
@@ -298,7 +298,7 @@ class VisualProcessor:
                 return True
 
             self.logger.debug(
-                f"Average processing time: {avg_time_per_doc:.1f}s per document"
+                f"Average processing time: {avg_time_per_doc:.1f}s per file_path"
             )
 
         # Check overall success rates using configuration constants
@@ -355,8 +355,8 @@ class VisualProcessor:
 
             # Update statistics
             self.stats.memory_refreshes += 1
-            processing_count = self.stats.documents_processed
-            self.stats.documents_processed = 0  # Reset document counter
+            processing_count = self.stats.file_paths_processed
+            self.stats.file_paths_processed = 0  # Reset file_path counter
 
             refresh_time = time.time() - refresh_start_time
             self.logger.info(
@@ -487,7 +487,7 @@ class VisualProcessor:
                 "diagram",
                 "chart",
                 "table",
-                "document",
+                "file_path",
                 "page",
                 "content",
                 "visual",
@@ -810,29 +810,28 @@ class VisualProcessor:
             self.logger.error(f"Failed to process image: {e}")
             raise
 
-    def extract_semantics(self, document: Path) -> Dict[str, str]:
+    def extract_semantics(self, file_path: Path) -> Dict[str, str]:
         """
-        Process document with enhanced monitoring and performance tracking.
+        Process file_path with enhanced monitoring and performance tracking.
 
-        Main entry point for document processing that handles both PDFs and images
+        Main entry point for file_path processing that handles both PDFs and images
         with comprehensive error handling, performance monitoring, and automatic
         model refresh based on configuration thresholds.
 
         Args:
-            document: Path to document file (PDF or image)
+            file_path: Path to file_path file (PDF or image)
 
         Returns:
             Dict containing extracted text and descriptions
 
         Raises:
-            FileNotFoundError: If document file doesn't exist
+            FileNotFoundError: If file_path file doesn't exist
             ValueError: If file type is unsupported
             Exception: If processing fails
         """
-        document_obj = Path(document)
-        self.logger.info(f"Starting document processing: {document_obj.name}")
+        self.logger.info(f"Starting file_path processing: {file_path.name}")
         self.logger.info(
-            f"Document size: {document_obj.stat().st_size / 1024 / 1024:.1f} MB"
+            f"Document size: {file_path.stat().st_size / 1024 / 1024:.1f} MB"
         )
 
         start_time = time.time()
@@ -848,13 +847,13 @@ class VisualProcessor:
             f"Memory before processing - GPU: {memory_before.get('gpu_memory_percent', 0):.1f}%, RAM: {memory_before.get('system_ram_percent', 0):.1f}%"
         )
 
-        # Validate document existence
-        if not document_obj.exists():
-            self.logger.error(f"Document file not found: {document_obj}")
-            raise FileNotFoundError(f"Document file not found: {document_obj}")
+        # Validate file_path existence
+        if not file_path.exists():
+            self.logger.error(f"Document file not found: {file_path}")
+            raise FileNotFoundError(f"Document file not found: {file_path}")
 
         # Determine file type and log processing approach
-        file_ext = document_obj.suffix.lower()
+        file_ext = file_path.suffix.lower()
         self.logger.info(f"Document type: {file_ext}")
 
         # Initialize processing containers
@@ -866,8 +865,8 @@ class VisualProcessor:
         try:
             if file_ext == ".pdf":
                 # PDF processing with detailed progress tracking
-                self.logger.info("Processing PDF document...")
-                images = self._pdf_to_images(document_obj)
+                self.logger.info("Processing PDF file_path...")
+                images = self._pdf_to_images(file_path)
                 total_pages = len(images)
                 self.logger.info(
                     f"PDF converted to {total_pages} images, beginning page-by-page processing"
@@ -934,9 +933,9 @@ class VisualProcessor:
 
             elif file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]:
                 # Image file processing
-                self.logger.info(f"Processing image file: {document_obj.name}")
+                self.logger.info(f"Processing image file: {file_path.name}")
 
-                result = self._process_single_image(document_obj)
+                result = self._process_single_image(file_path)
                 page_quality_metrics.append(result.get("quality_metrics", {}))
 
                 # Handle text extraction results
@@ -971,7 +970,7 @@ class VisualProcessor:
 
             # Compile final results
             final_text = (
-                "\n\n".join(all_text) if all_text else "No text found in document."
+                "\n\n".join(all_text) if all_text else "No text found in file_path."
             )
             final_descriptions = (
                 "\n\n".join(all_descriptions)
@@ -982,7 +981,7 @@ class VisualProcessor:
             # Update comprehensive statistics
             processing_time = time.time() - start_time
             self.stats.total_processing_time += processing_time
-            self.stats.documents_processed += 1
+            self.stats.file_paths_processed += 1
 
             # Update rolling averages for text and description lengths
             if all_text:
@@ -992,10 +991,10 @@ class VisualProcessor:
                 self.stats.average_text_length = (
                     (
                         self.stats.average_text_length
-                        * (self.stats.documents_processed - 1)
+                        * (self.stats.file_paths_processed - 1)
                     )
                     + current_avg_text_length
-                ) / self.stats.documents_processed
+                ) / self.stats.file_paths_processed
 
             if all_descriptions:
                 current_avg_desc_length = sum(
@@ -1004,10 +1003,10 @@ class VisualProcessor:
                 self.stats.average_description_length = (
                     (
                         self.stats.average_description_length
-                        * (self.stats.documents_processed - 1)
+                        * (self.stats.file_paths_processed - 1)
                     )
                     + current_avg_desc_length
-                ) / self.stats.documents_processed
+                ) / self.stats.file_paths_processed
 
             # Monitor memory after processing
             memory_after = self._monitor_memory_usage()
@@ -1055,9 +1054,7 @@ class VisualProcessor:
             }
 
         except Exception as e:
-            self.logger.error(
-                f"Document processing failed for {document_obj.name}: {e}"
-            )
+            self.logger.error(f"Document processing failed for {file_path.name}: {e}")
             raise
 
     def get_processing_stats(self) -> Dict[str, Any]:
@@ -1074,7 +1071,7 @@ class VisualProcessor:
 
         # Basic processing statistics
         stats = {
-            "documents_processed": self.stats.documents_processed,
+            "file_paths_processed": self.stats.file_paths_processed,
             "pages_processed": self.stats.pages_processed,
             "text_extractions_successful": self.stats.text_extractions_successful,
             "descriptions_successful": self.stats.descriptions_successful,
@@ -1100,9 +1097,9 @@ class VisualProcessor:
         }
 
         # Calculate performance rates and averages
-        if self.stats.documents_processed > 0:
+        if self.stats.file_paths_processed > 0:
             stats["avg_processing_time_per_doc"] = (
-                self.stats.total_processing_time / self.stats.documents_processed
+                self.stats.total_processing_time / self.stats.file_paths_processed
             )
 
             # Calculate success rates
@@ -1140,8 +1137,8 @@ class VisualProcessor:
                     self.stats.pages_processed / self.stats.total_processing_time
                 )
                 * 60,
-                "documents_per_hour": (
-                    self.stats.documents_processed / self.stats.total_processing_time
+                "file_paths_per_hour": (
+                    self.stats.file_paths_processed / self.stats.total_processing_time
                 )
                 * 3600,
                 "characters_per_second": (
@@ -1186,7 +1183,7 @@ class VisualProcessor:
                 "Consider using HIGH_QUALITY processing mode for better text extraction"
             )
             suggestions.append(
-                "Check if document quality is sufficient for text recognition"
+                "Check if file_path quality is sufficient for text recognition"
             )
             self.logger.warning(issue)
 
@@ -1234,7 +1231,7 @@ class VisualProcessor:
             self.logger.warning(issue)
 
         # Check refresh frequency optimization
-        if self.stats.memory_refreshes > self.stats.documents_processed // 2:
+        if self.stats.memory_refreshes > self.stats.file_paths_processed // 2:
             issue = "Frequent model refreshes detected - may indicate memory pressure"
             performance_issues.append(issue)
             suggestions.append(

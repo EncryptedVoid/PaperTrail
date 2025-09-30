@@ -592,3 +592,11 @@ TIKA_SERVER_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
 TIKA_SERVER_STANDARD_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
 MIN_JAVA_VERSION: int = 11
 MIN_FILE_TYPE_CONF_SCORE: float = 75.0
+
+SILENCE_THRESH_DB: float = -50.0
+MIN_SILENCE_LEN_MS: int = 1000
+MIN_NONSILENT_RATIO: float = 0.01
+RMS_ENERGY_THRESHOLD_DB: float = -40.0
+PREFERRED_AUDIO_MODEL = "large-v3"  # or "medium", "base", "small", "tiny"
+MIN_TRANSCRIPTION_SUCCESS_RATE = 0.7  # 70% minimum success rate
+MAX_PDF_SIZE_BEFORE_SUBSETTING: int = 8

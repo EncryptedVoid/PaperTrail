@@ -2,14 +2,14 @@
 Metadata Pipeline Module
 
 A robust file processing pipeline that handles comprehensive metadata extraction
-from various file types including images, documents, PDFs, office files, audio,
+from various file types including images, file_paths, PDFs, office files, audio,
 video, archives, and more.
 
 This module provides functionality to extract metadata by:
 - Detecting file types and routing to appropriate extractors
 - Extracting filesystem metadata (size, dates, permissions)
 - Processing image EXIF, IPTC, XMP data, color profiles, and technical details
-- Extracting document properties, structure information, and content analysis
+- Extracting file_path properties, structure information, and content analysis
 - Processing audio/video metadata including codecs, duration, and technical specs
 - Analyzing archive contents and compression details
 - Extracting code and text file metrics and language detection
@@ -25,27 +25,29 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List
+from typing import Any, Dict, List
 
+import pypdf
 from torch.onnx.errors import UnsupportedOperatorError
 from tqdm import tqdm
 
 from config import (
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	AUDIO_TYPES ,
-	DOCUMENT_TYPES ,
-	IMAGE_TYPES ,
-	PROFILE_PREFIX ,
-	TEMP_DIR ,
-	VIDEO_TYPES ,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    AUDIO_TYPES,
+    DOCUMENT_TYPES,
+    IMAGE_TYPES,
+    MAX_PDF_SIZE_BEFORE_SUBSETTING,
+    PROFILE_PREFIX,
+    TEMP_DIR,
+    VIDEO_TYPES,
 )
 from utilities import (
-	AudioProcessor ,
-	LanguageProcessor ,
-	VisualProcessor ,
-	compile_doc_subset ,
-	compile_video_snapshot_subset ,
+    AudioProcessor,
+    LanguageProcessor,
+    VisualProcessor,
+    compile_doc_subset,
+    compile_video_snapshot_subset,
 )
 
 
@@ -67,7 +69,7 @@ def extract_semantics(
     - Java runtime validation (version 11+)
     - Apache Tika JAR validation
     - Filesystem metadata extraction
-    - Technical metadata extraction (EXIF, IPTC, document properties, etc.)
+    - Technical metadata extraction (EXIF, IPTC, file_path properties, etc.)
     - Full text content extraction
     - Profile updates with extraction timestamps and results
     - Graceful error handling with detailed logging
@@ -121,7 +123,7 @@ def extract_semantics(
         return None
 
     # Initialize processor instances for different artifact types
-    # VisualProcessor handles images and documents with OCR capabilities
+    # VisualProcessor handles images and file_paths with OCR capabilities
     visual_processor: VisualProcessor = VisualProcessor(logger=logger)
     # LanguageProcessor extracts structured fields from text descriptions
     language_processor: LanguageProcessor = LanguageProcessor(logger=logger)
@@ -181,13 +183,19 @@ def extract_semantics(
             # Route to appropriate processor based on file type
             # Documents and images use visual processing with OCR
             if artifact.suffix in DOCUMENT_TYPES or artifact.suffix in IMAGE_TYPES:
-                # Extract both OCR text and visual descriptions from the document
-                if artifact.pages > 10:
-                    subset: Path = compile_doc_subset(set_size=10, temp_dir=TEMP_DIR)
+                # Extract both OCR text and visual descriptions from the file_path
+                if (
+                    len(pypdf.PdfReader(str(artifact)).pages)
+                ) > MAX_PDF_SIZE_BEFORE_SUBSETTING:
+                    subset: Path = compile_doc_subset(
+                        input_pdf=artifact,
+                        set_size=MAX_PDF_SIZE_BEFORE_SUBSETTING,
+                        temp_dir=TEMP_DIR,
+                    )
                 else:
                     subset: Path = artifact
                 ocr_text, visual_description = visual_processor.extract_semantics(
-                    document=subset
+                    file_path=subset
                 )
 
                 # Process the extracted text and visual data to create structured descriptors
@@ -196,23 +204,38 @@ def extract_semantics(
                     visual_description=visual_description,
                 )
             # Video and audio files use audio processing with transcription
-            elif (
-                artifact.suffix in VIDEO_TYPES or artifact.suffix in AUDIO_TYPES
-            ) and (audio_processor.has_audio(artifact)):
-                snapshots: Path = compile_video_snapshot_subset(
-                    set_size=6, temp_dir=TEMP_DIR
-                )
+            elif (artifact.suffix in VIDEO_TYPES) and (
+                audio_processor.has_audio(artifact)
+            ):
                 ocr_text, visual_description = visual_processor.extract_semantics(
-                    document=snapshots
+                    file_path=compile_video_snapshot_subset(
+                        video_path=artifact,
+                        set_size=MAX_PDF_SIZE_BEFORE_SUBSETTING,
+                        temp_dir=TEMP_DIR,
+                    )
                 )
 
                 # Extract transcription from audio/video and visual descriptions from video frames
-                transcription = audio_processor.transcribe_audio(document=artifact)
+                transcription = audio_processor.transcribe_audio(file_path=artifact)
 
                 # Process the transcription and visual data to create structured descriptors
                 artifact_descriptors = language_processor.extract_fields(
                     text_description=transcription,
                     visual_description=visual_description,
+                )
+            elif artifact.suffix in AUDIO_TYPES:
+                if not audio_processor.has_audio(artifact):
+                    raise SystemError(
+                        "Audio type artifact does not have audio. Malformed audio type."
+                    )
+
+                # Extract transcription from audio/video and visual descriptions from video frames
+                transcription = audio_processor.transcribe_audio(file_path=artifact)
+
+                # Process the transcription and visual data to create structured descriptors
+                artifact_descriptors = language_processor.extract_fields(
+                    text_description=transcription,
+                    visual_description="THIS FILE IS AN AUDIO FILE. NO VISUAL DESCRIPTION EXISTS.",
                 )
             else:
                 # Unsupported file types should fail explicitly
