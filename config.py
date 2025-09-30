@@ -62,32 +62,32 @@ BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail")
 
 # Resource directories
 PASSPHRASE_WORDLIST_PATH: Path = Path("assets/mit_wordlist.txt")
-CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "checksum_history.txt"
+CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "DATA/checksum_history.txt"
 
 # Main processing pipeline stages
-ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "artifact_profiles"
-LOG_DIR: Path = BASE_DIR / "logs"
+ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "DATA/artifact_profiles"
+LOG_DIR: Path = BASE_DIR / "DATA/logs"
 UNPROCESSED_ARTIFACTS_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail-Load")
-ARCHIVE_DIR: Path = BASE_DIR / "archive"
-FOR_REVIEW_ARTIFACTS_DIR: Path = BASE_DIR / "for_review"
-SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "01_sanitized"
-METADATA_EXTRACTED_DIR: Path = BASE_DIR / "02_metadata"
-SEMANTICS_EXTRACTED_DIR: Path = BASE_DIR / "03_semantics"
-CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "04_converted"
-COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "05_completed"
+ARCHIVAL_DIR: Path = BASE_DIR / "DATA/archive"
+FAILED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/00_review_failures"
+SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/01_sanitized"
+METADATA_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/02_metadata"
+SEMANTICS_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/03_semantics"
+CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "PROCESSING/04_converted"
+COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/05_completed"
 
 # System directories collection
 SYSTEM_DIRECTORIES: Set[Path] = {
     ARTIFACT_PROFILES_DIR,
     LOG_DIR,
     UNPROCESSED_ARTIFACTS_DIR,
-    ARCHIVE_DIR,
-    FOR_REVIEW_ARTIFACTS_DIR,
+    FAILED_ARTIFACTS_DIR,
     SANITIZED_ARTIFACTS_DIR,
     METADATA_EXTRACTED_DIR,
     SEMANTICS_EXTRACTED_DIR,
     CONVERTED_ARTIFACT_DIR,
     COMPLETED_ARTIFACTS_DIR,
+    ARCHIVAL_DIR,
 }
 
 
@@ -95,160 +95,96 @@ SYSTEM_DIRECTORIES: Set[Path] = {
 # FILE TYPE DEFINITIONS
 # ============================================================================
 
-# Supported file extensions
-SUPPORTED_EXTENSIONS: Set[str] = {
-    # Text & Documents
-    ".txt",
-    ".md",
-    ".rtf",
-    ".doc",
-    ".docx",
-    ".pdf",
-    ".odt",
-    ".xlsx",
-    ".xls",
-    ".pptx",
-    ".ppt",
-    ".ods",
-    ".odp",
-    ".odg",
-    # Data formats
-    ".csv",
-    ".tsv",
-    ".json",
-    ".xml",
-    # Images
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".bmp",
-    ".tiff",
-    ".tif",
-    ".webp",
-    ".heic",
-    ".heif",
-    ".raw",
-    ".cr2",
-    ".nef",
-    ".arw",
-    ".dng",
-    ".orf",
-    ".rw2",
-    ".tga",
-    ".psd",
-    # Email & Communication
-    ".eml",
-    ".msg",
-    ".mbox",
-    ".ics",
-    ".vcs",
-}
+EMAIL_TYPES = ["eml", "msg", "mbox", "emlx"]
 
-# Unsupported file extensions
-UNSUPPORTED_EXTENSIONS: Set[str] = {
-    # Audio
-    ".mp3",
-    ".aac",
-    ".ogg",
-    ".wma",
-    ".m4a",
-    ".wav",
-    ".flac",
-    ".aiff",
-    # Video
-    ".mp4",
-    ".avi",
-    ".mov",
-    ".mkv",
-    ".wmv",
-    ".flv",
-    ".webm",
-    ".ogv",
-    ".m4v",
-    # 3D & CAD
-    ".obj",
-    ".fbx",
-    ".dae",
-    ".3ds",
-    ".blend",
-    ".dwg",
-    ".dxf",
-    ".step",
-    ".stl",
-    ".gcode",
-    # Executables & System
-    ".exe",
-    ".msi",
-    ".dmg",
-    ".pkg",
-    ".deb",
-    ".rpm",
-    ".dll",
-    ".so",
-    ".dylib",
-    # Databases
-    ".db",
-    ".sqlite",
-    ".mdb",
-    ".accdb",
-    # Proprietary
-    ".indd",
-    ".fla",
-    ".swf",
-    ".sav",
-    ".dta",
-    ".sas7bdat",
-    ".mat",
-    ".hdf5",
-    # Archives
-    ".zip",
-    ".rar",
-    ".7z",
-    ".tar",
-    ".gz",
-}
+DOCUMENT_TYPES = [
+    "pdf",
+    "docx",
+    "doc",
+    "pptx",
+    "ppt",
+    "odt",
+    "odp",
+    "ods",
+    "rtf",
+    "epub",
+    "pub",
+]
 
-# File type mappings for conversion
-EXTENSION_MAPPING: Dict[str, str] = {
-    # Images
-    ".jpeg": "image",
-    ".jpg": "image",
-    ".png": "image",
-    ".heic": "image",
-    ".cr2": "image",
-    ".arw": "image",
-    ".nef": "image",
-    ".webp": "image",
-    # Videos
-    ".mov": "video",
-    ".mp4": "video",
-    ".webm": "video",
-    ".amv": "video",
-    ".3gp": "video_audio",  # Special case - need to probe
-    # Audio
-    ".wav": "audio",
-    ".mp3": "audio",
-    ".m4a": "audio",
-    ".ogg": "audio",
-    # Documents
-    ".pptx": "document",
-    ".doc": "document",
-    ".docx": "document",
-    ".rtf": "document",
-    ".epub": "document",
-    ".pub": "document",
-    ".djvu": "document",
-    ".pdf": "document",
-}
+IMAGE_TYPES = [
+    "jpeg",
+    "jpg",
+    "png",
+    "bmp",
+    "tiff",
+    "webp",
+    "svg",
+    "ico",
+    "psd",
+    "heic",
+    "heif",
+]
 
-# Target formats for each type
-TARGET_FORMATS: Dict[str, str] = {
-    "image": ".png",
-    "video": ".mp4",
-    "audio": ".mp3",
-    "document": ".pdf",
-}
+VIDEO_TYPES = [
+    "mp4",
+    "avi",
+    "mkv",
+    "mov",
+    "wmv",
+    "flv",
+    "webm",
+    "m4v",
+    "mpg",
+    "mpeg",
+    "3gp",
+    "ogv",
+]
+
+AUDIO_TYPES = ["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus", "aiff", "ape"]
+
+TEXT_TYPES = [
+    "txt",
+    "md",
+    "markdown",
+    "rst",
+    "csv",
+    "json",
+    "xml",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "log",
+]
+
+ARCHIVE_TYPES = [
+    "zip",
+    "tar",
+    "gz",
+    "bz2",
+    "xz",
+    "7z",
+    "rar",
+    "tar.gz",
+    "tar.bz2",
+    "tar.xz",
+]
+
+CODE_TYPES = [
+    "python",
+    "javascript",
+    "java",
+    "cpp",
+    "c",
+    "csharp",
+    "html",
+    "css",
+    "php",
+    "ruby",
+    "go",
+    "rust",
+    "sql",
+]
 
 
 # ============================================================================
@@ -456,47 +392,14 @@ FIELD_PROMPTS: Dict[str, str] = {
     - "IRB Document Submission Requirements and Procedures"
 
     Return ONLY the title. No quotes, no explanations.""",
-    #     "document_type": """Identify the specific type of document this is.
-    # Examples of document types:
-    # - birth_certificate, passport_us, driver_license_ca
-    # - invoice, receipt, bank_statement, credit_report
-    # - contract, lease_agreement, employment_contract
-    # - medical_record, prescription, insurance_policy
-    # - w2_tax_form, 1099, tax_return
-    # - court_order, legal_notice, business_license
-    # - university_transcript, diploma, certificate
-    # - property_deed, mortgage_document, warranty
-    # Return ONLY the specific document type in lowercase with underscores. If uncertain, return "UNKNOWN".""",
-    #     "original_language": """Analyze the document text and identify ALL languages present.
-    # Document contains sections in multiple languages. List ALL languages found.
-    # Examples:
-    # - If English only: "English"
-    # - If French only: "French"
-    # - If both: "English, French"
-    # - If trilingual: "English, French, Spanish"
-    # Return ONLY language names, comma-separated.""",
-    #     "current_language": """Identify the primary language this document is currently written in.
-    # Return ONLY the primary language name. If multiple languages, return the dominant one.""",
-    #     "confidentiality_level": """Determine the confidentiality or security classification of this document.
-    # Look for markings or indicators such as:
-    # - CONFIDENTIAL, CLASSIFIED, SECRET, TOP SECRET
-    # - INTERNAL USE ONLY, PROPRIETARY, RESTRICTED
-    # - PUBLIC, FOR PUBLIC RELEASE
-    # - Security stamps, watermarks, or headers
-    # Classification levels:
-    # - Public: No restrictions, can be freely shared
-    # - Internal: Internal use within organization
-    # - Confidential: Sensitive information, restricted access
-    # - Restricted: Highly sensitive, top-secret information
-    # Return ONLY one of these words: Public, Internal, Confidential, Restricted""",
-    #     "translator_name": """If this document has been translated, identify the translator's name.
-    # Look for:
-    # - Translator certifications or signatures
-    # - Translation agency information
-    # - "Translated by" notices
-    # - Official translation stamps or seals
-    # - Translator contact information
-    # Return ONLY the translator's full name. If this is not a translated document or no translator is identified, return "UNKNOWN".""",
+    "language": """Analyze the document text and identify ALL languages present.
+    Document contains sections in multiple languages. List ALL languages found.
+    Examples:
+    - If English only: "English"
+    - If French only: "French"
+    - If both: "English, French"
+    - If trilingual: "English, French, Spanish"
+    Return ONLY language names, comma-separated.""",
     "issuer_name": """Identify who issued, created, or published this document.
 
 Look for:
@@ -507,52 +410,14 @@ Look for:
 - Official stamps or seals with issuer information
 
 Return ONLY the full official name of the issuer. If unclear, return "UNKNOWN".""",
-    #     "officiater_name": """Identify any official authority that validated, certified, witnessed, or authorized this document.
-    # Look for:
-    # - Notary public names and seals
-    # - Certifying agency names
-    # - Official witnesses or authorizing bodies
-    # - Government officials who signed or stamped
-    # - Licensing boards or regulatory authorities
-    # Return ONLY the name of the official authority. If no official validation exists, return "UNKNOWN".""",
-    #     "date_created": """Find when this document was originally created, written, or authored.
-    # Look for:
-    # - Creation dates, authored dates, written dates
-    # - "Created on", "Date created", "Authored"
-    # - Document composition or drafting dates
-    # Return the date in YYYY-MM-DD format. If no creation date is found, return "UNKNOWN".""",
-    #     "date_of_reception": """Find when this document was received by the current holder.
-    # Look for:
-    # - "Received", "Date received", "Arrival date"
-    # - Postal stamps or delivery confirmations
-    # - Filing dates or intake dates
-    # - "Delivered on" stamps
-    # Return the date in YYYY-MM-DD format. If no reception date is found, return "UNKNOWN".""",
-    #     "date_of_issue": """Find the official issue, publication, or release date of this document.
-    # Look for:
-    # - "Issued", "Date of issue", "Publication date"
-    # - "Released", "Effective date"
-    # - Official dating stamps or seals
-    # - Government or agency issue dates
-    # Return the date in YYYY-MM-DD format. If no issue date is found, return "UNKNOWN".""",
-    #     "date_of_expiry": """Find when this document expires, becomes invalid, or requires renewal.
-    # Look for:
-    # - "Expires", "Expiration date", "Valid until"
-    # - "Renewal required", "Valid through"
-    # - License or certification expiry dates
-    # - "Not valid after" dates
-    # Return the date in YYYY-MM-DD format. If no expiration date exists, return "UNKNOWN".""",
-    #     "tags": """Create comprehensive keywords that describe this document for search and categorization purposes.
-    # Include keywords for:
-    # - Document category (legal, medical, financial, educational, personal, business, government, technical)
-    # - Subject matter (taxes, healthcare, employment, education, property, travel, identification, insurance)
-    # - Content type (contract, certificate, statement, report, application, notice, invoice, receipt)
-    # - Industry/field (healthcare, legal, finance, education, technology, government, military)
-    # - Geographic relevance (federal, state, local, international, specific regions)
-    # - Time relevance (annual, quarterly, monthly, historical, current)
-    # - Action items (renewal_required, payment_due, action_needed, informational_only)
-    # - Format type (official, certified, notarized, electronic, handwritten, typed)
-    # Return 15-25 comma-separated keywords. If document content is unclear, return "UNKNOWN".""",
+    "officiating_body": """Identify any official authority that validated, certified, witnessed, or authorized this document.
+    Look for:
+    - Notary public names and seals
+    - Certifying agency names
+    - Official witnesses or authorizing bodies
+    - Government officials who signed or stamped
+    - Licensing boards or regulatory authorities
+    Return ONLY the name of the official authority. If no official validation exists, return "UNKNOWN".""",
     "version_notes": """Analyze document versioning, revision history, and administrative metadata.
 
 Look for:
@@ -714,3 +579,4 @@ JAVA_PATH: str = "java"
 TIKA_APP_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
 TIKA_SERVER_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
 TIKA_SERVER_STANDARD_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
+MIN_JAVA_VERSION: int = 11

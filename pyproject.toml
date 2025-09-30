@@ -10,53 +10,89 @@ authors = [{ name = "Ashiq Arib Gazi", email = "ashiqarib@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    # Core utilities
-    "tqdm>=4.65.0",
-    "requests>=2.28.0",
-    "cryptography>=41.0.0",
-    # Deep Learning - GPU optimized
-    "transformers>=4.35.0",
-    "qwen-vl-utils>=0.0.1",
-    "accelerate>=0.25.0",
-    # HuggingFace optimization
-    "hf-xet>=0.1.0",
-    # Document processing
-    "PyMuPDF>=1.23.0",
-    "Pillow>=10.0.0",
-    "rawpy>=0.18.0",
-    "pillow-heif>=0.13.0",
-    # System utilities
-    "psutil>=5.9.0",
-    "transformers>=4.35.0",
-    "qwen-vl-utils>=0.0.1",
-    "accelerate>=0.25.0",
-    "GPUtil>=1.4.0",
-    # LLM and data processing
-    "ollama>=0.1.0",
-    "pandas>=2.0.0",
-    "openpyxl>=3.1.0",
-    # Media processing
-    "ffmpeg-python>=0.2.0",
-    # File type detection
-    "filetype>=1.2.0",
-    # Development tools
-    "pytest>=7.4.0",
-    "black>=23.0.0",
-    "mypy>=1.6.0",
-    "flake8>=6.0.0",
-    "isort>=5.12.0",
+    # ============================================================================
+    # Core Utilities - Essential system operations and HTTP requests
+    # ============================================================================
+    "tqdm>=4.65.0", # Progress bars for long-running operations
+    "requests>=2.28.0", # HTTP library for API calls and downloads
+    "cryptography>=41.0.0", # Encryption and security operations
+
+    # ============================================================================
+    # Deep Learning - GPU-optimized ML models and inference
+    # ============================================================================
+    "transformers>=4.35.0", # HuggingFace transformer models (LLMs, vision models)
+    "qwen-vl-utils>=0.0.1", # Utilities for Qwen vision-language models
+    "accelerate>=0.25.0", # Hardware acceleration and distributed training
+    "hf-xet>=0.1.0", # HuggingFace model optimization and caching
+
+    # ============================================================================
+    # Document Processing - PDF, images, and various file formats
+    # ============================================================================
+    "PyMuPDF>=1.23.0", # Fast PDF parsing and rendering (fitz)
+    "Pillow>=10.0.0", # Image manipulation and conversion
+    "rawpy>=0.18.0", # RAW camera image format support
+    "pillow-heif>=0.13.0", # HEIF/HEIC image format support (Apple photos)
+
+    # ============================================================================
+    # System Monitoring - Resource usage tracking
+    # ============================================================================
+    "psutil>=5.9.0", # CPU, memory, and disk usage monitoring
+    "GPUtil>=1.4.0", # GPU utilization and memory tracking
+
+    # ============================================================================
+    # LLM Integration - Local model inference and data handling
+    # ============================================================================
+    "ollama>=0.1.0", # Ollama API client for local LLM inference
+    "pandas>=2.3.3", # Tabular data manipulation and analysis
+    "openpyxl>=3.1.0", # Excel file reading and writing
+
+    # ============================================================================
+    # Media Processing - Video, advanced images, document conversion
+    # ============================================================================
+    "ffmpeg-python>=0.2.0", # Video processing and extraction
+    "Wand>=0.6.0", # ImageMagick wrapper for advanced image ops
+    "pypandoc>=1.11", # Universal document converter (requires pandoc)
+
+    # ============================================================================
+    # Archive and Email Formats - Specialized file extraction
+    # ============================================================================
+    "py7zr>=0.20.0", # 7-Zip archive extraction and compression
+    "extract-msg>=0.45.0", # Microsoft Outlook MSG file parser
+    "libpff-python>=20211114", # Microsoft Outlook PST/OST file parser
+
+    # ============================================================================
+    # File Type Detection - AI-powered file identification
+    # ============================================================================
+    "magika>=0.6.0", # Google's ML-based file type detector (fixed version)
+
+    # ============================================================================
+    # Development Tools - Code quality and testing
+    # ============================================================================
+    "pytest>=7.4.0", # Testing framework
+    "black>=23.0.0", # Code formatter
+    "mypy>=1.6.0", # Static type checker
+    "flake8>=6.0.0", # Linting and style checking
+    "isort>=5.12.0", # Import statement organizer
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
-include = ["pipelines*", "utilities*", "diagnostic_tools*"]
+# Package discovery configuration
+where = ["src"]  # Look for packages in the src directory
+include = ["pipelines*", "utilities*", "diagnostic_tools*"]  # Include these package patterns
 
 [tool.setuptools.package-data]
-"*" = ["*.txt", "*.json"]
+# Include non-Python files in the package
+"*" = ["*.txt", "*.json"]  # Include all text and JSON files
 
+# ============================================================================
+# Code Formatter Configuration - Black
+# ============================================================================
 [tool.black]
-line-length = 88
-target-version = ['py38']
+line-length = 88           # Standard Black line length
+target-version = ['py38']  # Python 3.8+ syntax support
 
+# ============================================================================
+# Import Sorter Configuration - isort
+# ============================================================================
 [tool.isort]
-profile = "black"
+profile = "black"  # Use Black-compatible import formatting
