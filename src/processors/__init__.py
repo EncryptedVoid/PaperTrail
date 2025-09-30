@@ -12,7 +12,7 @@ from .database_pipeline import tabulate
 from .file_conversion import convert
 from .metadata_extraction import extract_metadata
 from .sanitization import sanitize
-from .semantics_pipeline import extract_semantics
+from .semantics_metadata_extraction import extract_semantics
 
 __all__ = [
     convert,

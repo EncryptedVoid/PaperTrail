@@ -22,26 +22,27 @@ Author: Ashiq Gazi
 
 import json
 import logging
-import re
 import shutil
-import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List , Optional
+from typing import Any , Dict , List
 
+from torch.onnx.errors import UnsupportedOperatorError
 from tqdm import tqdm
 
 from config import (
 	ARTIFACT_PREFIX ,
 	ARTIFACT_PROFILES_DIR ,
-	JAVA_PATH ,
-	MIN_JAVA_VERSION ,
+	AUDIO_TYPES ,
+	DOCUMENT_TYPES ,
+	IMAGE_TYPES ,
 	PROFILE_PREFIX ,
-	TIKA_APP_JAR_PATH ,
+	VIDEO_TYPES ,
 )
+from utilities import AudioProcessor , LanguageProcessor , VisualProcessor
 
 
-def extract_metadata(
+def extract_semantics(
     logger: logging.Logger,
     source_dir: Path,
     failure_dir: Path,
@@ -94,109 +95,41 @@ def extract_metadata(
             - Extraction failures are logged with full exception details (exc_info=True)
     """
 
-    # Validate that Tika JAR exists before processing
-    tika_jar_path: Path = Path(TIKA_APP_JAR_PATH)
-    if not tika_jar_path.exists():
-        error_msg: str = f"Tika JAR not found at: {TIKA_APP_JAR_PATH}"
-        logger.error(error_msg, exc_info=True)
-        raise FileNotFoundError(error_msg)
-
-    # Validate Java runtime is available
-    try:
-        subprocess.run(
-            [JAVA_PATH, "-version"],
-            capture_output=True,
-            check=True,
-            timeout=5,
-        )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError) as e:
-        error_msg: str = (
-            "Java not found. Please install Java 11+ and ensure it's in your PATH"
-        )
-        logger.error(error_msg, exc_info=True)
-        raise RuntimeError(error_msg) from e
-
-    # Validate Java version meets minimum requirements
-    try:
-        result: subprocess.CompletedProcess = subprocess.run(
-            [JAVA_PATH, "-version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-
-        # Java version information is in stderr, first line
-        version_output: str = result.stderr.split("\n")[0]
-
-        # Parse version number (handles both old and new formats)
-        # Old format: java version "1.8.0_292"
-        # New format: openjdk version "11.0.12"
-        match: Optional[re.Match] = re.search(r'version "(\d+)\.(\d+)', version_output)
-        if not match:
-            # Try Java 8 format
-            match = re.search(r'version "1\.(\d+)', version_output)
-            if match:
-                major_version: int = int(match.group(1))
-            else:
-                error_msg: str = "Could not parse Java version from output"
-                logger.error(error_msg, exc_info=True)
-                raise ValueError(error_msg)
-        else:
-            major_version: int = int(match.group(1))
-
-        if major_version < MIN_JAVA_VERSION:
-            error_msg: str = (
-                f"Java {major_version} found, but Java {MIN_JAVA_VERSION}+ is required. "
-                f"Please upgrade your Java installation."
-            )
-            logger.error(error_msg, exc_info=True)
-            raise RuntimeError(error_msg)
-
-        logger.debug(f"Java version validated: {major_version}")
-
-    except FileNotFoundError as e:
-        error_msg: str = (
-            f"Java not found at {JAVA_PATH}. Please install Java {MIN_JAVA_VERSION}+ "
-            "and ensure it's in your PATH."
-        )
-        logger.error(error_msg, exc_info=True)
-        raise RuntimeError(error_msg) from e
-    except subprocess.TimeoutExpired as e:
-        error_msg: str = "Java version check timed out"
-        logger.error(error_msg, exc_info=True)
-        raise RuntimeError(error_msg) from e
-    except Exception as e:
-        error_msg: str = (
-            f"Error checking Java version: {e}. Please ensure Java {MIN_JAVA_VERSION}+ is installed."
-        )
-        logger.error(error_msg, exc_info=True)
-        raise EnvironmentError(error_msg) from e
-
     # Log metadata extraction stage header for clear progress tracking
     logger.info("=" * 80)
-    logger.info("METADATA EXTRACTION AND PROFILE UPDATE STAGE")
+    logger.info("SEMANTICS EXTRACTION AND ARTIFACT DESCRIPTION STAGE")
     logger.info("=" * 80)
 
     # Discover all artifact files in the source directory
+    # Filter for files that start with the ARTIFACT_PREFIX to ensure we only process valid artifacts
     unprocessed_artifacts: List[Path] = [
         item
         for item in source_dir.iterdir()
         if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
     ]
 
-    # Handle empty directory case
+    # Handle empty directory case - exit early if no artifacts found
     if not unprocessed_artifacts:
         logger.info("No artifact files found in source directory")
         return None
 
+    # Initialize processor instances for different artifact types
+    # VisualProcessor handles images and documents with OCR capabilities
+    visual_processor: VisualProcessor = VisualProcessor(logger=logger)
+    # LanguageProcessor extracts structured fields from text descriptions
+    language_processor: LanguageProcessor = LanguageProcessor(logger=logger)
+    # AudioProcessor handles audio and video transcription
+    audio_processor: AudioProcessor = AudioProcessor(logger=logger)
+
     # Sort files by size for consistent processing order (smaller files first)
+    # This provides faster initial feedback and helps identify issues early
     unprocessed_artifacts.sort(key=lambda p: p.stat().st_size)
     logger.info(f"Found {len(unprocessed_artifacts)} artifact files to process")
 
-    # Process each artifact file
+    # Process each artifact file with progress tracking
     for artifact in tqdm(
         unprocessed_artifacts,
-        desc="Extracting technical metadata",
+        desc="Extracting semantical data",
         unit="artifacts",
     ):
         try:
@@ -204,27 +137,33 @@ def extract_metadata(
 
             # Extract UUID from filename for profile lookup
             # Expected format: ARTIFACT-{uuid}.ext
+            # We strip the prefix and hyphen to get just the UUID portion
             artifact_id: str = artifact.stem[len(ARTIFACT_PREFIX) + 1 :]
+
+            # Construct the path to the corresponding profile file
             artifact_profile_path: Path = (
                 ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
             )
 
             # Validate that profile exists for this artifact
+            # Each artifact must have a corresponding profile for tracking
             if not artifact_profile_path.exists():
                 error_msg: str = f"Profile not found for artifact: {artifact.name}"
                 logger.error(error_msg, exc_info=True)
                 raise FileNotFoundError(error_msg)
 
-            # Load existing profile data
+            # Load existing profile data from JSON file
             artifact_profile_data: Dict[str, Any]
             try:
                 with open(artifact_profile_path, "r", encoding="utf-8") as f:
                     artifact_profile_data = json.load(f)
             except json.JSONDecodeError as e:
+                # Handle corrupted JSON files specifically
                 error_msg: str = f"Corrupted profile JSON for {artifact.name}: {e}"
                 logger.error(error_msg, exc_info=True)
                 raise ValueError(error_msg) from e
             except Exception as e:
+                # Catch any other file reading errors
                 error_msg: str = f"Failed to load profile for {artifact.name}: {e}"
                 logger.error(error_msg, exc_info=True)
                 raise
@@ -232,113 +171,75 @@ def extract_metadata(
             # Extract metadata using Apache Tika
             logger.debug(f"Extracting metadata for: {artifact.name}")
 
-            # Build Tika command for metadata extraction
-            # -m: Extract metadata only
-            # -j: Output as JSON
-            metadata_cmd: List[str] = [
-                JAVA_PATH,
-                "-jar",
-                str(tika_jar_path),
-                "-m",
-                "-j",
-                str(artifact),
-            ]
-
-            # Execute Tika with timeout to prevent hanging on large files
-            metadata_process: subprocess.CompletedProcess = subprocess.run(
-                metadata_cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,  # 2 minute timeout
-            )
-
-            # Check if Tika execution was successful
-            if metadata_process.returncode != 0:
-                error_msg: str = (
-                    f"Tika metadata extraction failed for {artifact.name}: "
-                    f"{metadata_process.stderr}"
+            # Route to appropriate processor based on file type
+            # Documents and images use visual processing with OCR
+            if artifact.suffix in DOCUMENT_TYPES or artifact.suffix in IMAGE_TYPES:
+                # Extract both OCR text and visual descriptions from the document
+                ocr_text, visual_description = visual_processor.extract_semantics(
+                    document=artifact
                 )
-                logger.error(error_msg, exc_info=True)
-                raise RuntimeError(error_msg)
 
-            # Parse JSON output from Tika
-            extracted_metadata: Dict[str, Any] = json.loads(metadata_process.stdout)
-
-            # Check if extraction produced valid results
-            if not extracted_metadata:
-                error_msg: str = f"No metadata extracted for {artifact.name}"
-                logger.warning(error_msg)
-                raise ValueError(error_msg)
-
-            logger.debug(f"Successfully extracted metadata for: {artifact.name}")
-
-            # Extract text content from the file
-            logger.debug(f"Extracting text content for: {artifact.name}")
-
-            # Build Tika command for text extraction
-            # --text: Extract full text content
-            text_cmd: List[str] = [
-                JAVA_PATH,
-                "-jar",
-                str(tika_jar_path),
-                "--text",
-                str(artifact),
-            ]
-
-            # Execute Tika with timeout
-            text_process: subprocess.CompletedProcess = subprocess.run(
-                text_cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,  # 2 minute timeout
-            )
-
-            # Check if text extraction was successful
-            if text_process.returncode != 0:
-                error_msg: str = (
-                    f"Tika text extraction failed for {artifact.name}: "
-                    f"{text_process.stderr}"
+                # Process the extracted text and visual data to create structured descriptors
+                artifact_descriptors = language_processor.extract_fields(
+                    text_description=ocr_text,
+                    visual_description=visual_description,
                 )
-                logger.error(error_msg, exc_info=True)
-                raise RuntimeError(error_msg)
+            # Video and audio files use audio processing with transcription
+            elif (
+                artifact.suffix in VIDEO_TYPES or artifact.suffix in AUDIO_TYPES
+            ) and (audio_processor.has_audio(artifact)):
+                # Extract transcription from audio/video and visual descriptions from video frames
+                transcription, visual_description = audio_processor.extract_semantics(
+                    document=artifact
+                )
 
-            extracted_text: str = text_process.stdout.strip()
-
-            # Check if text extraction produced results
-            if not extracted_text:
-                logger.warning(f"No text content extracted for {artifact.name}")
-
-            logger.debug(f"Successfully extracted text for: {artifact.name}")
+                # Process the transcription and visual data to create structured descriptors
+                artifact_descriptors = language_processor.extract_fields(
+                    text_description=transcription,
+                    visual_description=visual_description,
+                )
+            else:
+                # Unsupported file types should fail explicitly
+                raise UnsupportedOperatorError(
+                    "Unsupported file type for semantic extraction"
+                )
 
             # Update profile with extracted metadata
-            artifact_profile_data["extracted_metadata"] = extracted_metadata
+            # Store the structured descriptors in the profile for later retrieval
+            artifact_profile_data["extracted_semantics"] = artifact_descriptors
 
             # Store extracted text if available
-            if extracted_text:
-                artifact_profile_data["extracted_text"] = extracted_text
+            # This preserves the raw extracted text along with metadata about the extraction
+            if artifact_descriptors:
+                # Track extraction success with character count and timestamp
                 artifact_profile_data["text_extraction"] = {
                     "success": True,
-                    "character_count": len(extracted_text),
+                    "character_count": len(artifact_descriptors),
                     "timestamp": datetime.now().isoformat(),
                 }
             else:
+                # Mark extraction as failed if no descriptors were generated
                 artifact_profile_data["text_extraction"] = {
                     "success": False,
                     "timestamp": datetime.now().isoformat(),
                 }
 
             # Update stage tracking
+            # Initialize stage progression data if it doesn't exist in the profile
             if "stage_progression_data" not in artifact_profile_data:
                 artifact_profile_data["stage_progression_data"] = {}
 
-            artifact_profile_data["stage_progression_data"]["metadata_extraction"] = {
+            # Mark this processing stage as completed with timestamp
+            artifact_profile_data["stage_progression_data"]["semantics_extraction"] = {
                 "status": "completed",
                 "timestamp": datetime.now().isoformat(),
             }
 
             # Save updated profile back to disk
+            # This persists all the extracted metadata and processing status
             try:
                 with open(artifact_profile_path, "w", encoding="utf-8") as f:
+                    # Use indent for readable JSON and ensure_ascii=False for unicode support
                     json.dump(artifact_profile_data, f, indent=2, ensure_ascii=False)
                 logger.debug(f"Profile updated successfully for: {artifact.name}")
             except Exception as e:
@@ -346,41 +247,51 @@ def extract_metadata(
                 logger.error(error_msg, exc_info=True)
                 raise
 
-            # Move artifact to success directory
+            # Move artifact to success directory after successful processing
             success_location: Path = success_dir / artifact.name
 
-            # Handle naming conflicts
+            # Handle naming conflicts in success directory
+            # If a file with the same name exists, append a counter to make it unique
             if success_location.exists():
                 base_name: str = success_location.stem
                 extension: str = success_location.suffix
                 counter: int = 1
+                # Keep incrementing counter until we find a unique filename
                 while success_location.exists():
                     new_name: str = f"{base_name}_{counter}{extension}"
                     success_location = success_dir / new_name
                     counter += 1
 
+            # Perform the actual file move operation
             shutil.move(str(artifact), str(success_location))
             logger.info(f"Moved processed artifact to: {success_location}")
 
         except Exception as e:
+            # Catch any errors during processing to prevent pipeline failure
             error_msg: str = f"Error processing {artifact.name}: {e}"
             logger.error(error_msg, exc_info=True)
 
-            # Move failed artifact to failure directory
+            # Move failed artifact to failure directory for later inspection
             failure_location: Path = failure_dir / artifact.name
 
             # Handle naming conflicts in failure directory
+            # Same conflict resolution strategy as success directory
             if failure_location.exists():
                 base_name: str = failure_location.stem
                 extension: str = failure_location.suffix
                 counter: int = 1
+                # Keep incrementing counter until we find a unique filename
                 while failure_location.exists():
                     new_name: str = f"{base_name}_{counter}{extension}"
                     failure_location = failure_dir / new_name
                     counter += 1
 
+            # Move the failed artifact for later review and debugging
             shutil.move(str(artifact), str(failure_location))
             logger.info(f"Moved failed artifact to: {failure_location}")
+            # Continue processing remaining artifacts despite this failure
             continue
 
-    logger.info("Metadata extraction stage completed")
+    # Log completion of the entire extraction stage
+    logger.info("Semantics extraction stage completed")
+    return None

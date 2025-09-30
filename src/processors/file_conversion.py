@@ -20,25 +20,28 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any , Dict , List
 
 from magika import Magika
 from magika.types import MagikaResult
 from tqdm import tqdm
 
 from config import (
-    ARCHIVE_TYPES,
-    ARTIFACT_PREFIX,
-    ARTIFACT_PROFILES_DIR,
-    AUDIO_TYPES,
-    CODE_TYPES,
-    DOCUMENT_TYPES,
-    IMAGE_TYPES,
-    MIN_FILE_TYPE_CONF_SCORE,
-    PROFILE_PREFIX,
-    TEXT_TYPES,
-    VIDEO_TYPES,
+	ARCHIVE_TYPES ,
+	ARTIFACT_PREFIX ,
+	ARTIFACT_PROFILES_DIR ,
+	AUDIO_TYPES ,
+	CODE_TYPES ,
+	DOCUMENT_TYPES ,
+	EMAIL_TYPES ,
+	IMAGE_TYPES ,
+	MIN_FILE_TYPE_CONF_SCORE ,
+	PROFILE_PREFIX ,
+	TEMP_DIR ,
+	TEXT_TYPES ,
+	VIDEO_TYPES ,
 )
+from utilities.file_stability import is_stable , repair_instability
 
 
 def convert(
@@ -339,6 +342,19 @@ def convert(
                 logger.warning(
                     f"Unsupported file type: {file_type} for {artifact.name}"
                 )
+
+            # ====================================================================
+            # Check for file stability after conversion
+            # ====================================================================
+
+            if not is_stable(logger=logger, file_path=str(artifact)):
+                if not repair_instability(
+                    logger=logger,
+                    file_path=str(artifact),
+                    temp_directory=str(TEMP_DIR),
+                    archive_directory=str(archive_dir),
+                ):
+                    raise RuntimeError("File could not be repaired and is unstable")
 
             # ====================================================================
             # PROFILE UPDATE
@@ -781,6 +797,8 @@ def _convert_document(file_path: Path, to_format: str) -> None:
     file_path.unlink()  # Delete original
     output_path.rename(file_path.with_suffix(f".{to_format}"))  # Rename converted
 
+    _adjust_document(file_path)
+
 
 # ==============================================================================
 # ARCHIVE CONVERSION FUNCTIONS
@@ -1201,3 +1219,24 @@ def _convert_email(file_path: Path, to_format: str = "eml") -> None:
     else:
         # Unsupported email format
         raise ValueError(f"Unsupported email format: {suffix}")
+
+
+def _adjust_document(file_path):
+    # pdfarranger /path/to/file.pdf
+    #
+    # # Install qpdf
+    # # Linux: sudo apt install qpdf
+    # # Windows: winget install qpdf
+    #
+    # # Rotate all pages 90° clockwise:
+    # qpdf --rotate=+90:1-z input.pdf --replace-input
+    #
+    # PDF Arranger:
+    #
+    # ✅ Rotate pages via GUI
+    # ✅ Opens from CLI
+    # ✅ Saves in place (overwrites original)
+    # ✅ Simple, lightweight
+    # ✅ Open source, cross-platform
+
+    pass

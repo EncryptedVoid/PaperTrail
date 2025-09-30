@@ -34,6 +34,14 @@ dependencies = [
     "pillow-heif>=0.13.0", # HEIF/HEIC image format support (Apple photos)
 
     # ============================================================================
+    # Document Scanning - Image processing and PDF enhancement
+    # ============================================================================
+    "opencv-python>=4.8.0", # Computer vision and image preprocessing
+    "numpy>=1.24.0", # Numerical arrays (if not already present)
+    "ocrmypdf>=16.0.0", # PDF enhancement and OCR
+    "img2pdf>=0.5.0", # Lossless image to PDF conversion
+
+    # ============================================================================
     # System Monitoring - Resource usage tracking
     # ============================================================================
     "psutil>=5.9.0", # CPU, memory, and disk usage monitoring
@@ -71,6 +79,7 @@ dependencies = [
     "pytest>=7.4.0", # Testing framework
     "black>=23.0.0", # Code formatter
     "mypy>=1.6.0", # Static type checker
+    "types-pytz>=2022.1.1", # Type stubs for pytz (required by pandas-stubs)
     "flake8>=6.0.0", # Linting and style checking
     "isort>=5.12.0", # Import statement organizer
 ]

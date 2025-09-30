@@ -18,12 +18,14 @@ Dependencies:
 - GPUtil: GPU memory detection (optional)
 """
 
-import ollama
-import logging
 import datetime
+import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, TypedDict
-from config import SYSTEM_PROMPT, FIELD_PROMPTS, PREFERRED_LANGUAGE_MODEL
+from typing import Any , Dict , Optional , TypedDict
+
+import ollama
+
+from config import FIELD_PROMPTS , PREFERRED_LANGUAGE_MODEL , SYSTEM_PROMPT
 
 
 class LanguageExtractionReport(TypedDict):
@@ -58,7 +60,7 @@ class LanguageProcessor:
 
     Example:
         >>> processor = LanguageProcessor(logger, model="mistral:7b")
-        >>> result = processor.extract_fields(ocr_text, visual_desc, "doc_123")
+        >>> result = processor.extract_fields(text_description, visual_desc, "doc_123")
         >>> if result["success"]:
         ...     fields = result["extracted_fields"]
     """
@@ -99,7 +101,7 @@ class LanguageProcessor:
 
     def extract_fields(
         self,
-        ocr_text: str,
+        text_description: str,
         visual_description: str,
     ) -> LanguageExtractionReport:
         """
@@ -111,7 +113,7 @@ class LanguageProcessor:
         metrics and error reporting.
 
         Args:
-            ocr_text (str): Raw text content extracted from document OCR
+            text_description (str): Raw text content extracted from document OCR
             visual_description (str): AI-generated description of document visual elements
             uuid (str): Unique identifier for the document being processed
 
@@ -132,7 +134,7 @@ class LanguageProcessor:
 
         # Log input data sizes for debugging and optimization
         self.logger.info(
-            f"Input sizes: OCR={len(ocr_text)} chars, "
+            f"Input sizes: OCR={len(text_description)} chars, "
             f"Visual description={len(visual_description)} chars"
         )
 
@@ -153,7 +155,7 @@ class LanguageProcessor:
                     DOCUMENT DATA:
                     =============
                     OCR TEXT CONTENT:
-                    {ocr_text}
+                    {text_description}
 
                     VISUAL DESCRIPTION:
                     {visual_description}

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 
-def create_par2(
+def _create_par2(
     logger: logging.Logger,
     file_path: str,
     redundancy_percent: int = 5,
@@ -29,7 +29,7 @@ def create_par2(
                     True if PAR2 files created successfully, False otherwise
 
     Example:
-                    create_par2(logger, "important.zip", redundancy_percent=10)
+                    _create_par2(logger, "important.zip", redundancy_percent=10)
                     Creates: important.zip.par2, important.zip.vol0+1.par2, etc.
     """
     if not os.path.exists(file_path):
@@ -97,7 +97,7 @@ def create_par2(
         return False
 
 
-def find_par2_file(file_path: str) -> Optional[str]:
+def _find_par2_file(file_path: str) -> Optional[str]:
     """
     Find the corresponding PAR2 file for the given file.
     PAR2 files are typically named: filename.par2 or filename.vol00+01.par2
@@ -120,58 +120,75 @@ def find_par2_file(file_path: str) -> Optional[str]:
     return None
 
 
-def is_stable(logger: logging.Logger, file_path: str) -> bool:
+def is_stable(
+    logger: logging.Logger,
+    file_path: str,
+    auto__create_par2: bool = True,
+    redundancy_percent: int = 5,
+) -> bool | None:
     """
     Check if a file is stable/uncorrupted using PAR2 verification.
 
     Args:
-                    logger: Logger instance for logging messages
-                    file_path: Path to the file to verify
-
-    Returns:
-                    True if file is stable, False if corrupted or PAR2 files not found
+        auto__create_par2: If True and no PAR2 exists, create one first
+        :param file_path:
+        :param logger:
+        :param auto__create_par2:
+        :param redundancy_percent:
     """
     if not os.path.exists(file_path):
         logger.error(f"File does not exist: {file_path}")
         return False
 
     # Find the PAR2 file
-    par2_file = find_par2_file(file_path)
+    par2_file = _find_par2_file(file_path)
+
     if not par2_file:
-        logger.warning(f"No PAR2 file found for: {file_path}")
-        return False
-
-    logger.info(f"Verifying file stability: {file_path}")
-    logger.debug(f"Using PAR2 file: {par2_file}")
-
-    try:
-        # Run par2 verify command
-        result = subprocess.run(
-            ["par2", "verify", par2_file],
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minute timeout
-        )
-
-        # PAR2 returns 0 for success, non-zero for errors/corruption
-        if result.returncode == 0:
-            logger.info(f"File is stable: {file_path}")
-            return True
+        if auto__create_par2:
+            logger.info(f"No PAR2 found, creating one for: {file_path}")
+            if not _create_par2(logger, file_path, redundancy_percent):
+                logger.error("Failed to create PAR2 file")
+                return False
+            par2_file = _find_par2_file(file_path)
+            if not par2_file:
+                logger.error("PAR2 creation succeeded but file not found")
+                return False
         else:
-            logger.warning(f"File verification failed: {file_path}")
-            logger.debug(f"PAR2 output: {result.stdout}")
-            logger.debug(f"PAR2 errors: {result.stderr}")
+            logger.warning(f"No PAR2 file found for: {file_path}")
             return False
 
-    except subprocess.TimeoutExpired:
-        logger.error(f"Verification timeout for: {file_path}")
-        return False
-    except FileNotFoundError:
-        logger.error("PAR2 command not found. Please install par2 utility.")
-        return False
-    except Exception as e:
-        logger.error(f"Error during verification: {e}")
-        return False
+        logger.info(f"Verifying file stability: {file_path}")
+        logger.debug(f"Using PAR2 file: {par2_file}")
+
+        try:
+            # Run par2 verify command
+            result = subprocess.run(
+                ["par2", "verify", par2_file],
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout
+            )
+
+            # PAR2 returns 0 for success, non-zero for errors/corruption
+            if result.returncode == 0:
+                logger.info(f"File is stable: {file_path}")
+                return True
+            else:
+                logger.warning(f"File verification failed: {file_path}")
+                logger.debug(f"PAR2 output: {result.stdout}")
+                logger.debug(f"PAR2 errors: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"Verification timeout for: {file_path}")
+            return False
+        except FileNotFoundError:
+            logger.error("PAR2 command not found. Please install par2 utility.")
+            return False
+        except Exception as e:
+            logger.error(f"Error during verification: {e}")
+            return False
+    return None
 
 
 def repair_instability(
@@ -181,26 +198,27 @@ def repair_instability(
     Attempt to repair a corrupted file using PAR2.
 
     Args:
-                    logger: Logger instance for logging messages
-                    file_path: Path to the corrupted file
-                    temp_directory: Directory to store temporary backup
-                    archive_directory: Directory to move failed files
+                                logger: Logger instance for logging messages
+                                file_path: Path to the corrupted file
+                                temp_directory: Directory to store temporary backup
+                                archive_directory: Directory to move failed files
 
     Returns:
-                    True if repair successful, False if repair failed
+                                        True if repair successful, False if repair failed
 
     Workflow:
-                    1. Copy file to temp directory (backup)
-                    2. Attempt PAR2 repair on original file
-                    3. If successful: delete temp backup, keep repaired file
-                    4. If failed: delete corrupted file, move backup to archive
+                                        1. Copy file to temp directory (backup)
+                                        2. Attempt PAR2 repair on original file
+                                        3. If successful: delete temp backup, keep repaired file
+                                        4. If failed: delete corrupted file, move backup to archive
     """
+
     if not os.path.exists(file_path):
         logger.error(f"File does not exist: {file_path}")
         return False
 
     # Find PAR2 file
-    par2_file = find_par2_file(file_path)
+    par2_file = _find_par2_file(file_path)
     if not par2_file:
         logger.error(f"No PAR2 file found for repair: {file_path}")
         return False

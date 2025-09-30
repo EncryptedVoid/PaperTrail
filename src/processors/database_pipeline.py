@@ -1,210 +1,185 @@
 """
 Enhanced DatabasePipeline with complete tabulate function implementation
 """
-
+import json
 import logging
+import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict , List , TypedDict
+from typing import Any , Dict, List, TypedDict
 
 from tqdm import tqdm
+from utilities.checksum import (
+    generate_checksum,
+    save_checksum,
+)
 
 from config import (
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	PASSWORD_VAULT_PATH ,
-	PROFILE_PREFIX ,
-)
-from utilities.common import (
-	generate_checksum ,
-	move ,
-	save_checksum ,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    PASSWORD_VAULT_PATH,
+    PROFILE_PREFIX,
 )
 
+def tabulate(
+		logger: logging.Logger,
+		source_dir: Path,
+		failure_dir: Path,
+		success_dir: Path,
+) -> None:
+		"""
+		Main tabulation function that encrypts files, stores passwords, and exports spreadsheets.
 
-class TabulationReport(TypedDict):
-    """
-    Type definition for the tabulation report returned by the tabulate method.
-    """
+		This method performs the complete database pipeline process:
+		1. Discovers all processed artifact files in the source directory
+		2. Encrypts each file with a unique password/passphrase
+		3. Securely stores encryption passwords in an encrypted vault
+		4. Exports all profile data to Excel and CSV spreadsheets
+		5. Moves processed files to appropriate directories
+		6. Generates comprehensive processing report
 
-    processed_files: int
-    total_files: int
-    encrypted_files: int
-    failed_encryptions: int
-    failed_exports: int
-    skipped_files: int
-    spreadsheet_exports: Dict[str, Path]
-    password_vault_created: bool
-    errors: List[str]
-    processing_time: float
+		Args:
+				source_dir: Directory containing processed artifacts to tabulate
+				failure_dir: Directory to move problematic files for manual review
+				success_dir: Directory to move successfully processed files
 
+		Returns:
+				TabulationReport containing detailed results of the tabulation process
+				:param logger:
+		"""
+			# Log metadata extraction stage header for clear progress tracking
+			logger.info("=" * 80)
+			logger.info("TABULATE PROFILE DATA AND POPULATE DATABASE STAGE")
+			logger.info("=" * 80)
 
-class DatabasePipeline:
-    """
-    Comprehensive database pipeline providing file encryption and spreadsheet export services.
-    """
+			# Discover all artifact files in the source directory
+			unprocessed_artifacts: List[Path] = [
+				item
+				for item in source_dir.iterdir()
+				if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
+			]
 
-    def _init__(self, logger: logging.Logger) -> None:
-        """Initialize the DatabasePipeline with logging configuration."""
-        self.logger: logging.Logger = logger
+			# Handle empty directory case
+			if not unprocessed_artifacts:
+				logger.info("No artifact files found in source directory")
+				return None
 
-    def tabulate(
-        self,
-        source_dir: Path,
-        failure_dir: Path,
-        success_dir: Path,
-    ) -> TabulationReport:
-        """
-        Main tabulation function that encrypts files, stores passwords, and exports spreadsheets.
+			# Sort files by size for consistent processing order (smaller files first)
+			unprocessed_artifacts.sort(key=lambda p: p.stat().st_size)
+			logger.info(f"Found {len(unprocessed_artifacts)} artifact files to process")
 
-        This method performs the complete database pipeline process:
-        1. Discovers all processed artifact files in the source directory
-        2. Encrypts each file with a unique password/passphrase
-        3. Securely stores encryption passwords in an encrypted vault
-        4. Exports all profile data to Excel and CSV spreadsheets
-        5. Moves processed files to appropriate directories
-        6. Generates comprehensive processing report
+			# Process each artifact file
+			for artifact in tqdm(
+					unprocessed_artifacts,
+					desc="Extracting technical metadata",
+					unit="artifacts",
+			):
+				try:
+					logger.info(f"Processing artifact: {artifact.name}")
 
-        Args:
-            source_dir: Directory containing processed artifacts to tabulate
-            failure_dir: Directory to move problematic files for manual review
-            success_dir: Directory to move successfully processed files
+					# Extract UUID from filename for profile lookup
+					# Expected format: ARTIFACT-{uuid}.ext
+					artifact_id: str = artifact.stem[len(ARTIFACT_PREFIX) + 1 :]
+					artifact_profile_path: Path = (
+							ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
+					)
 
-        Returns:
-            TabulationReport containing detailed results of the tabulation process
-        """
-        start_time = datetime.now()
+					# Validate that profile exists for this artifact
+					if not artifact_profile_path.exists():
+						error_msg: str = f"Profile not found for artifact: {artifact.name}"
+						logger.error(error_msg, exc_info=True)
+						raise FileNotFoundError(error_msg)
 
-        # Validate input directories
-        if not source_dir.exists():
-            error_msg = f"Source directory does not exist: {source_dir}"
-            self.logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
+					# Load existing profile data
+					artifact_profile_data: Dict[str, Any]
+					try:
+						with open(artifact_profile_path, "r", encoding="utf-8") as f:
+							artifact_profile_data = json.load(f)
+					except json.JSONDecodeError as e:
+						error_msg: str = f"Corrupted profile JSON for {artifact.name}: {e}"
+						logger.error(error_msg, exc_info=True)
+						raise ValueError(error_msg) from e
+					except Exception as e:
+						error_msg: str = f"Failed to load profile for {artifact.name}: {e}"
+						logger.error(error_msg, exc_info=True)
+						raise
 
-        # Create output directories if they don't exist
-        for directory in [failure_dir, success_dir]:
-            if not directory.exists():
-                directory.mkdir(parents=True, exist_ok=True)
-            self.logger.info(f"Created directory: {directory}")
+					# Extract metadata using Apache Tika
+					logger.debug(f"Extracting metadata for: {artifact.name}")
 
-        # Initialize report
-        report: TabulationReport = {
-            "processed_files": 0,
-            "total_files": 0,
-            "encrypted_files": 0,
-            "failed_encryptions": 0,
-            "failed_exports": 0,
-            "skipped_files": 0,
-            "spreadsheet_exports": {},
-            "password_vault_created": False,
-            "errors": [],
-            "processing_time": 0.0,
-        }
+				# DO STUFF HERE
 
-        # Log tabulation stage header
-        self.logger.info("=" * 80)
-        self.logger.info("DATABASE TABULATION AND ENCRYPTION STAGE")
-        self.logger.info("=" * 80)
+					# Update profile with extracted metadata
+					artifact_profile_data["extracted_metadata"] = extracted_metadata
 
-        # Discover artifact files
-        try:
-            artifacts = [
-                item
-                for item in source_dir.iterdir()
-                if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
-            ]
-        except Exception as e:
-            error_msg = f"Failed to scan source directory: {e}"
-            self.logger.error(error_msg)
-            report["errors"].append(error_msg)
-            return report
+					# Store extracted text if available
+					if extracted_text:
+						artifact_profile_data["extracted_text"] = extracted_text
+						artifact_profile_data["text_extraction"] = {
+							"success": True,
+							"character_count": len(extracted_text),
+							"timestamp": datetime.now().isoformat(),
+						}
+					else:
+						artifact_profile_data["text_extraction"] = {
+							"success": False,
+							"timestamp": datetime.now().isoformat(),
+						}
 
-        if not artifacts:
-            self.logger.info("No artifact files found for tabulation")
+					# Update stage tracking
+					if "stage_progression_data" not in artifact_profile_data:
+						artifact_profile_data["stage_progression_data"] = {}
 
-        report["total_files"] = len(artifacts)
-        self.logger.info(f"Found {len(artifacts)} artifact files to process")
+					artifact_profile_data["stage_progression_data"]["metadata_extraction"] = {
+						"status": "completed",
+						"timestamp": datetime.now().isoformat(),
+					}
 
-        # Process each artifact
-        for artifact in tqdm(artifacts, desc="Processing artifacts", unit="file"):
-            try:
-                # Extract UUID for profile lookup
-                artifact_id = artifact.stem[(len(ARTIFACT_PREFIX) + 1) :]
-                profile_path = (
-                    ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
-                )
+					# Save updated profile back to disk
+					try:
+						with open(artifact_profile_path, "w", encoding="utf-8") as f:
+							json.dump(artifact_profile_data, f, indent=2, ensure_ascii=False)
+						logger.debug(f"Profile updated successfully for: {artifact.name}")
+					except Exception as e:
+						error_msg: str = f"Failed to save profile for {artifact.name}: {e}"
+						logger.error(error_msg, exc_info=True)
+						raise
 
-                # Verify profile exists
-                if not profile_path.exists():
-                    error_msg = f"Profile not found for artifact: {artifact.name}"
-                    self.logger.error(error_msg)
-                    report["errors"].append(error_msg)
-                    report["skipped_files"] += 1
-                    move(artifact, failure_dir, "missing_profile")
-                    continue
+					# Move artifact to success directory
+					success_location: Path = success_dir / artifact.name
 
-                # STAGE 5: File passed all sanitization checks (only reached if conversion was successful)
-                # Verify the file still exists at the expected location
-                if not artifact.exists():
-                    error_msg = f"File disappeared after conversion: {artifact}"
-                    self.logger.error(error_msg)
-                    report["errors"].append(error_msg)
-                    continue
+					# Handle naming conflicts
+					if success_location.exists():
+						base_name: str = success_location.stem
+						extension: str = success_location.suffix
+						counter: int = 1
+						while success_location.exists():
+							new_name: str = f"{base_name}_{counter}{extension}"
+							success_location = success_dir / new_name
+							counter += 1
 
-                # Add checksum to history to prevent future duplicates
-                try:
-                    checksum = generate_checksum(artifact)
-                    save_checksum(checksum)
-                except Exception as checksum_error:
-                    error_msg = f"Checksum generation failed for {artifact.name}: {checksum_error}"
-                    self.logger.error(error_msg)
-                    report["errors"].append(error_msg)
-                    continue
+					shutil.move(str(artifact), str(success_location))
+					logger.info(f"Moved processed artifact to: {success_location}")
 
-                # Move artifact to success directory
-                try:
-                    moved_artifact = artifact.rename(success_dir / artifact.name)
-                    report["processed_files"] += 1
-                    self.logger.debug(f"Moved to success directory: {artifact.name}")
-                except Exception as e:
-                    error_msg = (
-                        f"Failed to move {artifact.name} to success directory: {e}"
-                    )
-                    self.logger.error(error_msg)
-                    report["errors"].append(error_msg)
+				except Exception as e:
+					error_msg: str = f"Error processing {artifact.name}: {e}"
+					logger.error(error_msg, exc_info=True)
 
-            except Exception as e:
-                error_msg = f"Failed to process {artifact.name}: {e}"
-                self.logger.error(error_msg)
-                report["errors"].append(error_msg)
-                move(artifact, failure_dir)
+					# Move failed artifact to failure directory
+					failure_location: Path = failure_dir / artifact.name
 
-            # Finalize report
-            total_time = (datetime.now() - start_time).total_seconds()
-            report["processing_time"] = total_time
+					# Handle naming conflicts in failure directory
+					if failure_location.exists():
+						base_name: str = failure_location.stem
+						extension: str = failure_location.suffix
+						counter: int = 1
+						while failure_location.exists():
+							new_name: str = f"{base_name}_{counter}{extension}"
+							failure_location = failure_dir / new_name
+							counter += 1
 
-            # Log final summary
-            self.logger.info("Tabulation complete:")
-            self.logger.info(
-                f"  - {report['processed_files']} files successfully processed"
-            )
-            self.logger.info(f"  - {report['encrypted_files']} files encrypted")
-            self.logger.info(f"  - {report['failed_encryptions']} encryption failures")
-            self.logger.info(f"  - {report['skipped_files']} files skipped")
-            self.logger.info(
-                f"  - Processing time: {report['processing_time']:.2f} seconds"
-            )
+					shutil.move(str(artifact), str(failure_location))
+					logger.info(f"Moved failed artifact to: {failure_location}")
+					continue
 
-            if report["spreadsheet_exports"]:
-                self.logger.info("  - Spreadsheet exports:")
-                for format_type, file_path in report["spreadsheet_exports"].items():
-                    self.logger.info(f"    - {format_type.upper()}: {file_path}")
-
-            if report["password_vault_created"]:
-                self.logger.info(f"  - Password vault: {PASSWORD_VAULT_PATH}")
-
-            if report["errors"]:
-                self.logger.warning(f"  - {len(report['errors'])} errors encountered")
-
-            return report
-        return None
+			logger.info("Tabulation stage completed")
