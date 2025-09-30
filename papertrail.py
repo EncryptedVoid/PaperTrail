@@ -14,31 +14,35 @@ Author: Ashiq Gazi
 import logging
 from datetime import datetime
 
-# Import all directory configurations and constants
 # These define the folder structure for the document processing pipeline
 from config import (
-	ARCHIVAL_DIR ,  # Directory for archiving original files after conversion
-	COMPLETED_ARTIFACTS_DIR ,  # Final destination for fully processed documents
-	CONVERTED_ARTIFACT_DIR ,  # Storage for documents after format conversion
-	FAILED_ARTIFACTS_DIR ,  # Quarantine area for documents that fail any processing stage
-	LOG_DIR ,  # Directory where session logs are stored
-	METADATA_EXTRACTED_DIR ,  # Storage for documents after metadata extraction
-	SANITIZED_ARTIFACTS_DIR ,  # Storage for documents after initial sanitization
-	SEMANTICS_EXTRACTED_DIR ,  # Storage for documents after semantic analysis
-	SESSION_LOG_FILE_PREFIX ,  # Prefix used for naming session log files
-	SYSTEM_DIRECTORIES ,  # List of all directories that need to exist for the system
-	UNPROCESSED_ARTIFACTS_DIR ,  # Input directory where raw documents are placed
+	ARCHIVAL_DIR ,
+	COMPLETED_ARTIFACTS_DIR ,
+	CONVERTED_ARTIFACT_DIR ,
+	EMBELLISHED_ARTIFACTS_DIR ,
+	FAILED_ARTIFACTS_DIR ,
+	LOG_DIR ,
+	METADATA_EXTRACTED_DIR ,
+	PROTECTED_ARTIFACTS_DIR ,
+	SANITIZED_ARTIFACTS_DIR ,
+	SCANNED_ARTIFACTS_DIR ,
+	SEMANTICS_EXTRACTED_DIR ,
+	SESSION_LOG_FILE_PREFIX ,
+	SYSTEM_DIRECTORIES ,
+	TRANSLATED_ARTIFACTS_DIR ,
+	UNPROCESSED_ARTIFACTS_DIR ,
 )
 # Import all processor modules that handle each stage of the pipeline
 from src.processors import (
-	convert ,  # Handles document format conversion (e.g., DOCX to PDF, images to text)
-	embellish ,  # Enhances documents with additional formatting or metadata
-	extract_metadata ,  # Extracts document metadata (author, date, properties, etc.)
-	extract_semantics ,  # Performs semantic analysis and content understanding
-	password_protect ,  # Applies password protection to documents
-	sanitize ,  # Cleans and validates incoming documents for security and format compliance
-	tabulate ,  # Organizes data into database format with encryption
-	translate ,  # Translates documents to target languages
+	convert ,
+	embellish ,
+	extract_metadata ,
+	extract_semantics ,
+	password_protect ,
+	sanitize ,
+	scan ,
+	tabulate ,
+	translate ,
 )
 
 # ============================================================================
@@ -95,10 +99,6 @@ logger.info(
 # ============================================================================
 # STAGE 1: SANITIZATION
 # ============================================================================
-# First processing stage: validate and clean incoming documents
-# This stage checks for malware, enforces file type restrictions, validates formats,
-# and ensures documents meet security requirements before further processing
-# Documents that pass move to SANITIZED_ARTIFACTS_DIR, failures go to FAILED_ARTIFACTS_DIR
 sanitize(
     logger=logger,  # Pass logger for tracking sanitization activities
     source_dir=UNPROCESSED_ARTIFACTS_DIR,  # Input: raw, unprocessed documents
@@ -109,10 +109,6 @@ sanitize(
 # ============================================================================
 # STAGE 2: METADATA EXTRACTION
 # ============================================================================
-# Second processing stage: extract document metadata and properties
-# This stage reads embedded metadata like author, creation date, modification history,
-# document properties, and other file attributes for indexing and searchability
-# Extracted metadata is stored alongside documents for later database insertion
 extract_metadata(
     logger=logger,  # Pass logger for tracking metadata extraction activities
     source_dir=SANITIZED_ARTIFACTS_DIR,  # Input: sanitized documents from previous stage
@@ -121,7 +117,7 @@ extract_metadata(
 )
 
 # ============================================================================
-# STAGE 3: FORMAT CONVERSION
+# STAGE 3: FILE TYPE CONVERSION
 # ============================================================================
 # Third processing stage: convert documents to standardized formats
 # This stage normalizes different file formats (DOCX, XLSX, images, etc.) into
@@ -136,26 +132,29 @@ convert(
 )
 
 # ============================================================================
-# STAGE 3.5: DOCUMENT EMBELLISHMENT
+# STAGE 4: IMAGE SCANNING TO PDF
 # ============================================================================
-# Intermediate processing stage: enhance documents with additional formatting
-# This stage applies visual improvements, adds watermarks, adjusts layouts,
-# or enriches documents with supplementary metadata or styling
-# Documents are enhanced without changing their core content
-embellish(
+
+scan(
     logger=logger,  # Pass logger for tracking embellishment activities
     source_dir=CONVERTED_ARTIFACT_DIR,  # Input: converted documents in standard format
+    failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents where embellishment fails
+    success_dir=SCANNED_ARTIFACTS_DIR,  # Output: enhanced documents with improved presentation
+)
+
+# ============================================================================
+# STAGE 5: DOCUMENT EMBELLISHMENT
+# ============================================================================
+embellish(
+    logger=logger,  # Pass logger for tracking embellishment activities
+    source_dir=SCANNED_ARTIFACTS_DIR,  # Input: converted documents in standard format
     failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents where embellishment fails
     success_dir=EMBELLISHED_ARTIFACTS_DIR,  # Output: enhanced documents with improved presentation
 )
 
 # ============================================================================
-# STAGE 4: SEMANTIC EXTRACTION
+# STAGE 6: SEMANTIC EXTRACTION
 # ============================================================================
-# Fourth processing stage: perform semantic analysis and content understanding
-# This stage analyzes document content to extract meaning, identify key concepts,
-# classify document types, extract entities, and build searchable semantic indexes
-# Results enable intelligent search and retrieval beyond simple keyword matching
 extract_semantics(
     logger=logger,  # Pass logger for tracking semantic analysis activities
     source_dir=EMBELLISHED_ARTIFACTS_DIR,  # Input: embellished documents with improved formatting
@@ -164,12 +163,8 @@ extract_semantics(
 )
 
 # ============================================================================
-# STAGE 5: TRANSLATION
+# STAGE 7: TRANSLATION
 # ============================================================================
-# Fifth processing stage: translate documents to target languages
-# This stage performs language detection and translation of document content
-# to one or more target languages for multi-lingual accessibility
-# Translation preserves formatting and structure while converting text content
 translate(
     logger=logger,  # Pass logger for tracking translation activities
     source_dir=SEMANTICS_EXTRACTED_DIR,  # Input: documents with semantic annotations
@@ -178,12 +173,8 @@ translate(
 )
 
 # ============================================================================
-# STAGE 6: PASSWORD PROTECTION
+# STAGE 8: PASSWORD PROTECTION
 # ============================================================================
-# Sixth processing stage: apply encryption and password protection
-# This stage secures documents by adding password protection, applying encryption,
-# and setting access restrictions to ensure confidentiality
-# Protected documents can only be accessed with proper credentials
 password_protect(
     logger=logger,  # Pass logger for tracking password protection activities
     source_dir=TRANSLATED_ARTIFACTS_DIR,  # Input: translated documents
@@ -192,12 +183,9 @@ password_protect(
 )
 
 # ============================================================================
-# STAGE 7: DATABASE TABULATION
+# STAGE 9: DATABASE TABULATION
 # ============================================================================
-# Final processing stage: organize data into database with encryption
-# This stage takes all extracted information (metadata, semantics, content) and
-# structures it into database records with proper encryption for sensitive fields
-# Successfully tabulated documents move to COMPLETED_ARTIFACTS_DIR, ready for storage
+
 tabulate(
     logger=logger,  # Pass logger for tracking database insertion activities
     source_dir=PROTECTED_ARTIFACTS_DIR,  # Input: documents with all processing complete

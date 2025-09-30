@@ -8,11 +8,11 @@ Provides pipeline classes for each stage of document processing:
 - Database tabulation and encryption
 """
 
-from .database_pipeline import tabulate
 from .file_conversion import convert
 from .metadata_extraction import extract_metadata
 from .sanitization import sanitize
-from .semantics_metadata_extraction import extract_semantics
+from .semantics_extraction import extract_semantics
+from .tabulation import tabulate
 
 __all__ = [
     convert,

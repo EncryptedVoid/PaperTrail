@@ -59,36 +59,46 @@ class HashAlgorithm(Enum):
 # ============================================================================
 
 BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail")
+UNPROCESSED_ARTIFACTS_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail-Load")
 
 # Resource directories
 PASSPHRASE_WORDLIST_PATH: Path = Path("assets/mit_wordlist.txt")
-CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "DATA/checksum_history.txt"
 
-# Main processing pipeline stages
+# Immutable/permanent locations
 ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "DATA/artifact_profiles"
+CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "DATA/checksum_history.txt"
 LOG_DIR: Path = BASE_DIR / "DATA/logs"
-UNPROCESSED_ARTIFACTS_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail-Load")
 ARCHIVAL_DIR: Path = BASE_DIR / "DATA/archive"
 TEMP_DIR: Path = BASE_DIR / "TEMP"
+
+# Main processing pipeline stages
 FAILED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/00_review_failures"
 SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/01_sanitized"
-METADATA_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/02_metadata"
-SEMANTICS_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/03_semantics"
-CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "PROCESSING/04_converted"
-COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/05_completed"
+METADATA_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/02_metadata_extracted"
+CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "PROCESSING/03_converted"
+SCANNED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/04_scanned"
+EMBELLISHED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/05_embellished"
+SEMANTICS_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/06_semantics_extracted"
+TRANSLATED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/07_translated"
+PROTECTED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/08_protected"
+COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/09_completed"
 
 # System directories collection
 SYSTEM_DIRECTORIES: Set[Path] = {
-    ARTIFACT_PROFILES_DIR,
-    LOG_DIR,
-    UNPROCESSED_ARTIFACTS_DIR,
     FAILED_ARTIFACTS_DIR,
     SANITIZED_ARTIFACTS_DIR,
     METADATA_EXTRACTED_DIR,
-    SEMANTICS_EXTRACTED_DIR,
     CONVERTED_ARTIFACT_DIR,
+    EMBELLISHED_ARTIFACTS_DIR,
+    SEMANTICS_EXTRACTED_DIR,
+    TRANSLATED_ARTIFACTS_DIR,
+    PROTECTED_ARTIFACTS_DIR,
     COMPLETED_ARTIFACTS_DIR,
+    ARTIFACT_PROFILES_DIR,
+    LOG_DIR,
     ARCHIVAL_DIR,
+    TEMP_DIR,
+    SCANNED_ARTIFACTS_DIR,
 }
 
 
