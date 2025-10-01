@@ -4,9 +4,11 @@
 
 ## 🤔 What Even Is This Thing?
 
-PaperTrail is an **absolutely bonkers** document processing pipeline that takes your messy pile of files and transforms them into a beautifully organized spreadsheet database! 🗂️➡️📊
+PaperTrail is an **absolutely bonkers** document processing pipeline that takes your messy pile of files and transforms
+them into a beautifully organized spreadsheet database! 🗂️➡️📊
 
 Think of it as a digital filing assistant that:
+
 - 🔍 **Sniffs out duplicates** (using fancy SHA3-512 checksums)
 - 🏷️ **Labels everything** with unique UUIDs
 - 🧠 **Reads your documents** with AI vision models
@@ -18,43 +20,51 @@ Think of it as a digital filing assistant that:
 Your documents go through this wild ride:
 
 ### 🎭 Stage 1: The Bouncer
+
 - Kicks out duplicates and zero-byte files
 - Moves unsupported files to the "review" folder
 - Maintains a permanent checksum history (no duplicates allowed!)
 
 ### 🏷️ Stage 2: The Name Tag Party
+
 - Gives every document a shiny new UUID name
 - Creates a JSON profile for each file
 - Preserves original filenames for posterity
 
 ### 📊 Stage 3: The Data Detective
+
 - Extracts technical metadata from files
 - Handles images, PDFs, Word docs, Excel files, and more
 - Gets file size, creation dates, EXIF data - the works!
 
 ### 👁️ Stage 4: The Vision Wizard
+
 - Uses Qwen2-VL models to "see" your documents
 - Extracts all text via OCR magic
 - Describes visual elements in detail
 - Auto-detects your hardware and picks the best model
 
 ### 🧠 Stage 5: The Smart Librarian
+
 - Uses local OLLAMA models to extract structured fields
 - Pulls out titles, document types, dates, people names
 - Creates searchable tags and metadata
 - Hardware-aware model selection (because efficiency matters!)
 
 ### ✅ Stage 6: The Completion Ceremony
+
 - Marks documents as fully processed
 - Creates processing summaries
 - Moves everything to the "completed" folder
 
 ### 📈 Stage 7: The Spreadsheet Factory
+
 - Generates beautiful Excel and CSV files
 - Organizes all extracted data into columns
 - Creates a searchable database of your documents
 
 ### 🔐 Stage 8: The Vault (Coming Soon™)
+
 - *Encryption capabilities exist but aren't wired up yet*
 
 ## 🎯 What You Get Out of It
@@ -63,6 +73,7 @@ Your documents go through this wild ride:
 **Output:** Professional spreadsheet database with extracted metadata 📊
 
 The final spreadsheet includes columns like:
+
 - 📋 Title, Document Type, Language
 - 👥 Issuer, Translator, Official Authority
 - 📅 Creation Date, Issue Date, Expiry Date
@@ -79,6 +90,7 @@ The final spreadsheet includes columns like:
 ## 📁 The Folder Structure Dance
 
 The pipeline creates this beautiful folder hierarchy:
+
 ```
 📂 test_run/
 ├── 📁 unprocessed_artifacts/     (Drop files here!)
@@ -102,6 +114,7 @@ The pipeline creates this beautiful folder hierarchy:
 ## 🚨 Current State: "It Actually Works!"
 
 This is a **functional prototype** that:
+
 - ✅ Successfully processes PDFs, images, and Office docs
 - ✅ Uses real AI models for text extraction and field parsing
 - ✅ Creates actual usable spreadsheets
@@ -119,6 +132,10 @@ This is a **functional prototype** that:
 
 ## 🎊 The Bottom Line
 
-PaperTrail is a surprisingly capable document processing pipeline that actually works! It's like having a very patient digital assistant that never gets tired of organizing your paperwork. Drop in your documents, wait for the AI magic to happen, and get back a professional database spreadsheet.
+PaperTrail is a surprisingly capable document processing pipeline that actually works! It's like having a very patient
+digital assistant that never gets tired of organizing your paperwork. Drop in your documents, wait for the AI magic to
+happen, and get back a professional database spreadsheet.
 
 *Perfect for anyone drowning in documents and wanting to bring some order to the chaos!* 🌪️➡️📋✨
+
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
