@@ -9,21 +9,22 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List
+from typing import Any, Dict, List
 
 import fitz  # PyMuPDF
-from pdf2zh import set_service , translate
+from pdf2zh import set_service, translate
 from tqdm import tqdm
 
 from config import (
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	LANGUAGE_MAP ,
-	PREFERRED_LANGUAGE_TRANSLATIONS ,
-	PREFERRED_TRANSLATION_MODEL ,
-	PROFILE_PREFIX ,
-	TRANSLATION_WATERMARKS ,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    LANGUAGE_MAP,
+    PREFERRED_LANGUAGE_TRANSLATIONS,
+    PREFERRED_TRANSLATION_MODEL,
+    PROFILE_PREFIX,
+    TRANSLATION_WATERMARKS,
 )
+from utilities import ensure_ollama
 
 
 def _add_watermark(pdf_path: str, watermark_text: str, font_size: int = 8):
@@ -110,6 +111,8 @@ def translate_multilingual(
                     - The original artifact is only moved after ALL translations are attempted
     """
 
+    ensure_ollama()
+
     # Log stage header for clear progress tracking in logs
     logger.info("=" * 80)
     logger.info("MULTI-LANGUAGE TRANSLATION STAGE")
@@ -121,6 +124,7 @@ def translate_multilingual(
         item
         for item in source_dir.iterdir()
         if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
+        if item.suffix == ".pdf"
     ]
 
     # Handle empty directory case - nothing to process

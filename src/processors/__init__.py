@@ -9,6 +9,7 @@ Provides pipeline classes for each stage of document processing:
 """
 
 from .doc_translation import translate_multilingual
+from .embellishment import embellish
 from .encryption import password_protect
 from .file_conversion import convert
 from .metadata_extraction import extract_metadata
@@ -22,6 +23,7 @@ __all__ = [
     sanitize,
     translate_multilingual,
     password_protect,
+    embellish,
 ]
 
 __version__ = "1.2.0"

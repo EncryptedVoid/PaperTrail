@@ -1,19 +1,16 @@
 import json
 import logging
 import shutil
-import subprocess
-import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from tqdm import tqdm
 
 from config import ARTIFACT_PREFIX, ARTIFACT_PROFILES_DIR, PROFILE_PREFIX
-from utilities import ensure_pdfarranger
+from utilities import ensure_ollama
 
 
-def embellish(
+def scan(
     logger: logging.Logger,
     source_dir: Path,
     failure_dir: Path,
@@ -66,11 +63,11 @@ def embellish(
             - Extraction failures are logged with full exception details (exc_info=True)
     """
 
-    ensure_pdfarranger()
+    ensure_ollama()
 
     # Log metadata extraction stage header for clear progress tracking
     logger.info("=" * 80)
-    logger.info("EMBELLISHMENT STAGE")
+    logger.info("SEMANTICS EXTRACTION AND ARTIFACT DESCRIPTION STAGE")
     logger.info("=" * 80)
 
     # Discover all artifact files in the source directory
@@ -79,7 +76,6 @@ def embellish(
         item
         for item in source_dir.iterdir()
         if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
-        if item.suffix == ".pdf"
     ]
 
     # Handle empty directory case - exit early if no artifacts found
@@ -134,11 +130,27 @@ def embellish(
                 logger.error(error_msg, exc_info=True)
                 raise
 
-            # Try to launch pdfarranger
-            if sys.platform == "win32":
-                subprocess.Popen(["pdfarranger", artifact], shell=True)
+            # Do STUFF HERE
+
+            # Update profile with extracted metadata
+            # Store the structured descriptors in the profile for later retrieval
+            artifact_profile_data["extracted_semantics"] = artifact_descriptors
+
+            # Store extracted text if available
+            # This preserves the raw extracted text along with metadata about the extraction
+            if artifact_descriptors:
+                # Track extraction success with character count and timestamp
+                artifact_profile_data["text_extraction"] = {
+                    "success": True,
+                    "character_count": len(artifact_descriptors),
+                    "timestamp": datetime.now().isoformat(),
+                }
             else:
-                subprocess.Popen(["pdfarranger", artifact])
+                # Mark extraction as failed if no descriptors were generated
+                artifact_profile_data["text_extraction"] = {
+                    "success": False,
+                    "timestamp": datetime.now().isoformat(),
+                }
 
             # Update stage tracking
             # Initialize stage progression data if it doesn't exist in the profile
@@ -146,7 +158,7 @@ def embellish(
                 artifact_profile_data["stage_progression_data"] = {}
 
             # Mark this processing stage as completed with timestamp
-            artifact_profile_data["stage_progression_data"]["embellishment"] = {
+            artifact_profile_data["stage_progression_data"]["semantics_extraction"] = {
                 "status": "completed",
                 "timestamp": datetime.now().isoformat(),
             }
@@ -209,5 +221,5 @@ def embellish(
             continue
 
     # Log completion of the entire extraction stage
-    logger.info("Embellishment stage completed")
+    logger.info("Semantics extraction stage completed")
     return None

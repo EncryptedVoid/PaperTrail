@@ -757,3 +757,79 @@ def ensure_ollama(min_version: str = "0.1") -> str:
 
     except subprocess.CalledProcessError as e:
         raise ModuleNotFoundError(f"Ollama installation failed: {e}")
+
+
+def ensure_unpaper(min_version: str = "6.1") -> str:
+    """
+    Ensure unpaper is installed for cleaning up scanned images.
+
+    Args:
+        min_version: Minimum required version (default: "6.1")
+
+    Returns:
+        Installed version string
+
+    Raises:
+        ModuleNotFoundError: If unpaper cannot be installed or verified
+
+    Example verification commands:
+        unpaper --version
+        unpaper --help
+    """
+    # Check if already installed
+    if shutil.which("unpaper"):
+        success, output = _run_command(["unpaper", "--version"])
+        if success:
+            version_line = output.strip().split("\n")[0]
+            print(f"✓ unpaper already installed: {version_line}")
+            return version_line
+
+    # Install based on OS
+    os_type = _get_os()
+    print(f"Installing unpaper on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update"], check=True, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "unpaper"], check=True, timeout=300
+            )
+        elif os_type == "Windows":
+            if shutil.which("choco"):
+                subprocess.run(
+                    ["choco", "install", "-y", "unpaper"], check=True, timeout=300
+                )
+            else:
+                raise ModuleNotFoundError(
+                    "unpaper installation failed: Chocolatey not found.\n"
+                    "Install Chocolatey from: https://chocolatey.org/install\n"
+                    "Then run: choco install unpaper\n"
+                    "Or download binaries from: https://github.com/unpaper/unpaper/releases"
+                )
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "unpaper"], check=True, timeout=300)
+            else:
+                raise ModuleNotFoundError(
+                    "unpaper installation failed: Homebrew not found.\n"
+                    "Install Homebrew from: https://brew.sh\n"
+                    "Then run: brew install unpaper"
+                )
+        else:
+            raise ModuleNotFoundError(f"Unsupported OS: {os_type}")
+
+        # Verify installation
+        if shutil.which("unpaper"):
+            success, output = _run_command(["unpaper", "--version"])
+            if success:
+                version_line = output.strip().split("\n")[0]
+                print(f"✓ unpaper installed successfully: {version_line}")
+                print("  Verify with: unpaper --version")
+                return version_line
+
+        raise ModuleNotFoundError(
+            "unpaper installation completed but command not found in PATH"
+        )
+
+    except subprocess.CalledProcessError as e:
+        raise ModuleNotFoundError(f"unpaper installation failed: {e}")

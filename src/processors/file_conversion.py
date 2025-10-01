@@ -41,6 +41,13 @@ from config import (
     TEXT_TYPES,
     VIDEO_TYPES,
 )
+from utilities import (
+    ensure_ffmpeg,
+    ensure_imagemagick,
+    ensure_libpff_python,
+    ensure_pandoc,
+    ensure_par2,
+)
 from utilities.file_stability import is_stable, repair_instability
 
 
@@ -109,6 +116,12 @@ def convert(
             - Naming conflicts in destination directories are automatically resolved
             - All conversion failures are logged with full exception details (exc_info=True)
     """
+
+    ensure_ffmpeg()
+    ensure_imagemagick()
+    ensure_pandoc()
+    ensure_par2()
+    ensure_libpff_python()
 
     # ============================================================================
     # INITIALIZATION AND SETUP

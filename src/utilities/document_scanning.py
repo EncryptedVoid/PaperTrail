@@ -19,9 +19,13 @@ import img2pdf
 import numpy as np
 from PIL import Image, ImageTk
 
+from utilities.dependancy_ensurance import ensure_unpaper
+
 
 class DocumentScanner:
     def __init__(self, root: tk.Tk):
+        ensure_unpaper()
+
         self.root = root
         self.root.title("Interactive Document Scanner")
         self.root.geometry("1200x800")
@@ -358,3 +362,27 @@ class DocumentScanner:
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to reject scan: {str(e)}")
+
+
+def main():
+    """Main entry point for the Document Scanner application"""
+    # Create the Tkinter root window
+    root = tk.Tk()
+
+    # Initialize the Document Scanner
+    app = DocumentScanner(root)
+
+    # Optional: Auto-load a test directory on startup
+    # Uncomment and modify the path below to skip the file dialog
+    # test_dir = Path("C:/Users/YourName/Documents/test_scans")  # Windows
+    # test_dir = Path("/Users/yourname/Documents/test_scans")    # Mac
+    # test_dir = Path("/home/yourname/Documents/test_scans")     # Linux
+    # if test_dir.exists():
+    #     app.load_specific_directory(test_dir)
+
+    # Start the application
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
