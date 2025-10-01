@@ -9,19 +9,19 @@ Provides pipeline classes for each stage of document processing:
 """
 
 from .doc_translation import translate_multilingual
+from .encryption import password_protect
 from .file_conversion import convert
 from .metadata_extraction import extract_metadata
 from .sanitization import sanitize
 from .semantics_extraction import extract_semantics
-from .tabulation import tabulate
 
 __all__ = [
     convert,
     extract_metadata,
     extract_semantics,
     sanitize,
-    tabulate,
     translate_multilingual,
+    password_protect,
 ]
 
 __version__ = "1.2.0"

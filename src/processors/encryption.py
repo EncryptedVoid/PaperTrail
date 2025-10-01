@@ -1,34 +1,229 @@
 import base64
+import json
+import logging
 import os
 import secrets
+import shutil
 import string
 from datetime import datetime
 from logging import Logger
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 # Cryptography imports for secure file encryption operations
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from tqdm import tqdm
 
 # Import all security-related constants from centralized configuration
 from config import (
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
     DEFAULT_PASSPHRASE_WORD_COUNT,
     DEFAULT_PASSWORD_LENGTH,
     DEFAULT_WORD_SEPARATOR,
     ENCRYPTED_FILE_EXTENSION,
+    EXCLUDE_VISUALLY_SIMILAR_CHARS_IN_PASSWORD,
+    INCLUDE_SPECIAL_SYMBOLS_IN_PASSWORD,
     KEY_DERIVATION_ITERATIONS,
     MAX_PASSWORD_GENERATION_ATTEMPTS,
     MINIMUM_WORD_LENGTH,
     PASSPHRASE_WORDLIST_PATH,
+    PROFILE_PREFIX,
     SALT_LENGTH_BYTES,
     SIMILAR_CHARACTERS,
     SYMBOL_CHARACTERS,
 )
 
 
-def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -> None:
+def password_protect(
+    logger: logging.Logger,
+    source_dir: Path,
+    failure_dir: Path,
+    success_dir: Path,
+) -> None:
+    """
+    Extract metadata and text from all files in a directory and update their profiles.
+
+    This method performs comprehensive metadata extraction by validating dependencies,
+    discovering artifact files, loading existing profiles, extracting metadata and text
+    using Apache Tika, updating profiles with extraction results, and moving processed
+    files to appropriate directories based on success or failure.
+
+    The extraction process includes:
+    - Java runtime validation (version 11+)
+    - Apache Tika JAR validation
+    - Filesystem metadata extraction
+    - Technical metadata extraction (EXIF, IPTC, document properties, etc.)
+    - Full text content extraction
+    - Profile updates with extraction timestamps and results
+    - Graceful error handling with detailed logging
+
+    Args:
+            logger: Logger instance for tracking operations and errors
+            source_dir: Directory containing artifact files to process. Files must follow
+                    the ARTIFACT-{uuid}.ext naming convention
+            failure_dir: Directory to move files that fail processing. Files are moved here
+                    when profile loading, metadata extraction, or text extraction fails
+            success_dir: Directory to move files after successful metadata extraction and
+                    profile updates
+
+    Returns:
+            Tuple containing (metadata, text) from the last successfully processed file,
+            or None if no files were processed successfully. Both elements may be None
+            if no extraction occurred.
+
+    Raises:
+            FileNotFoundError: If Tika JAR is not found at the configured path or if
+                    source directory does not exist
+            RuntimeError: If Java is not installed, not in PATH, or version is below
+                    the minimum required version (Java 11+)
+            EnvironmentError: If Java version cannot be determined or other environment
+                    issues prevent execution
+
+    Note:
+            - Files are processed in order of size (smallest first) for faster feedback
+            - Requires corresponding PROFILE-{uuid}.json files in ARTIFACT_PROFILES_DIR
+            - Tika commands timeout after 120 seconds to prevent hanging on large files
+            - All profile updates include timestamps for audit trail
+            - Extraction failures are logged with full exception details (exc_info=True)
+    """
+
+    # Log metadata extraction stage header for clear progress tracking
+    logger.info("=" * 80)
+    logger.info("ENCRYPTION STAGE")
+    logger.info("=" * 80)
+
+    # Discover all artifact files in the source directory
+    unprocessed_artifacts: List[Path] = [
+        item
+        for item in source_dir.iterdir()
+        if item.is_file() and item.name.startswith(f"{ARTIFACT_PREFIX}-")
+    ]
+
+    # Handle empty directory case
+    if not unprocessed_artifacts:
+        logger.info("No artifact files found in source directory")
+        return None
+
+    # Sort files by size for consistent processing order (smaller files first)
+    unprocessed_artifacts.sort(key=lambda p: p.stat().st_size)
+    logger.info(f"Found {len(unprocessed_artifacts)} artifact files to process")
+
+    # Process each artifact file
+    for artifact in tqdm(
+        unprocessed_artifacts,
+        desc="Encrypting with passwords",
+        unit="artifacts",
+    ):
+        try:
+            logger.info(f"Processing artifact: {artifact.name}")
+
+            # Extract UUID from filename for profile lookup
+            # Expected format: ARTIFACT-{uuid}.ext
+            artifact_id: str = artifact.stem[len(ARTIFACT_PREFIX) + 1 :]
+            artifact_profile_path: Path = (
+                ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
+            )
+
+            # Validate that profile exists for this artifact
+            if not artifact_profile_path.exists():
+                error_msg: str = f"Profile not found for artifact: {artifact.name}"
+                logger.error(error_msg, exc_info=True)
+                raise FileNotFoundError(error_msg)
+
+            # Load existing profile data
+            artifact_profile_data: Dict[str, Any]
+            try:
+                with open(artifact_profile_path, "r", encoding="utf-8") as f:
+                    artifact_profile_data = json.load(f)
+            except json.JSONDecodeError as e:
+                error_msg: str = f"Corrupted profile JSON for {artifact.name}: {e}"
+                logger.error(error_msg, exc_info=True)
+                raise ValueError(error_msg) from e
+            except Exception as e:
+                error_msg: str = f"Failed to load profile for {artifact.name}: {e}"
+                logger.error(error_msg, exc_info=True)
+                raise
+
+            password = _encrypt_file(logger=logger, artifact=artifact)
+
+            # Store extracted text if available
+            if password and len(password) > 0:
+                artifact_profile_data["password_protection_encryption"] = {
+                    "success": True,
+                    "password": password,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            else:
+                artifact_profile_data["password_protection_encryption"] = {
+                    "success": False,
+                    "timestamp": datetime.now().isoformat(),
+                }
+
+            # Update stage tracking
+            if "stage_progression_data" not in artifact_profile_data:
+                artifact_profile_data["stage_progression_data"] = {}
+
+            artifact_profile_data["stage_progression_data"][
+                "password_protection_encryption"
+            ] = {
+                "status": "completed",
+                "timestamp": datetime.now().isoformat(),
+            }
+
+            # Save updated profile back to disk
+            try:
+                with open(artifact_profile_path, "w", encoding="utf-8") as f:
+                    json.dump(artifact_profile_data, f, indent=2, ensure_ascii=False)
+                logger.debug(f"Profile updated successfully for: {artifact.name}")
+            except Exception as e:
+                error_msg: str = f"Failed to save profile for {artifact.name}: {e}"
+                logger.error(error_msg, exc_info=True)
+                raise
+
+            # Move artifact to success directory
+            success_location: Path = success_dir / artifact.name
+
+            # Handle naming conflicts
+            if success_location.exists():
+                base_name: str = success_location.stem
+                extension: str = success_location.suffix
+                counter: int = 1
+                while success_location.exists():
+                    new_name: str = f"{base_name}_{counter}{extension}"
+                    success_location = success_dir / new_name
+                    counter += 1
+
+            shutil.move(str(artifact), str(success_location))
+            logger.info(f"Moved processed artifact to: {success_location}")
+
+        except Exception as e:
+            error_msg: str = f"Error processing {artifact.name}: {e}"
+            logger.error(error_msg, exc_info=True)
+
+            # Move failed artifact to failure directory
+            failure_location: Path = failure_dir / artifact.name
+
+            # Handle naming conflicts in failure directory
+            if failure_location.exists():
+                base_name: str = failure_location.stem
+                extension: str = failure_location.suffix
+                counter: int = 1
+                while failure_location.exists():
+                    new_name: str = f"{base_name}_{counter}{extension}"
+                    failure_location = failure_dir / new_name
+                    counter += 1
+
+            shutil.move(str(artifact), str(failure_location))
+            logger.info(f"Moved failed artifact to: {failure_location}")
+            continue
+
+    logger.info("Encryption stage completed")
+
+
+def _decrypt_file(logger: Logger, file_path: Path, password: str) -> None:
     """
     Decrypt a password-protected encrypted file with comprehensive validation and error handling.
 
@@ -51,7 +246,7 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
     - Secure memory handling for passwords and keys
 
     Args:
-        encrypted_artifact_path: Path to the encrypted file - must exist and be readable
+        file_path: Path to the encrypted file - must exist and be readable
         password: Password used for original encryption - must match exactly
 
     Raises:
@@ -60,17 +255,12 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
         PermissionError: If unable to read encrypted file or write decrypted output
         OSError: If file I/O operations fail due to system constraints
 
-    Example:
-        >>> agent = SecurityAgent(logger, Path("checksums.txt"))
-        >>> agent.decrypt_file(Path("document.txt.encrypted"), "secure_password_123")
-        # Creates "document.txt" with original content restored
-
     Note:
         The encrypted file is not modified. A new decrypted file is created by
         removing the encrypted extension from the original filename.
     """
     # Log the start of decryption operation for audit trail
-    logger.info(f"Starting file decryption for {encrypted_artifact_path.name}")
+    logger.info(f"Starting file decryption for {file_path.name}")
 
     # Validate input parameters before proceeding
     if not password or not password.strip():
@@ -78,14 +268,14 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    if not encrypted_artifact_path.exists():
-        error_msg = f"Encrypted file not found: {encrypted_artifact_path}"
+    if not file_path.exists():
+        error_msg = f"Encrypted file not found: {file_path}"
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
 
     # Log encrypted file size for performance monitoring
     try:
-        encrypted_artifact_size: int = encrypted_artifact_path.stat().st_size
+        encrypted_artifact_size: int = file_path.stat().st_size
         logger.debug(f"Decrypting file of size: {encrypted_artifact_size:,} bytes")
 
     except OSError as stat_error:
@@ -93,7 +283,7 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
 
     # Read entire encrypted file contents for processing
     try:
-        with open(encrypted_artifact_path, "rb") as encrypted_file:
+        with open(file_path, "rb") as encrypted_file:
             encrypted_artifact_contents: bytes = encrypted_file.read()
 
         logger.debug(
@@ -101,9 +291,7 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
         )
 
     except PermissionError as permission_error:
-        error_msg = (
-            f"Permission denied reading encrypted file: {encrypted_artifact_path}"
-        )
+        error_msg = f"Permission denied reading encrypted file: {file_path}"
         logger.error(error_msg)
         raise PermissionError(error_msg) from permission_error
 
@@ -173,14 +361,14 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
         raise ValueError(error_msg) from decryption_error
 
     # Determine output file path by removing encrypted extension
-    if encrypted_artifact_path.suffix == ENCRYPTED_FILE_EXTENSION:
+    if file_path.suffix == ENCRYPTED_FILE_EXTENSION:
         # Standard case: remove .encrypted extension
-        original_artifact_path: Path = encrypted_artifact_path.with_suffix("")
+        original_artifact_path: Path = file_path.with_suffix("")
 
     else:
         # Handle compound extensions: remove .encrypted from anywhere in filename
         original_artifact_path = Path(
-            str(encrypted_artifact_path).replace(ENCRYPTED_FILE_EXTENSION, "")
+            str(file_path).replace(ENCRYPTED_FILE_EXTENSION, "")
         )
 
     logger.debug(f"Determined output file path: {original_artifact_path}")
@@ -195,7 +383,7 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
             os.fsync(decrypted_file.fileno())
 
         logger.info(
-            f"Successfully decrypted file: {encrypted_artifact_path.name} -> {original_artifact_path.name}"
+            f"Successfully decrypted file: {file_path.name} -> {original_artifact_path.name}"
         )
 
     except PermissionError as permission_error:
@@ -211,7 +399,7 @@ def decrypt_file(logger: Logger, encrypted_artifact_path: Path, password: str) -
         raise OSError(error_msg) from write_error
 
 
-def encrypt_file(logger: Logger, artifact: Path, passphrase: bool = False) -> str:
+def _encrypt_file(logger: Logger, artifact: Path, passphrase: bool = False) -> str:
     """
     Encrypt a file using password-based encryption with industry-standard security practices.
 
@@ -269,7 +457,9 @@ def encrypt_file(logger: Logger, artifact: Path, passphrase: bool = False) -> st
     encryption_salt: bytes = os.urandom(SALT_LENGTH_BYTES)
     logger.debug(f"Generated {SALT_LENGTH_BYTES}-byte random salt for key derivation")
 
-    password = generate_passphrase(logger) if passphrase else generate_password(logger)
+    password = (
+        _generate_passphrase(logger) if passphrase else _generate_password(logger)
+    )
 
     # Derive encryption key from password using PBKDF2 with strong parameters
     try:
@@ -341,12 +531,10 @@ def encrypt_file(logger: Logger, artifact: Path, passphrase: bool = False) -> st
         raise OSError(error_msg) from encryption_error
 
     # Write encrypted file with salt prepended for self-contained decryption
-    encrypted_artifact_path: Path = artifact.with_suffix(
-        artifact.suffix + ENCRYPTED_FILE_EXTENSION
-    )
+    file_path: Path = artifact.with_suffix(artifact.suffix + ENCRYPTED_FILE_EXTENSION)
 
     try:
-        with open(encrypted_artifact_path, "wb") as encrypted_file:
+        with open(file_path, "wb") as encrypted_file:
             # Write salt first for later key derivation during decryption
             encrypted_file.write(encryption_salt)
 
@@ -357,16 +545,12 @@ def encrypt_file(logger: Logger, artifact: Path, passphrase: bool = False) -> st
             encrypted_file.flush()
             os.fsync(encrypted_file.fileno())
 
-        logger.info(
-            f"Successfully encrypted file: {artifact.name} -> {encrypted_artifact_path.name}"
-        )
+        logger.info(f"Successfully encrypted file: {artifact.name} -> {file_path.name}")
 
         return password
 
     except PermissionError as permission_error:
-        error_msg = (
-            f"Permission denied writing encrypted file: {encrypted_artifact_path}"
-        )
+        error_msg = f"Permission denied writing encrypted file: {file_path}"
         logger.error(error_msg)
         raise PermissionError(error_msg) from permission_error
 
@@ -376,12 +560,7 @@ def encrypt_file(logger: Logger, artifact: Path, passphrase: bool = False) -> st
         raise OSError(error_msg) from write_error
 
 
-def generate_password(
-    logger: Logger,
-    character_length: int = DEFAULT_PASSWORD_LENGTH,
-    include_special_symbols: bool = True,
-    exclude_similar_looking_chars: bool = True,
-) -> str:
+def _generate_password(logger: Logger) -> str:
     """
     Generate cryptographically secure random password with comprehensive complexity validation.
 
@@ -407,26 +586,13 @@ def generate_password(
     - No predictable patterns or sequences in generated passwords
     - Suitable for high-security authentication systems
 
-    Args:
-        character_length: Desired password length (minimum 1, recommended 12+)
-        include_special_symbols: Whether to include special symbols in character pool
-        exclude_similar_looking_chars: Whether to exclude visually similar characters
+
 
     Returns:
         Cryptographically secure random password meeting complexity requirements
 
     Raises:
-        ValueError: If character_length is less than 1
-
-    Example:
-        >>> agent = SecurityAgent(logger, Path("checksums.txt"))
-        >>> password = agent.generate_password(16, True, True)
-        >>> len(password)
-        16
-        >>> any(c.isupper() for c in password)  # Contains uppercase
-        True
-        >>> any(c.islower() for c in password)  # Contains lowercase
-        True
+        ValueError: If DEFAULT_PASSWORD_LENGTH is less than 1
 
     Note:
         For passwords shorter than 4 characters, complexity validation is skipped
@@ -435,12 +601,12 @@ def generate_password(
     """
     # Log password generation request for audit trail
     logger.debug(
-        f"Generating password: length={character_length}, "
-        f"symbols={include_special_symbols}, exclude_similar={exclude_similar_looking_chars}"
+        f"Generating password: length={DEFAULT_PASSWORD_LENGTH}, "
+        f"symbols={INCLUDE_SPECIAL_SYMBOLS_IN_PASSWORD}, exclude_similar={EXCLUDE_VISUALLY_SIMILAR_CHARS_IN_PASSWORD}"
     )
 
     # Validate minimum password length requirement
-    if character_length < 1:
+    if DEFAULT_PASSWORD_LENGTH < 1:
         error_msg: str = "Password length must be at least 1 character"
         logger.error(error_msg)
         raise ValueError(error_msg)
@@ -450,12 +616,12 @@ def generate_password(
     logger.debug(f"Base character pool size: {len(available_characters)}")
 
     # Add special symbols if requested for increased complexity
-    if include_special_symbols:
+    if INCLUDE_SPECIAL_SYMBOLS_IN_PASSWORD:
         available_characters += SYMBOL_CHARACTERS
         logger.debug(f"Added symbols, pool size: {len(available_characters)}")
 
     # Remove visually similar characters if requested for usability
-    if exclude_similar_looking_chars:
+    if EXCLUDE_VISUALLY_SIMILAR_CHARS_IN_PASSWORD:
         original_length: int = len(available_characters)
         available_characters = "".join(
             char for char in available_characters if char not in SIMILAR_CHARACTERS
@@ -469,11 +635,11 @@ def generate_password(
     for generation_attempt in range(1, MAX_PASSWORD_GENERATION_ATTEMPTS + 1):
         # Generate random password using cryptographically secure source
         generated_password: str = "".join(
-            secrets.choice(available_characters) for _ in range(character_length)
+            secrets.choice(available_characters) for _ in range(DEFAULT_PASSWORD_LENGTH)
         )
 
         # Skip complexity validation for very short passwords to avoid infinite loops
-        if character_length < 4:
+        if DEFAULT_PASSWORD_LENGTH < 4:
             logger.debug(f"Generated short password on attempt {generation_attempt}")
             return generated_password
 
@@ -483,7 +649,7 @@ def generate_password(
         has_numeric_digit: bool = any(char.isdigit() for char in generated_password)
         has_special_symbol: bool = (
             any(char in SYMBOL_CHARACTERS for char in generated_password)
-            if include_special_symbols
+            if INCLUDE_SPECIAL_SYMBOLS_IN_PASSWORD
             else True  # Skip symbol check if symbols not required
         )
 
@@ -505,7 +671,7 @@ def generate_password(
             missing_types.append("uppercase")
         if not has_numeric_digit:
             missing_types.append("digits")
-        if not has_special_symbol and include_special_symbols:
+        if not has_special_symbol and INCLUDE_SPECIAL_SYMBOLS_IN_PASSWORD:
             missing_types.append("symbols")
 
         logger.debug(
@@ -521,7 +687,7 @@ def generate_password(
     return generated_password
 
 
-def generate_passphrase(logger: Logger) -> str:
+def _generate_passphrase(logger: Logger) -> str:
     """
     Generate memorable passphrase using random word combinations with configurable formatting.
 
@@ -553,14 +719,6 @@ def generate_passphrase(logger: Logger) -> str:
 
     Raises:
         ValueError: If DEFAULT_PASSPHRASE_WORD_COUNT is less than 1
-
-    Example:
-        >>> agent = SecurityAgent(logger, Path("checksums.txt"))
-        >>> passphrase = agent.generate_passphrase(4, "-", True, True)
-        >>> passphrase
-        'Forest-Mountain-River-Ocean-73'
-        >>> len(passphrase.split("-"))
-        5  # 4 words + 1 number
 
     Note:
         If external wordlist is requested but unavailable, the method gracefully

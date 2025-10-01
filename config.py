@@ -58,10 +58,9 @@ class HashAlgorithm(Enum):
 # BASE DIRECTORIES AND PATHS
 # ============================================================================
 
+# Resource directories
 BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail")
 UNPROCESSED_ARTIFACTS_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail-Load")
-
-# Resource directories
 PASSPHRASE_WORDLIST_PATH: Path = Path("assets/mit_wordlist.txt")
 
 # Immutable/permanent locations
@@ -74,9 +73,9 @@ TEMP_DIR: Path = BASE_DIR / "TEMP"
 # Main processing pipeline stages
 FAILED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/00_review_failures"
 SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/01_sanitized"
-METADATA_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/02_metadata_extracted"
-CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "PROCESSING/03_converted"
-SCANNED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/04_scanned"
+SCANNED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/02_scanned"
+METADATA_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/03_metadata_extracted"
+CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "PROCESSING/04_converted"
 EMBELLISHED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/05_embellished"
 SEMANTICS_EXTRACTED_DIR: Path = BASE_DIR / "PROCESSING/06_semantics_extracted"
 TRANSLATED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/07_translated"
@@ -573,3 +572,6 @@ TRANSLATION_WATERMARKS: Dict[str, str] = {
     "HIN": f"यह दस्तावेज़ PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) का उपयोग करके अंग्रेजी से अनुवादित किया गया है",
     "ENG": f"This document has been translated using PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) from English",
 }
+
+INCLUDE_SPECIAL_SYMBOLS_IN_PASSWORD: bool = True
+EXCLUDE_VISUALLY_SIMILAR_CHARS_IN_PASSWORD: bool = True

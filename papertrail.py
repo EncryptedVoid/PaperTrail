@@ -16,33 +16,34 @@ from datetime import datetime
 
 # These define the folder structure for the document processing pipeline
 from config import (
-	ARCHIVAL_DIR ,
-	COMPLETED_ARTIFACTS_DIR ,
-	CONVERTED_ARTIFACT_DIR ,
-	EMBELLISHED_ARTIFACTS_DIR ,
-	FAILED_ARTIFACTS_DIR ,
-	LOG_DIR ,
-	METADATA_EXTRACTED_DIR ,
-	PROTECTED_ARTIFACTS_DIR ,
-	SANITIZED_ARTIFACTS_DIR ,
-	SCANNED_ARTIFACTS_DIR ,
-	SEMANTICS_EXTRACTED_DIR ,
-	SESSION_LOG_FILE_PREFIX ,
-	SYSTEM_DIRECTORIES ,
-	TRANSLATED_ARTIFACTS_DIR ,
-	UNPROCESSED_ARTIFACTS_DIR ,
+    ARCHIVAL_DIR,
+    COMPLETED_ARTIFACTS_DIR,
+    CONVERTED_ARTIFACT_DIR,
+    EMBELLISHED_ARTIFACTS_DIR,
+    FAILED_ARTIFACTS_DIR,
+    LOG_DIR,
+    METADATA_EXTRACTED_DIR,
+    PROTECTED_ARTIFACTS_DIR,
+    SANITIZED_ARTIFACTS_DIR,
+    SCANNED_ARTIFACTS_DIR,
+    SEMANTICS_EXTRACTED_DIR,
+    SESSION_LOG_FILE_PREFIX,
+    SYSTEM_DIRECTORIES,
+    TRANSLATED_ARTIFACTS_DIR,
+    UNPROCESSED_ARTIFACTS_DIR,
 )
+
 # Import all processor modules that handle each stage of the pipeline
 from src.processors import (
-	convert ,
-	embellish ,
-	extract_metadata ,
-	extract_semantics ,
-	password_protect ,
-	sanitize ,
-	scan ,
-	tabulate ,
-	translate_multilingual ,
+    convert,
+    embellish,
+    extract_metadata,
+    extract_semantics,
+    password_protect,
+    sanitize,
+    scan,
+    tabulate,
+    translate_multilingual,
 )
 
 # ============================================================================
@@ -105,19 +106,28 @@ sanitize(
     failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents that fail sanitization
     success_dir=SANITIZED_ARTIFACTS_DIR,  # Output: clean, validated documents
 )
+# ============================================================================
+# STAGE 2: IMAGE SCANNING TO PDF
+# ============================================================================
+scan(
+    logger=logger,  # Pass logger for tracking embellishment activities
+    source_dir=SANITIZED_ARTIFACTS_DIR,  # Input: converted documents in standard format
+    failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents where embellishment fails
+    success_dir=SCANNED_ARTIFACTS_DIR,  # Output: enhanced documents with improved presentation
+)
 
 # ============================================================================
-# STAGE 2: METADATA EXTRACTION
+# STAGE 3: METADATA EXTRACTION
 # ============================================================================
 extract_metadata(
     logger=logger,  # Pass logger for tracking metadata extraction activities
-    source_dir=SANITIZED_ARTIFACTS_DIR,  # Input: sanitized documents from previous stage
+    source_dir=SCANNED_ARTIFACTS_DIR,  # Input: sanitized documents from previous stage
     failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents where metadata extraction fails
     success_dir=METADATA_EXTRACTED_DIR,  # Output: documents with extracted metadata
 )
 
 # ============================================================================
-# STAGE 3: FILE TYPE CONVERSION
+# STAGE 4: FILE TYPE CONVERSION
 # ============================================================================
 # Third processing stage: convert documents to standardized formats
 # This stage normalizes different file formats (DOCX, XLSX, images, etc.) into
@@ -132,22 +142,11 @@ convert(
 )
 
 # ============================================================================
-# STAGE 4: IMAGE SCANNING TO PDF
-# ============================================================================
-
-scan(
-    logger=logger,  # Pass logger for tracking embellishment activities
-    source_dir=CONVERTED_ARTIFACT_DIR,  # Input: converted documents in standard format
-    failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents where embellishment fails
-    success_dir=SCANNED_ARTIFACTS_DIR,  # Output: enhanced documents with improved presentation
-)
-
-# ============================================================================
 # STAGE 5: DOCUMENT EMBELLISHMENT
 # ============================================================================
 embellish(
     logger=logger,  # Pass logger for tracking embellishment activities
-    source_dir=SCANNED_ARTIFACTS_DIR,  # Input: converted documents in standard format
+    source_dir=CONVERTED_ARTIFACT_DIR,  # Input: converted documents in standard format
     failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents where embellishment fails
     success_dir=EMBELLISHED_ARTIFACTS_DIR,  # Output: enhanced documents with improved presentation
 )
