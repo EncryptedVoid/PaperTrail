@@ -11,13 +11,13 @@ import subprocess
 import tempfile
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog , messagebox
-from typing import List , Optional
+from tkinter import filedialog, messagebox
+from typing import List, Optional
 
 import cv2
 import img2pdf
 import numpy as np
-from PIL import Image , ImageTk
+from PIL import Image, ImageTk
 
 
 class DocumentScanner:

@@ -8,6 +8,7 @@ Provides pipeline classes for each stage of document processing:
 - Database tabulation and encryption
 """
 
+from .doc_translation import translate_multilingual
 from .file_conversion import convert
 from .metadata_extraction import extract_metadata
 from .sanitization import sanitize
@@ -20,6 +21,7 @@ __all__ = [
     extract_semantics,
     sanitize,
     tabulate,
+    translate_multilingual,
 ]
 
 __version__ = "1.2.0"

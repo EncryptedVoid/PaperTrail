@@ -3,13 +3,13 @@ import os
 from datetime import datetime
 from logging import Logger
 from pathlib import Path
-from typing import List , Set
+from typing import List, Set
 
 # Import all security-related constants from centralized configuration
 from config import (
-	CHECKSUM_ALGORITHM ,
-	CHECKSUM_CHUNK_SIZE_BYTES ,
-	CHECKSUM_HISTORY_FILE ,
+    CHECKSUM_ALGORITHM,
+    CHECKSUM_CHUNK_SIZE_BYTES,
+    CHECKSUM_HISTORY_FILE,
 )
 
 

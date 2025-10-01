@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import img2pdf
 import numpy as np
-from pypdf import PdfReader , PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 
 def compile_doc_subset(input_pdf: Path, set_size: int, temp_dir: Path) -> Path:

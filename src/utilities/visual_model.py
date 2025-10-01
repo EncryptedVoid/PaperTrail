@@ -5,32 +5,32 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any , Dict , List , Union
+from typing import Any, Dict, List, Union
 
 import fitz
 import psutil
 import torch
 from PIL import Image
 from qwen_vl_utils import process_vision_info
-from transformers import AutoProcessor , Qwen2VLForConditionalGeneration
+from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
 from config import (
-	DEFAULT_AUTO_MODEL_SELECTION ,
-	DEFAULT_MEMORY_THRESHOLD ,
-	DEFAULT_PROCESSING_MODE ,
-	DEFAULT_REFRESH_INTERVAL ,
-	MAX_AVERAGE_PROCESSING_TIME ,
-	MAX_GPU_MEMORY_PERCENT ,
-	MAX_PROCESSING_TIME_PER_DOC ,
-	MIN_DESCRIPTION_SUCCESS_RATE ,
-	MIN_TEXT_SUCCESS_RATE ,
-	PREFERRED_VISUAL_MODEL ,
-	QWEN2VL_2B_MAX_TOKENS ,
-	RAM_USAGE_RATIO ,
-	VRAM_USAGE_RATIO ,
-	ZOOM_FACTOR_BALANCED ,
-	ZOOM_FACTOR_FAST ,
-	ZOOM_FACTOR_HIGH_QUALITY ,
+    DEFAULT_AUTO_MODEL_SELECTION,
+    DEFAULT_MEMORY_THRESHOLD,
+    DEFAULT_PROCESSING_MODE,
+    DEFAULT_REFRESH_INTERVAL,
+    MAX_AVERAGE_PROCESSING_TIME,
+    MAX_GPU_MEMORY_PERCENT,
+    MAX_PROCESSING_TIME_PER_DOC,
+    MIN_DESCRIPTION_SUCCESS_RATE,
+    MIN_TEXT_SUCCESS_RATE,
+    PREFERRED_VISUAL_MODEL,
+    QWEN2VL_2B_MAX_TOKENS,
+    RAM_USAGE_RATIO,
+    VRAM_USAGE_RATIO,
+    ZOOM_FACTOR_BALANCED,
+    ZOOM_FACTOR_FAST,
+    ZOOM_FACTOR_HIGH_QUALITY,
 )
 
 

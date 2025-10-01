@@ -27,17 +27,17 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List , Optional
+from typing import Any, Dict, List, Optional
 
 from tqdm import tqdm
 
 from config import (
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	JAVA_PATH ,
-	MIN_JAVA_VERSION ,
-	PROFILE_PREFIX ,
-	TIKA_APP_JAR_PATH ,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    JAVA_PATH,
+    MIN_JAVA_VERSION,
+    PROFILE_PREFIX,
+    TIKA_APP_JAR_PATH,
 )
 
 

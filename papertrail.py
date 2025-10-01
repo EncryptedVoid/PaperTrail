@@ -42,7 +42,7 @@ from src.processors import (
 	sanitize ,
 	scan ,
 	tabulate ,
-	translate ,
+	translate_multilingual ,
 )
 
 # ============================================================================
@@ -165,7 +165,7 @@ extract_semantics(
 # ============================================================================
 # STAGE 7: TRANSLATION
 # ============================================================================
-translate(
+translate_multilingual(
     logger=logger,  # Pass logger for tracking translation activities
     source_dir=SEMANTICS_EXTRACTED_DIR,  # Input: documents with semantic annotations
     failure_dir=FAILED_ARTIFACTS_DIR,  # Output: documents where translation fails

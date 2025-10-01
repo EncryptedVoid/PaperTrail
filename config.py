@@ -10,7 +10,7 @@ Author: Ashiq Gazi
 
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict, List, Set
 
 
 class PipelineStatus(Enum):
@@ -403,25 +403,14 @@ FIELD_PROMPTS: Dict[str, str] = {
     - "IRB Document Submission Requirements and Procedures"
 
     Return ONLY the title. No quotes, no explanations.""",
-    "language": """Analyze the document text and identify ALL languages present.
-    Document contains sections in multiple languages. List ALL languages found.
+    "language": """Analyze the document text and identify the PREDOMINANT language present.
+    Document contains sections in multiple languages. List the PREDOMINANT/MAIN language found.
     Examples:
     - If English only: "English"
     - If French only: "French"
-    - If both: "English, French"
-    - If trilingual: "English, French, Spanish"
-    Return ONLY language names, comma-separated.""",
-    "issuer_name": """Identify who issued, created, or published this document.
-
-Look for:
-- Organization names, agencies, departments
-- Company names or letterheads
-- Government agencies or institutions
-- Individual names (for personally issued documents)
-- Official stamps or seals with issuer information
-
-Return ONLY the full official name of the issuer. If unclear, return "UNKNOWN".""",
-    "officiating_body": """Identify any official authority that validated, certified, witnessed, or authorized this document.
+    - If both: "English, French", provide the language with more text
+    Return ONLY language names.""",
+    "issuing_body": """Identify any official authority that validated, certified, witnessed, or authorized this document.
     Look for:
     - Notary public names and seals
     - Certifying agency names
@@ -466,81 +455,6 @@ Present observations in formal, official terminology suitable for administrative
 # Password vault for storing encryption passwords securely
 PASSWORD_VAULT_PATH = Path("data/password_vault.encrypted")
 VAULT_MASTER_KEY: str = "password"
-
-# Define the column mapping from profile data to spreadsheet columns
-DATABASE_COLUMN_MAPPING = {
-    # Core identification
-    "ITEM_ID": "uuid",
-    "Title": ["llm_extraction", "extracted_fields", "title"],
-    "File_Extension": ["metadata", "extension"],
-    # Document classification
-    "Document_Type": ["llm_extraction", "extracted_fields", "document_type"],
-    "Original_Language": [
-        "llm_extraction",
-        "extracted_fields",
-        "original_language",
-    ],
-    "Current_Language": [
-        "llm_extraction",
-        "extracted_fields",
-        "current_language",
-    ],
-    "Confidentiality_Level": [
-        "llm_extraction",
-        "extracted_fields",
-        "confidentiality_level",
-    ],
-    # Technical data
-    "Checksum_SHA256": "checksum",
-    "File_Size_MB": ["metadata", "size_mb"],
-    # People and organizations
-    "Translator_Name": [
-        "llm_extraction",
-        "extracted_fields",
-        "translator_name",
-    ],
-    "Issuer_Name": ["llm_extraction", "extracted_fields", "issuer_name"],
-    "Officiater_Name": [
-        "llm_extraction",
-        "extracted_fields",
-        "officiater_name",
-    ],
-    # Dates
-    "Date_Added": ["stages", "metadata_extraction", "timestamp"],
-    "Date_Created": ["llm_extraction", "extracted_fields", "date_created"],
-    "Date_of_Reception": [
-        "llm_extraction",
-        "extracted_fields",
-        "date_of_reception",
-    ],
-    "Date_of_Issue": ["llm_extraction", "extracted_fields", "date_of_issue"],
-    "Date_of_Expiry": ["llm_extraction", "extracted_fields", "date_of_expiry"],
-    # Content and notes
-    "Tags": ["llm_extraction", "extracted_fields", "tags"],
-    "Version_Notes": ["llm_extraction", "extracted_fields", "version_notes"],
-    "Utility_Notes": ["llm_extraction", "extracted_fields", "utility_notes"],
-    "Additional_Notes": [
-        "llm_extraction",
-        "extracted_fields",
-        "additional_notes",
-    ],
-    # Manual entry fields (will be empty for now)
-    "Action_Required": "",
-    "Parent_Document_ID": "",
-    "Off_Site_Storage_ID": "",
-    "On_Site_Storage_ID": "",
-    "Backup_Storage_ID": "",
-    "Project_ID": "",
-    "Version_Number": "",
-    # Processing metadata
-    "Processing_Status": ["llm_extraction", "success"],
-    "OCR_Text_Length": "calculated",
-    "Visual_Description_Length": "calculated",
-    "Fields_Extracted_Count": "calculated",
-    "Processing_Date": ["stages", "llm_field_extraction", "timestamp"],
-    "Original_Filename": "original_artifact_name",
-    "Encryption_Status": "calculated",
-}
 
 USE_PASSPHRASE_ENCRYPTION: bool = False
 ENCRYPT_ARTIFACTS: bool = True
@@ -600,3 +514,62 @@ RMS_ENERGY_THRESHOLD_DB: float = -40.0
 PREFERRED_AUDIO_MODEL = "large-v3"  # or "medium", "base", "small", "tiny"
 MIN_TRANSCRIPTION_SUCCESS_RATE = 0.7  # 70% minimum success rate
 MAX_PDF_SIZE_BEFORE_SUBSETTING: int = 8
+
+
+# Language code mapping (ISO 639-3 to full names for pdf2zh)
+LANGUAGE_MAP = {
+    "ENG": "English",
+    "ZHO": "Simplified Chinese",
+    "ZHT": "Traditional Chinese",
+    "SPA": "Spanish",
+    "FRA": "French",
+    "DEU": "German",
+    "ITA": "Italian",
+    "POR": "Portuguese",
+    "RUS": "Russian",
+    "JPN": "Japanese",
+    "KOR": "Korean",
+    "ARA": "Arabic",
+    "HIN": "Hindi",
+    "BEN": "Bengali",
+    "VIE": "Vietnamese",
+    "THA": "Thai",
+    "TUR": "Turkish",
+    "POL": "Polish",
+    "NLD": "Dutch",
+    "GRE": "Greek",
+    "HEB": "Hebrew",
+    "SWE": "Swedish",
+    "NOR": "Norwegian",
+    "DAN": "Danish",
+    "FIN": "Finnish",
+    "CZE": "Czech",
+    "HUN": "Hungarian",
+    "ROM": "Romanian",
+    "UKR": "Ukrainian",
+    "IND": "Indonesian",
+    "MAY": "Malay",
+    "PER": "Persian",
+    "URD": "Urdu",
+}
+
+PREFERRED_LANGUAGE_TRANSLATIONS: List[str] = ["ENG", "FRA", "BEN", "DEU", "POL"]
+PREFERRED_TRANSLATION_MODEL: str = "ollama:gemma2:9b"
+
+# Watermark translations for different languages
+TRANSLATION_WATERMARKS: Dict[str, str] = {
+    "DEU": f"Dieses Dokument wurde mit PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) aus dem Englischen übersetzt",
+    "FRA": f"Ce document a été traduit de l'anglais avec PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
+    "SPA": f"Este documento ha sido traducido del inglés usando PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
+    "ITA": f"Questo documento è stato tradotto dall'inglese usando PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
+    "POR": f"Este documento foi traduzido do inglês usando PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
+    "RUS": f"Этот документ был переведен с английского с помощью PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
+    "JPN": f"この文書はPDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})を使用して英語から翻訳されました",
+    "KOR": f"이 문서는 PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})를 사용하여 영어에서 번역되었습니다",
+    "CHI": f"本文档已使用 PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) 从英文翻译",
+    "NLD": f"Dit document is vertaald uit het Engels met PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
+    "POL": f"Ten dokument został przetłumaczony z angielskiego za pomocą PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
+    "TUR": f"Bu belge PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) kullanılarak İngilizceden çevrilmiştir",
+    "HIN": f"यह दस्तावेज़ PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) का उपयोग करके अंग्रेजी से अनुवादित किया गया है",
+    "ENG": f"This document has been translated using PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) from English",
+}

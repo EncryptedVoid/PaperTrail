@@ -26,20 +26,20 @@ from typing import Set
 from tqdm import tqdm
 
 from config import (
-	ARCHIVAL_DIR ,
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	PROFILE_PREFIX ,
-	TEMP_DIR ,
-	UUID_ENTROPY ,
-	UUID_PREFIX ,
+    ARCHIVAL_DIR,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    PROFILE_PREFIX,
+    TEMP_DIR,
+    UUID_ENTROPY,
+    UUID_PREFIX,
 )
 from src.utilities.checksum import (
-	generate_checksum ,
-	load_checksum_history ,
-	save_checksum ,
+    generate_checksum,
+    load_checksum_history,
+    save_checksum,
 )
-from utilities.file_stability import is_stable , repair_instability
+from utilities.file_stability import is_stable, repair_instability
 
 
 def sanitize(

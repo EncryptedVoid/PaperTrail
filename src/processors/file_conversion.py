@@ -20,28 +20,28 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List
+from typing import Any, Dict, List
 
 from magika import Magika
 from magika.types import MagikaResult
 from tqdm import tqdm
 
 from config import (
-	ARCHIVE_TYPES ,
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	AUDIO_TYPES ,
-	CODE_TYPES ,
-	DOCUMENT_TYPES ,
-	EMAIL_TYPES ,
-	IMAGE_TYPES ,
-	MIN_FILE_TYPE_CONF_SCORE ,
-	PROFILE_PREFIX ,
-	TEMP_DIR ,
-	TEXT_TYPES ,
-	VIDEO_TYPES ,
+    ARCHIVE_TYPES,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    AUDIO_TYPES,
+    CODE_TYPES,
+    DOCUMENT_TYPES,
+    EMAIL_TYPES,
+    IMAGE_TYPES,
+    MIN_FILE_TYPE_CONF_SCORE,
+    PROFILE_PREFIX,
+    TEMP_DIR,
+    TEXT_TYPES,
+    VIDEO_TYPES,
 )
-from utilities.file_stability import is_stable , repair_instability
+from utilities.file_stability import is_stable, repair_instability
 
 
 def convert(
