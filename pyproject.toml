@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "papertrail"
-version = "2.1.0"
+version = "1.3.0"
 description = "A local LLM based, secure, document tabulating and organising system using SQLite, Ollama, and Python"
 authors = [{ name = "Ashiq Arib Gazi", email = "ashiqarib@gmail.com" }]
 readme = "README.md"
