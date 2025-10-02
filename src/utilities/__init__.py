@@ -10,6 +10,17 @@ Provides core utility classes and functions:
 
 from .audio_model import AudioProcessingStats, AudioProcessor, AudioQualityMode
 from .compile_subsets import compile_doc_subset, compile_video_snapshot_subset
+from .dependancy_ensurance import (
+    ensure_apache_tika,
+    ensure_ffmpeg,
+    ensure_imagemagick,
+    ensure_java,
+    ensure_libpff_python,
+    ensure_ollama,
+    ensure_pandoc,
+    ensure_par2,
+    ensure_pdfarranger,
+)
 from .language_model import LanguageExtractionReport, LanguageProcessor
 from .visual_model import (
     HardwareConstraints,
@@ -22,19 +33,26 @@ from .visual_model import (
 # Import specific functions as needed in other modules directly
 
 __all__ = [
-    # Language processing
-    "LanguageProcessor",
-    "LanguageExtractionReport",
-    # Visual processing
-    "VisualProcessor",
-    "AudioProcessor",
-    "AudioProcessingStats",
-    "AudioQualityMode",
-    "ProcessingMode",
-    "HardwareConstraints",
-    "ProcessingStats",
-    "compile_doc_subset",
-    "compile_video_snapshot_subset",
+    LanguageProcessor,
+    LanguageExtractionReport,
+    VisualProcessor,
+    AudioProcessor,
+    AudioProcessingStats,
+    AudioQualityMode,
+    ProcessingMode,
+    HardwareConstraints,
+    ProcessingStats,
+    compile_doc_subset,
+    compile_video_snapshot_subset,
+    ensure_ffmpeg,
+    ensure_imagemagick,
+    ensure_pandoc,
+    ensure_par2,
+    ensure_libpff_python,
+    ensure_java,
+    ensure_apache_tika,
+    ensure_pdfarranger,
+    ensure_ollama,
 ]
 
 __version__ = "1.2.0"

@@ -25,29 +25,30 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any , Dict , List
+from typing import Any, Dict, List
 
 import pypdf
 from torch.onnx.errors import UnsupportedOperatorError
 from tqdm import tqdm
 
 from config import (
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	AUDIO_TYPES ,
-	DOCUMENT_TYPES ,
-	IMAGE_TYPES ,
-	MAX_PDF_SIZE_BEFORE_SUBSETTING ,
-	PROFILE_PREFIX ,
-	TEMP_DIR ,
-	VIDEO_TYPES ,
+    ARTIFACT_PREFIX,
+    ARTIFACT_PROFILES_DIR,
+    AUDIO_TYPES,
+    DOCUMENT_TYPES,
+    IMAGE_TYPES,
+    MAX_PDF_SIZE_BEFORE_SUBSETTING,
+    PROFILE_PREFIX,
+    TEMP_DIR,
+    VIDEO_TYPES,
 )
 from utilities import (
-	AudioProcessor ,
-	LanguageProcessor ,
-	VisualProcessor ,
-	compile_doc_subset ,
-	compile_video_snapshot_subset ,
+    AudioProcessor,
+    LanguageProcessor,
+    VisualProcessor,
+    compile_doc_subset,
+    compile_video_snapshot_subset,
+    ensure_ollama,
 )
 
 
@@ -103,6 +104,8 @@ def extract_semantics(
             - All profile updates include timestamps for audit trail
             - Extraction failures are logged with full exception details (exc_info=True)
     """
+
+    ensure_ollama()
 
     # Log metadata extraction stage header for clear progress tracking
     logger.info("=" * 80)

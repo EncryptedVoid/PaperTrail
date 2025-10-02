@@ -21,7 +21,7 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Set
+from typing import Any, Dict, Set
 
 from tqdm import tqdm
 
@@ -206,7 +206,7 @@ def sanitize(
             unique_id_name: str = f"{ARTIFACT_PREFIX}-{artifact_id}{artifact.suffix}"
 
             # Create initial profile data dictionary with comprehensive metadata
-            artifact_profile_data: dict[str, any] = {
+            artifact_profile_data: Dict[str, Any] = {
                 "uuid": artifact_id,  # Unique identifier for tracking
                 "original_artifact_name": original_name,  # Preserve original filename
                 "artifact_size": file_size,  # File size in bytes

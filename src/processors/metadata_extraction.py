@@ -39,6 +39,7 @@ from config import (
     PROFILE_PREFIX,
     TIKA_APP_JAR_PATH,
 )
+from utilities import ensure_apache_tika, ensure_java
 
 
 def extract_metadata(
@@ -93,6 +94,9 @@ def extract_metadata(
             - All profile updates include timestamps for audit trail
             - Extraction failures are logged with full exception details (exc_info=True)
     """
+
+    ensure_java()
+    ensure_apache_tika()
 
     # Validate that Tika JAR exists before processing
     tika_jar_path: Path = Path(TIKA_APP_JAR_PATH)

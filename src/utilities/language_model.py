@@ -21,11 +21,11 @@ Dependencies:
 import datetime
 import logging
 from datetime import datetime
-from typing import Any , Dict , Optional , TypedDict
+from typing import Any, Dict, Optional, TypedDict
 
 import ollama
 
-from config import FIELD_PROMPTS , PREFERRED_LANGUAGE_MODEL , SYSTEM_PROMPT
+from config import FIELD_PROMPTS, PREFERRED_LANGUAGE_MODEL, SYSTEM_PROMPT
 
 
 class LanguageExtractionReport(TypedDict):
@@ -57,12 +57,6 @@ class LanguageProcessor:
         logger (logging.Logger): Logger instance for tracking operations and debugging
         model (str): Name of the LLM model being used for extraction
         client (ollama.Client): OLLAMA client for model communication
-
-    Example:
-        >>> processor = LanguageProcessor(logger, model="mistral:7b")
-        >>> result = processor.extract_fields(text_description, visual_desc, "doc_123")
-        >>> if result["success"]:
-        ...     fields = result["extracted_fields"]
     """
 
     def __init__(self, logger: logging.Logger) -> None:
