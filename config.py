@@ -13,6 +13,20 @@ from pathlib import Path
 from typing import Dict, List, Set
 
 
+class ProcessingMode(Enum):
+    """
+    Processing quality modes that determine the balance between speed and quality.
+
+    FAST: Optimized for speed with lower resolution and simpler processing
+    BALANCED: Good balance between speed and quality (default)
+    HIGH_QUALITY: Maximum quality with higher resolution and detailed processing
+    """
+
+    FAST = "fast"
+    BALANCED = "balanced"
+    HIGH_QUALITY = "high_quality"
+
+
 class PipelineStatus(Enum):
     SUCCESS = "success"
     FAILURE = "failure"
@@ -331,7 +345,7 @@ PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
 DEFAULT_REFRESH_INTERVAL: int = 5
 DEFAULT_MEMORY_THRESHOLD: float = 80.0
 DEFAULT_AUTO_MODEL_SELECTION: bool = True
-DEFAULT_PROCESSING_MODE: str = "balanced"
+DEFAULT_PROCESSING_MODE: ProcessingMode = ProcessingMode.HIGH_QUALITY
 
 # Hardware resource allocation ratios
 RAM_USAGE_RATIO: float = 0.7  # Use 70% of total RAM

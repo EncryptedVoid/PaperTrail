@@ -17,13 +17,12 @@ from .sanitization import sanitize
 from .semantics_extraction import extract_semantics
 
 __all__ = [
-    convert,
-    extract_metadata,
-    extract_semantics,
-    sanitize,
-    translate_multilingual,
-    password_protect,
-    embellish,
+    archive_and_tabulte,
+    encrypt_and_protect,
+    extract_artifact_data,
+    manual_review,
+    transform,
+    manual_backup,
 ]
 
 __version__ = "1.2.0"

@@ -3,7 +3,6 @@ import io
 import logging
 import time
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -25,6 +24,7 @@ from config import (
     MIN_DESCRIPTION_SUCCESS_RATE,
     MIN_TEXT_SUCCESS_RATE,
     PREFERRED_VISUAL_MODEL,
+    ProcessingMode,
     QWEN2VL_2B_MAX_TOKENS,
     RAM_USAGE_RATIO,
     VRAM_USAGE_RATIO,
@@ -32,36 +32,6 @@ from config import (
     ZOOM_FACTOR_FAST,
     ZOOM_FACTOR_HIGH_QUALITY,
 )
-
-
-class ProcessingMode(Enum):
-    """
-    Processing quality modes that determine the balance between speed and quality.
-
-    FAST: Optimized for speed with lower resolution and simpler processing
-    BALANCED: Good balance between speed and quality (default)
-    HIGH_QUALITY: Maximum quality with higher resolution and detailed processing
-    """
-
-    FAST = "fast"
-    BALANCED = "balanced"
-    HIGH_QUALITY = "high_quality"
-
-
-@dataclass
-class HardwareConstraints:
-    """
-    Hardware resource constraints for model selection and processing.
-
-    Attributes:
-        max_gpu_vram_gb: Maximum available GPU VRAM in gigabytes
-        max_ram_gb: Maximum available system RAM in gigabytes
-        force_cpu: Whether to force CPU-only processing
-    """
-
-    max_gpu_vram_gb: float
-    max_ram_gb: float
-    force_cpu: bool = False
 
 
 @dataclass
@@ -99,6 +69,8 @@ class VisualProcessor:
     - Configurable processing modes (fast, balanced, high-quality)
     - Comprehensive performance tracking and statistics
     - Robust error handling and fallback mechanisms
+    - Handwriting detection capabilities
+    - Document detection capabilities
     """
 
     def __init__(self, logger: logging.Logger) -> None:
@@ -116,14 +88,7 @@ class VisualProcessor:
         self.logger = logger
         self.logger.info("Initializing VisualProcessor with configuration constants")
 
-        # Apply configuration constants for initialization parameters
-        # Convert string to enum
-        if DEFAULT_PROCESSING_MODE == "fast":
-            self.processing_mode = ProcessingMode.FAST
-        elif DEFAULT_PROCESSING_MODE == "high_quality":
-            self.processing_mode = ProcessingMode.HIGH_QUALITY
-        else:
-            self.processing_mode = ProcessingMode.BALANCED  # Default
+        self.processing_mode: ProcessingMode = DEFAULT_PROCESSING_MODE
 
         self.refresh_interval = DEFAULT_REFRESH_INTERVAL
         self.memory_threshold = DEFAULT_MEMORY_THRESHOLD
@@ -810,79 +775,401 @@ class VisualProcessor:
             self.logger.error(f"Failed to process image: {e}")
             raise
 
-    def extract_semantics(self, file_path: Path) -> Dict[str, str]:
+    def detect_handwriting(
+        self, image: Union[str, Path, Image.Image]
+    ) -> Dict[str, Any]:
         """
-        Process file_path with enhanced monitoring and performance tracking.
-
-        Main entry point for file_path processing that handles both PDFs and images
-        with comprehensive error handling, performance monitoring, and automatic
-        model refresh based on configuration thresholds.
+        Detect whether an image contains handwriting and return a confidence score.
 
         Args:
-            file_path: Path to file_path file (PDF or image)
+            image: Image to analyze (file path or PIL Image object)
 
         Returns:
-            Dict containing extracted text and descriptions
+            Dict containing:
+                - confidence: float (0.0-1.0) indicating confidence that handwriting is present
+                - detected: bool indicating if handwriting was detected (confidence > 0.5)
+                - analysis: str describing the findings
+                - processing_time: float time taken to process
 
         Raises:
-            FileNotFoundError: If file_path file doesn't exist
+            FileNotFoundError: If image file doesn't exist
+            RuntimeError: If model is not available
+        """
+        self.logger.info("Starting handwriting detection...")
+        start_time = time.time()
+
+        # Check if model is loaded
+        if self.model is None or self.processor is None:
+            self.logger.error("Model not loaded for handwriting detection")
+            raise RuntimeError("Visual model not available for processing")
+
+        try:
+            # Load and validate image
+            if isinstance(image, (str, Path)):
+                image_path = Path(image)
+                if not image_path.exists():
+                    raise FileNotFoundError(f"Image file not found: {image_path}")
+                processed_image = Image.open(image_path)
+            else:
+                processed_image = image
+
+            # Prepare handwriting detection prompt
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": processed_image},
+                        {
+                            "type": "text",
+                            "text": "Analyze this image carefully. Does it contain any handwriting or handwritten text? Respond with a confidence score from 0 to 100 (where 0 means definitely no handwriting, 100 means definitely handwriting present), followed by a brief explanation. Format: CONFIDENCE: [score] | ANALYSIS: [explanation]",
+                        },
+                    ],
+                }
+            ]
+
+            # Process and generate response
+            text_inputs = self.processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            image_inputs, video_inputs = process_vision_info(messages)
+
+            inputs = self.processor(
+                text=[text_inputs],
+                images=image_inputs,
+                videos=video_inputs,
+                padding=True,
+                return_tensors="pt",
+            )
+            inputs = inputs.to(self.device)
+
+            with torch.no_grad():
+                generated_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_tokens,
+                    do_sample=False,
+                    temperature=0.1,
+                )
+
+                generated_ids_trimmed = [
+                    out_ids[len(in_ids) :]
+                    for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                ]
+
+                output = self.processor.batch_decode(
+                    generated_ids_trimmed,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False,
+                )[0]
+
+            # Parse response to extract confidence score
+            confidence = 0.0
+            analysis = output.strip()
+
+            # Try to extract confidence score from response
+            if "CONFIDENCE:" in output.upper():
+                try:
+                    confidence_part = (
+                        output.upper().split("CONFIDENCE:")[1].split("|")[0].strip()
+                    )
+                    confidence_value = float(
+                        "".join(
+                            filter(lambda x: x.isdigit() or x == ".", confidence_part)
+                        )
+                    )
+                    confidence = min(max(confidence_value / 100.0, 0.0), 1.0)
+                except:
+                    # Fallback: analyze keywords in response
+                    response_lower = output.lower()
+                    if any(
+                        word in response_lower
+                        for word in [
+                            "definitely handwriting",
+                            "clearly handwritten",
+                            "handwritten text",
+                        ]
+                    ):
+                        confidence = 0.9
+                    elif any(
+                        word in response_lower
+                        for word in ["handwriting", "handwritten"]
+                    ):
+                        confidence = 0.7
+                    elif any(
+                        word in response_lower
+                        for word in ["possibly handwriting", "might be handwriting"]
+                    ):
+                        confidence = 0.5
+                    elif any(
+                        word in response_lower
+                        for word in [
+                            "no handwriting",
+                            "not handwritten",
+                            "typed",
+                            "printed",
+                        ]
+                    ):
+                        confidence = 0.1
+
+            processing_time = time.time() - start_time
+
+            result = {
+                "confidence": confidence,
+                "detected": confidence > 0.5,
+                "analysis": analysis,
+                "processing_time": processing_time,
+            }
+
+            self.logger.info(
+                f"Handwriting detection completed in {processing_time:.2f}s - "
+                f"Confidence: {confidence:.2f}, Detected: {result['detected']}"
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Handwriting detection failed: {e}")
+            raise
+
+    def detect_document(self, image: Union[str, Path, Image.Image]) -> Dict[str, Any]:
+        """
+        Detect whether an image is a document and return a confidence score.
+
+        Args:
+            image: Image to analyze (file path or PIL Image object)
+
+        Returns:
+            Dict containing:
+                - confidence: float (0.0-1.0) indicating confidence that this is a document
+                - is_document: bool indicating if it's likely a document (confidence > 0.5)
+                - document_type: str describing the type of document if detected
+                - analysis: str describing the findings
+                - processing_time: float time taken to process
+
+        Raises:
+            FileNotFoundError: If image file doesn't exist
+            RuntimeError: If model is not available
+        """
+        self.logger.info("Starting document detection...")
+        start_time = time.time()
+
+        # Check if model is loaded
+        if self.model is None or self.processor is None:
+            self.logger.error("Model not loaded for document detection")
+            raise RuntimeError("Visual model not available for processing")
+
+        try:
+            # Load and validate image
+            if isinstance(image, (str, Path)):
+                image_path = Path(image)
+                if not image_path.exists():
+                    raise FileNotFoundError(f"Image file not found: {image_path}")
+                processed_image = Image.open(image_path)
+            else:
+                processed_image = image
+
+            # Prepare document detection prompt
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": processed_image},
+                        {
+                            "type": "text",
+                            "text": "Analyze this image carefully. Is this a document or an image of a document? Documents include: invoices, receipts, forms, letters, reports, contracts, certificates, ID cards, business cards, book pages, articles, spreadsheets, presentations, etc. Respond with a confidence score from 0 to 100 (where 0 means definitely not a document, 100 means definitely a document), the document type if applicable, and a brief explanation. Format: CONFIDENCE: [score] | TYPE: [document type or 'N/A'] | ANALYSIS: [explanation]",
+                        },
+                    ],
+                }
+            ]
+
+            # Process and generate response
+            text_inputs = self.processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            image_inputs, video_inputs = process_vision_info(messages)
+
+            inputs = self.processor(
+                text=[text_inputs],
+                images=image_inputs,
+                videos=video_inputs,
+                padding=True,
+                return_tensors="pt",
+            )
+            inputs = inputs.to(self.device)
+
+            with torch.no_grad():
+                generated_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_tokens,
+                    do_sample=False,
+                    temperature=0.1,
+                )
+
+                generated_ids_trimmed = [
+                    out_ids[len(in_ids) :]
+                    for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                ]
+
+                output = self.processor.batch_decode(
+                    generated_ids_trimmed,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False,
+                )[0]
+
+            # Parse response to extract confidence score and document type
+            confidence = 0.0
+            document_type = "Unknown"
+            analysis = output.strip()
+
+            # Try to extract confidence score from response
+            if "CONFIDENCE:" in output.upper():
+                try:
+                    confidence_part = (
+                        output.upper().split("CONFIDENCE:")[1].split("|")[0].strip()
+                    )
+                    confidence_value = float(
+                        "".join(
+                            filter(lambda x: x.isdigit() or x == ".", confidence_part)
+                        )
+                    )
+                    confidence = min(max(confidence_value / 100.0, 0.0), 1.0)
+                except:
+                    # Fallback: analyze keywords in response
+                    response_lower = output.lower()
+                    if any(
+                        word in response_lower
+                        for word in ["definitely a document", "clearly a document"]
+                    ):
+                        confidence = 0.9
+                    elif any(
+                        word in response_lower
+                        for word in [
+                            "document",
+                            "invoice",
+                            "receipt",
+                            "form",
+                            "letter",
+                            "report",
+                        ]
+                    ):
+                        confidence = 0.7
+                    elif any(
+                        word in response_lower
+                        for word in ["possibly a document", "might be a document"]
+                    ):
+                        confidence = 0.5
+                    elif any(
+                        word in response_lower
+                        for word in [
+                            "not a document",
+                            "photograph",
+                            "artwork",
+                            "screenshot",
+                        ]
+                    ):
+                        confidence = 0.1
+
+            # Try to extract document type
+            if "TYPE:" in output.upper():
+                try:
+                    type_part = output.upper().split("TYPE:")[1].split("|")[0].strip()
+                    if type_part and type_part.upper() != "N/A":
+                        document_type = type_part
+                except:
+                    pass
+
+            # Fallback document type detection from keywords
+            if document_type == "Unknown" and confidence > 0.5:
+                response_lower = output.lower()
+                doc_types = {
+                    "invoice": ["invoice"],
+                    "receipt": ["receipt"],
+                    "form": ["form"],
+                    "letter": ["letter"],
+                    "report": ["report"],
+                    "contract": ["contract"],
+                    "certificate": ["certificate"],
+                    "ID card": ["id card", "identification"],
+                    "business card": ["business card"],
+                    "spreadsheet": ["spreadsheet", "excel", "table"],
+                    "presentation": ["presentation", "slide"],
+                    "article": ["article", "page"],
+                }
+                for doc_type, keywords in doc_types.items():
+                    if any(keyword in response_lower for keyword in keywords):
+                        document_type = doc_type
+                        break
+
+            processing_time = time.time() - start_time
+
+            result = {
+                "confidence": confidence,
+                "is_document": confidence > 0.5,
+                "document_type": document_type,
+                "analysis": analysis,
+                "processing_time": processing_time,
+            }
+
+            self.logger.info(
+                f"Document detection completed in {processing_time:.2f}s - "
+                f"Confidence: {confidence:.2f}, Is Document: {result['is_document']}, "
+                f"Type: {document_type}"
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Document detection failed: {e}")
+            raise
+
+    def extract_text(self, file_path: Path) -> str:
+        """
+        Extract text from a document file (PDF or image).
+
+        Args:
+            file_path: Path to document file (PDF or image)
+
+        Returns:
+            str: Extracted text from the document
+
+        Raises:
+            FileNotFoundError: If document file doesn't exist
             ValueError: If file type is unsupported
             Exception: If processing fails
         """
-        self.logger.info(f"Starting file_path processing: {file_path.name}")
-        self.logger.info(
-            f"Document size: {file_path.stat().st_size / 1024 / 1024:.1f} MB"
-        )
-
+        self.logger.info(f"Starting text extraction: {file_path.name}")
         start_time = time.time()
 
-        # Check if model should be refreshed based on configuration thresholds
+        # Check if model should be refreshed
         if self._should_refresh_model():
             self.logger.info("Auto-refreshing model due to configuration thresholds")
             self.refresh_model()
 
-        # Monitor memory before processing
-        memory_before = self._monitor_memory_usage()
-        self.logger.info(
-            f"Memory before processing - GPU: {memory_before.get('gpu_memory_percent', 0):.1f}%, RAM: {memory_before.get('system_ram_percent', 0):.1f}%"
-        )
-
-        # Validate file_path existence
+        # Validate file existence
         if not file_path.exists():
             self.logger.error(f"Document file not found: {file_path}")
             raise FileNotFoundError(f"Document file not found: {file_path}")
 
-        # Determine file type and log processing approach
         file_ext = file_path.suffix.lower()
-        self.logger.info(f"Document type: {file_ext}")
-
-        # Initialize processing containers
         all_text = []
-        all_descriptions = []
-        page_quality_metrics = []
-        processing_errors = []
 
         try:
             if file_ext == ".pdf":
-                # PDF processing with detailed progress tracking
-                self.logger.info("Processing PDF file_path...")
+                # PDF processing
+                self.logger.info("Processing PDF for text extraction...")
                 images = self._pdf_to_images(file_path)
                 total_pages = len(images)
-                self.logger.info(
-                    f"PDF converted to {total_pages} images, beginning page-by-page processing"
-                )
 
                 for i, img in enumerate(images):
                     page_num = i + 1
-                    page_start_time = time.time()
-                    self.logger.debug(f"Processing page {page_num}/{total_pages}")
+                    self.logger.debug(
+                        f"Extracting text from page {page_num}/{total_pages}"
+                    )
 
                     try:
-                        # Process individual page with timeout consideration
-                        result = self._process_single_image(img)
-                        page_quality_metrics.append(result.get("quality_metrics", {}))
+                        result = self._process_single_image(
+                            img, extract_text=True, describe_image=False
+                        )
 
-                        # Handle text extraction results
                         if result.get("text") and result["text"] not in [
                             "NO_TEXT_FOUND",
                             "TEXT_EXTRACTION_FAILED",
@@ -890,15 +1177,106 @@ class VisualProcessor:
                             page_text = f"=== Page {page_num} ===\n{result['text']}"
                             all_text.append(page_text)
                             self.stats.text_extractions_successful += 1
-                            self.logger.debug(
-                                f"Page {page_num}: Text extracted ({len(result['text'])} chars)"
-                            )
-                        else:
-                            self.logger.debug(
-                                f"Page {page_num}: No text found or extraction failed"
-                            )
 
-                        # Handle description results
+                        self.stats.pages_processed += 1
+
+                    except Exception as e:
+                        self.logger.error(
+                            f"Failed to extract text from page {page_num}: {e}"
+                        )
+                        continue
+
+            elif file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]:
+                # Image file processing
+                self.logger.info(
+                    f"Processing image for text extraction: {file_path.name}"
+                )
+                result = self._process_single_image(
+                    file_path, extract_text=True, describe_image=False
+                )
+
+                if result.get("text") and result["text"] not in [
+                    "NO_TEXT_FOUND",
+                    "TEXT_EXTRACTION_FAILED",
+                ]:
+                    all_text.append(result["text"])
+                    self.stats.text_extractions_successful += 1
+
+                self.stats.pages_processed += 1
+
+            else:
+                error_msg = f"Unsupported file type: {file_ext}"
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Compile final results
+            final_text = (
+                "\n\n".join(all_text) if all_text else "No text found in document."
+            )
+
+            # Update statistics
+            processing_time = time.time() - start_time
+            self.stats.total_processing_time += processing_time
+            self.stats.file_paths_processed += 1
+
+            self.logger.info(f"Text extraction completed in {processing_time:.2f}s")
+            self.logger.info(f"Extracted text: {len(final_text)} characters")
+
+            return final_text
+
+        except Exception as e:
+            self.logger.error(f"Text extraction failed for {file_path.name}: {e}")
+            raise
+
+    def extract_visual_description(self, file_path: Path) -> str:
+        """
+        Extract visual descriptions from a document file (PDF or image).
+
+        Args:
+            file_path: Path to document file (PDF or image)
+
+        Returns:
+            str: Visual descriptions of the document
+
+        Raises:
+            FileNotFoundError: If document file doesn't exist
+            ValueError: If file type is unsupported
+            Exception: If processing fails
+        """
+        self.logger.info(f"Starting visual description extraction: {file_path.name}")
+        start_time = time.time()
+
+        # Check if model should be refreshed
+        if self._should_refresh_model():
+            self.logger.info("Auto-refreshing model due to configuration thresholds")
+            self.refresh_model()
+
+        # Validate file existence
+        if not file_path.exists():
+            self.logger.error(f"Document file not found: {file_path}")
+            raise FileNotFoundError(f"Document file not found: {file_path}")
+
+        file_ext = file_path.suffix.lower()
+        all_descriptions = []
+
+        try:
+            if file_ext == ".pdf":
+                # PDF processing
+                self.logger.info("Processing PDF for visual descriptions...")
+                images = self._pdf_to_images(file_path)
+                total_pages = len(images)
+
+                for i, img in enumerate(images):
+                    page_num = i + 1
+                    self.logger.debug(
+                        f"Generating description for page {page_num}/{total_pages}"
+                    )
+
+                    try:
+                        result = self._process_single_image(
+                            img, extract_text=False, describe_image=True
+                        )
+
                         if (
                             result.get("description")
                             and result["description"] != "DESCRIPTION_GENERATION_FAILED"
@@ -906,155 +1284,63 @@ class VisualProcessor:
                             page_desc = f"=== Page {page_num} Visual Description ===\n{result['description']}"
                             all_descriptions.append(page_desc)
                             self.stats.descriptions_successful += 1
-                            self.logger.debug(
-                                f"Page {page_num}: Description generated ({len(result['description'])} chars)"
-                            )
-                        else:
-                            self.logger.debug(
-                                f"Page {page_num}: Description generation failed"
-                            )
 
                         self.stats.pages_processed += 1
-                        page_time = time.time() - page_start_time
-
-                        # Check for processing time issues using configuration constant
-                        if (
-                            page_time > MAX_PROCESSING_TIME_PER_DOC / 10
-                        ):  # Scale down for per-page
-                            self.logger.warning(
-                                f"Page {page_num} took {page_time:.2f}s to process (slower than expected)"
-                            )
 
                     except Exception as e:
-                        error_msg = f"Failed to process page {page_num}: {e}"
-                        self.logger.error(error_msg)
-                        processing_errors.append(error_msg)
+                        self.logger.error(
+                            f"Failed to generate description for page {page_num}: {e}"
+                        )
                         continue
 
             elif file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]:
                 # Image file processing
-                self.logger.info(f"Processing image file: {file_path.name}")
+                self.logger.info(
+                    f"Processing image for visual description: {file_path.name}"
+                )
+                result = self._process_single_image(
+                    file_path, extract_text=False, describe_image=True
+                )
 
-                result = self._process_single_image(file_path)
-                page_quality_metrics.append(result.get("quality_metrics", {}))
-
-                # Handle text extraction results
-                if result.get("text") and result["text"] not in [
-                    "NO_TEXT_FOUND",
-                    "TEXT_EXTRACTION_FAILED",
-                ]:
-                    all_text.append(result["text"])
-                    self.stats.text_extractions_successful += 1
-                    self.logger.info(
-                        f"Text extracted from image ({len(result['text'])} chars)"
-                    )
-
-                # Handle description results
                 if (
                     result.get("description")
                     and result["description"] != "DESCRIPTION_GENERATION_FAILED"
                 ):
                     all_descriptions.append(result["description"])
                     self.stats.descriptions_successful += 1
-                    self.logger.info(
-                        f"Description generated for image ({len(result['description'])} chars)"
-                    )
 
                 self.stats.pages_processed += 1
 
             else:
-                # Unsupported file type
-                error_msg = f"Unsupported file type: {file_ext}. Supported types: .pdf, .jpg, .jpeg, .png, .bmp, .tiff, .webp"
+                error_msg = f"Unsupported file type: {file_ext}"
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
 
             # Compile final results
-            final_text = (
-                "\n\n".join(all_text) if all_text else "No text found in file_path."
-            )
             final_descriptions = (
                 "\n\n".join(all_descriptions)
                 if all_descriptions
                 else "No visual content described."
             )
 
-            # Update comprehensive statistics
+            # Update statistics
             processing_time = time.time() - start_time
             self.stats.total_processing_time += processing_time
             self.stats.file_paths_processed += 1
 
-            # Update rolling averages for text and description lengths
-            if all_text:
-                current_avg_text_length = sum(len(text) for text in all_text) / len(
-                    all_text
-                )
-                self.stats.average_text_length = (
-                    (
-                        self.stats.average_text_length
-                        * (self.stats.file_paths_processed - 1)
-                    )
-                    + current_avg_text_length
-                ) / self.stats.file_paths_processed
-
-            if all_descriptions:
-                current_avg_desc_length = sum(
-                    len(desc) for desc in all_descriptions
-                ) / len(all_descriptions)
-                self.stats.average_description_length = (
-                    (
-                        self.stats.average_description_length
-                        * (self.stats.file_paths_processed - 1)
-                    )
-                    + current_avg_desc_length
-                ) / self.stats.file_paths_processed
-
-            # Monitor memory after processing
-            memory_after = self._monitor_memory_usage()
-            memory_increase = memory_after.get(
-                "gpu_memory_percent", 0
-            ) - memory_before.get("gpu_memory_percent", 0)
-
             self.logger.info(
-                f"Memory after processing - GPU: {memory_after.get('gpu_memory_percent', 0):.1f}%, RAM: {memory_after.get('system_ram_percent', 0):.1f}%"
-            )
-            if memory_increase > 5:  # Log significant memory increases
-                self.logger.warning(
-                    f"GPU memory increased by {memory_increase:.1f}% during processing"
-                )
-
-            # Final processing summary
-            self.logger.info(f"Document processing completed in {processing_time:.2f}s")
-            self.logger.info(f"Results summary:")
-            self.logger.info(f"  - Text: {len(final_text)} characters")
-            self.logger.info(f"  - Descriptions: {len(final_descriptions)} characters")
-            self.logger.info(f"  - Pages processed: {self.stats.pages_processed}")
-            self.logger.info(
-                f"  - Text extractions successful: {self.stats.text_extractions_successful}"
+                f"Visual description extraction completed in {processing_time:.2f}s"
             )
             self.logger.info(
-                f"  - Descriptions successful: {self.stats.descriptions_successful}"
+                f"Generated descriptions: {len(final_descriptions)} characters"
             )
 
-            if processing_errors:
-                self.logger.warning(
-                    f"Processing completed with {len(processing_errors)} errors"
-                )
-                for error in processing_errors[:3]:  # Log first 3 errors
-                    self.logger.warning(f"  - {error}")
-
-            # Check if processing time exceeded configuration threshold
-            if processing_time > MAX_PROCESSING_TIME_PER_DOC:
-                self.logger.warning(
-                    f"Document processing time ({processing_time:.2f}s) exceeded threshold ({MAX_PROCESSING_TIME_PER_DOC}s)"
-                )
-
-            return {
-                "all_text": final_text,
-                "all_imagery": final_descriptions,
-            }
+            return final_descriptions
 
         except Exception as e:
-            self.logger.error(f"Document processing failed for {file_path.name}: {e}")
+            self.logger.error(
+                f"Visual description extraction failed for {file_path.name}: {e}"
+            )
             raise
 
     def get_processing_stats(self) -> Dict[str, Any]:

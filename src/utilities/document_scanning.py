@@ -7,24 +7,33 @@ pip install pillow opencv-python numpy ocrmypdf img2pdf
 """
 
 import shutil
-import subprocess
 import tempfile
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox
-from typing import List, Optional
+from tkinter import filedialog , messagebox
+from typing import List , Optional
 
 import cv2
 import img2pdf
 import numpy as np
-from PIL import Image, ImageTk
+from PIL import Image , ImageTk
 
-from utilities.dependancy_ensurance import ensure_unpaper
+from dependancy_ensurance import (
+	ensure_ghostscript ,
+	ensure_jbig2enc ,
+	ensure_pngquant ,
+	ensure_tesseract ,
+	ensure_unpaper ,
+)
 
 
 class DocumentScanner:
     def __init__(self, root: tk.Tk):
         ensure_unpaper()
+        ensure_pngquant()
+        ensure_tesseract()
+        ensure_ghostscript()
+        ensure_jbig2enc()
 
         self.root = root
         self.root.title("Interactive Document Scanner")
@@ -140,6 +149,12 @@ class DocumentScanner:
             return
 
         self.current_image_path = self.image_queue[self.current_index]
+
+        # Skip if it's a PDF (can't display with PIL)
+        if self.current_image_path.suffix.lower() == ".pdf":
+            # Auto-accept PDFs or move to next
+            self.accept_scan()
+            return
 
         # Check if this is a pending scan approval
         is_pending = (
@@ -267,62 +282,76 @@ class DocumentScanner:
             if self.archive_copy and self.archive_copy.exists():
                 shutil.copy2(self.archive_copy, self.current_image_path)
 
+    # def preprocess_image(self, image_path: Path) -> np.ndarray:
+    #     """Preprocess image with OpenCV for better scanning"""
+    #     # Read image
+    #     img = cv2.imread(str(image_path))
+    #
+    #     # Convert to grayscale
+    #     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #
+    #     # Apply edge detection for document detection (optional - basic preprocessing)
+    #     # For a full document scanner, you'd add perspective correction here
+    #
+    #     # Denoise
+    #     denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+    #
+    #     # Increase contrast and brightness
+    #     alpha = 1.5  # Contrast
+    #     beta = 20  # Brightness
+    #     adjusted = cv2.convertScaleAbs(denoised, alpha=alpha, beta=beta)
+    #
+    #     # Apply adaptive thresholding for better text visibility
+    #     thresh = cv2.adaptiveThreshold(
+    #         adjusted, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 15
+    #     )
+    #
+    #     # Sharpen the image
+    #     kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    #     sharpened = cv2.filter2D(thresh, -1, kernel)
+    #
+    #     return sharpened
+
     def preprocess_image(self, image_path: Path) -> np.ndarray:
-        """Preprocess image with OpenCV for better scanning"""
-        # Read image
+        """Preprocess image with GENTLE enhancement (not destruction)"""
         img = cv2.imread(str(image_path))
 
-        # Convert to grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Option 1: Keep color, just denoise and sharpen
+        denoised = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
 
-        # Apply edge detection for document detection (optional - basic preprocessing)
-        # For a full document scanner, you'd add perspective correction here
-
-        # Denoise
-        denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-
-        # Increase contrast and brightness
-        alpha = 1.5  # Contrast
-        beta = 20  # Brightness
-        adjusted = cv2.convertScaleAbs(denoised, alpha=alpha, beta=beta)
-
-        # Apply adaptive thresholding for better text visibility
-        thresh = cv2.adaptiveThreshold(
-            adjusted, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 15
-        )
-
-        # Sharpen the image
-        kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-        sharpened = cv2.filter2D(thresh, -1, kernel)
+        # Slight sharpening
+        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+        sharpened = cv2.filter2D(denoised, -1, kernel)
 
         return sharpened
 
+        # Option 2: If you MUST have grayscale (for smaller files):
+        # gray = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
+        # alpha = 1.3  # Gentle contrast
+        # adjusted = cv2.convertScaleAbs(gray, alpha=alpha, beta=10)
+        # return adjusted
+
     def enhance_pdf(self, input_pdf: Path, output_pdf: Path):
-        """Enhance PDF using OCRmyPDF"""
+        """Enhance PDF using OCRmyPDF as a Python module"""
         try:
-            cmd = [
-                "ocrmypdf",
-                "--deskew",  # Deskew crooked PDFs
-                "--clean",  # Clean up image before OCR
-                "--optimize",
-                "3",  # Highest optimization
-                "--output-type",
-                "pdf",
-                str(input_pdf),
-                str(output_pdf),
-            ]
+            import ocrmypdf
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-
-            if result.returncode != 0:
-                raise Exception(f"OCRmyPDF failed: {result.stderr}")
-
-        except subprocess.TimeoutExpired:
-            raise Exception("OCR processing timed out")
-        except FileNotFoundError:
-            raise Exception(
-                "OCRmyPDF not installed. Install with: pip install ocrmypdf"
+            ocrmypdf.ocr(
+                input_file=str(input_pdf),
+                output_file=str(output_pdf),
+                deskew=True,
+                clean=True,
+                optimize=3,
+                output_type="pdf",
+                force_ocr=False,
+                skip_text=True,
             )
+
+        except ocrmypdf.exceptions.PriorOcrFoundError:
+            # PDF already has text, just copy it
+            shutil.copy2(input_pdf, output_pdf)
+        except Exception as e:
+            raise Exception(f"OCR processing failed: {str(e)}")
 
     def accept_scan(self):
         """Accept the scanned PDF"""
