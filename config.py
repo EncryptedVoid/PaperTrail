@@ -145,6 +145,7 @@ IMAGE_TYPES = [
     "psd",
     "heic",
     "heif",
+    "cr2",
 ]
 
 VIDEO_TYPES = [
