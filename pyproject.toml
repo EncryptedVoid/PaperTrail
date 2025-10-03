@@ -61,6 +61,9 @@ dependencies = [
     # Document Processing - PDF & Images
     # ============================================================================
     "PyMuPDF>=1.23.0", # Fast PDF parsing (fitz)
+    "python-docx>=1.0.0",
+    "EbookLib>=0.18",
+    "beautifulsoup4>=4.12.0",
     # 👉 PyMuPDF AUTO-INSTALLS: (minimal - mostly self-contained)
 
     "opencv-python>=4.8.0", # Computer vision
@@ -70,6 +73,7 @@ dependencies = [
     "pypdf>=3.0.0", # Alternative PDF parser
     # 👉 pypdf AUTO-INSTALLS: (minimal dependencies)
 
+    "pyexiftool>=0.5.0",
     # ============================================================================
     # Document Scanning & OCR - IMPORTANT: ocrmypdf installs img2pdf!
     # ============================================================================
@@ -209,11 +213,22 @@ vision = [
     #    - pillow-heif-cffi
 ]
 
+email_archival = [
+    "google-auth>=2.27.0,<3.0.0",
+    "google-auth-oauthlib>=1.2.0,<2.0.0",
+    "google-auth-httplib2>=0.2.0,<1.0.0",
+    "google-api-python-client>=2.116.0,<3.0.0",
+    "msal>=1.26.0,<2.0.0",
+    "python-dotenv>=1.0.1,<2.0.0",
+    "requests>=2.31.0,<3.0.0",
+    "M2Crypto>=0.41.0,<1.0.0",
+    "python-gnupg>=0.5.2,<1.0.0",
+]
 # ============================================================================
 # All Extras - Install with: pip install papertrail[all]
 # ============================================================================
 all = [
-    "papertrail[dev,vision]",
+    "papertrail[dev,vision,email_archival]",
 ]
 
 #[project.scripts]
@@ -222,16 +237,15 @@ all = [
 #papertrail-process = "papertrail.process:process_documents"
 #papertrail-setup = "papertrail.setup:initialize"
 
-#[project.urls]
-#Homepage = "https://github.com/yourusername/papertrail"
-#Repository = "https://github.com/yourusername/papertrail"
-#Documentation = "https://papertrail.readthedocs.io"
-#Issues = "https://github.com/yourusername/papertrail/issues"
-#Changelog = "https://github.com/yourusername/papertrail/blob/main/CHANGELOG.md"
+[project.urls]
+Homepage = "https://github.com/EncryptedVoid/PaperTrail"
+Repository = "https://github.com/EncryptedVoid/PaperTrail"
+Documentation = "https://github.com/EncryptedVoid/PaperTrail/blob/main/README.md"
+Issues = "https://github.com/EncryptedVoid/PaperTrail/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["papertrail*", "processors*", "utilities*", "diagnostic_tools*"]
+include = ["papertrail*", "processors*", "utilities*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.json", "*.yaml", "*.yml"]
@@ -280,20 +294,3 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
-
-# ============================================================================
-# 📋 SUMMARY OF AUTO-INSTALLED PACKAGES (DON'T ADD THESE):
-# ============================================================================
-# ❌ numpy          - Installed by: torch, opencv, transformers, pandas, librosa, etc.
-# ❌ Pillow         - Installed by: ocrmypdf, torchvision, qwen-vl-utils, pillow-heif
-# ❌ tqdm           - Installed by: transformers, accelerate
-# ❌ requests       - Installed by: transformers, ollama
-# ❌ openpyxl       - Installed by: pandas (for Excel support)
-# ❌ img2pdf        - Installed by: ocrmypdf
-# ❌ psutil         - Installed by: accelerate
-# ============================================================================
-#
-# 🔍 TO CHECK WHAT A PACKAGE INSTALLS:
-# pip install pipdeptree
-# pipdeptree -p package_name
-# ============================================================================

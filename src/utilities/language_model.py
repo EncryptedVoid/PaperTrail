@@ -93,11 +93,7 @@ class LanguageProcessor:
             self.logger.error(f"Failed to initialize LanguageProcessor: {e}")
             # Re-raise to indicate initialization failure
 
-    def extract_fields(
-        self,
-        text_description: str,
-        visual_description: str,
-    ) -> LanguageExtractionReport:
+    def extract_fields(self, content: str) -> LanguageExtractionReport:
         """
         Extract all document fields using LLM with comprehensive error handling.
 
@@ -105,11 +101,6 @@ class LanguageProcessor:
         structured field data. It iterates through all configured field prompts, handles
         individual field extraction failures gracefully, and provides detailed performance
         metrics and error reporting.
-
-        Args:
-            text_description (str): Raw text content extracted from document OCR
-            visual_description (str): AI-generated description of document visual elements
-            uuid (str): Unique identifier for the document being processed
 
         Returns:
             ExtractionReport: Structured report containing either:
@@ -126,12 +117,6 @@ class LanguageProcessor:
 
         self.logger.debug("Extracting fields from summaries...")
 
-        # Log input data sizes for debugging and optimization
-        self.logger.info(
-            f"Input sizes: OCR={len(text_description)} chars, "
-            f"Visual description={len(visual_description)} chars"
-        )
-
         try:
             # Main extraction loop - process each configured field independently
             extracted_fields: Dict[str, str] = {}
@@ -146,13 +131,8 @@ class LanguageProcessor:
                     complete_prompt: str = f"""
                     {SYSTEM_PROMPT}
 
-                    DOCUMENT DATA:
-                    =============
-                    OCR TEXT CONTENT:
-                    {text_description}
-
-                    VISUAL DESCRIPTION:
-                    {visual_description}
+                    DOCUMENT CONTENTS:
+                    {content}
 
                     TASK:
                     =====

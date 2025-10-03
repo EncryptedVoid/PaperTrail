@@ -295,7 +295,7 @@ def convert(
                 # Convert documents to PDF for standardization
                 # PDF is universal and preserves formatting
                 logger.debug(f"Converting document: {artifact.name}")
-                _convert_document(artifact, "pdf")
+                convert_document(artifact, "pdf")
                 converted_extension = ".pdf"
                 conversion_performed = True
 
@@ -765,7 +765,7 @@ def _convert_audio(file_path: Path, to_format: str) -> None:
 # ==============================================================================
 
 
-def _convert_document(file_path: Path, to_format: str) -> None:
+def convert_document(file_path: Path, to_format: str) -> None:
     """
     Convert document files preserving formatting and embedded images.
     Uses high-quality PDF rendering settings.

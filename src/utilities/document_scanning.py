@@ -1,417 +1,257 @@
 """
-Interactive Document Scanner
-A module for reviewing images and converting them to enhanced PDFs
-
-Requirements:
-pip install pillow opencv-python numpy ocrmypdf img2pdf
+Document Scanner Module - Optimized with unpaper
 """
 
+import logging
 import shutil
+import subprocess
 import tempfile
-import tkinter as tk
+from io import UnsupportedOperation
 from pathlib import Path
-from tkinter import filedialog , messagebox
-from typing import List , Optional
 
 import cv2
-import img2pdf
 import numpy as np
-from PIL import Image , ImageTk
 
-from dependancy_ensurance import (
-	ensure_ghostscript ,
-	ensure_jbig2enc ,
-	ensure_pngquant ,
-	ensure_tesseract ,
-	ensure_unpaper ,
-)
+from processors.file_conversion import convert_document
 
 
-class DocumentScanner:
-    def __init__(self, root: tk.Tk):
-        ensure_unpaper()
-        ensure_pngquant()
-        ensure_tesseract()
-        ensure_ghostscript()
-        ensure_jbig2enc()
-
-        self.root = root
-        self.root.title("Interactive Document Scanner")
-        self.root.geometry("1200x800")
-
-        # Queue management
-        self.image_queue: List[Path] = []
-        self.current_index = 0
-        self.archive_dir: Optional[Path] = None
-        self.output_dir: Optional[Path] = None
-
-        # State tracking
-        self.current_image_path: Optional[Path] = None
-        self.pending_scan: Optional[Path] = (
-            None  # Path to scanned PDF awaiting approval
+def _dewarp_page(image_path: Path, logger: logging.Logger) -> Path:
+    """Dewarp curved pages using page-dewarp library."""
+    try:
+        result = subprocess.run(
+            ["page-dewarp", "--help"], capture_output=True, timeout=5
         )
-        self.archive_copy: Optional[Path] = None  # Path to archived original
+        if result.returncode != 0:
+            logger.warning("page-dewarp not available, skipping dewarping")
+            return image_path
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        logger.warning("page-dewarp not installed, skipping dewarping")
+        return image_path
 
-        self.setup_ui()
-        self.bind_keys()
-
-    def setup_ui(self):
-        """Setup the user interface"""
-        # Top frame for controls
-        control_frame = tk.Frame(self.root, bg="#2c3e50", pady=10)
-        control_frame.pack(fill=tk.X)
-
-        # Buttons
-        tk.Button(
-            control_frame,
-            text="Load Images",
-            command=self.load_images,
-            bg="#3498db",
-            fg="white",
-            font=("Arial", 12, "bold"),
-            padx=20,
-            pady=5,
-        ).pack(side=tk.LEFT, padx=10)
-
-        # Status label
-        self.status_label = tk.Label(
-            control_frame,
-            text="No images loaded",
-            bg="#2c3e50",
-            fg="white",
-            font=("Arial", 12),
-        )
-        self.status_label.pack(side=tk.LEFT, padx=20)
-
-        # Image display frame
-        self.image_frame = tk.Frame(self.root, bg="#34495e")
-        self.image_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-
-        # Canvas for image display
-        self.canvas = tk.Canvas(self.image_frame, bg="#34495e", highlightthickness=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        # Instructions
-        instructions = tk.Label(
-            self.root,
-            text="← Left Arrow: Skip | → Right Arrow: Scan to PDF | ESC: Quit",
-            bg="#2c3e50",
-            fg="#ecf0f1",
-            font=("Arial", 14, "bold"),
-            pady=15,
-        )
-        instructions.pack(fill=tk.X)
-
-    def bind_keys(self):
-        """Bind keyboard shortcuts"""
-        self.root.bind("<Left>", lambda e: self.handle_left_arrow())
-        self.root.bind("<Right>", lambda e: self.handle_right_arrow())
-        self.root.bind("<Escape>", lambda e: self.root.quit())
-
-    def load_images(self):
-        """Load images from a directory"""
-        directory = filedialog.askdirectory(title="Select Image Directory")
-        if not directory:
-            return
-
-        directory = Path(directory)
-
-        # Set up archive and output directories
-        self.archive_dir = directory / "archive"
-        self.output_dir = directory / "scanned_pdfs"
-        self.archive_dir.mkdir(exist_ok=True)
-        self.output_dir.mkdir(exist_ok=True)
-
-        # Supported image formats
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
-
-        # Load all images
-        self.image_queue = [
-            f
-            for f in directory.iterdir()
-            if f.is_file() and f.suffix.lower() in image_extensions
-        ]
-
-        if not self.image_queue:
-            messagebox.showinfo(
-                "No Images", "No image files found in the selected directory."
-            )
-            return
-
-        self.current_index = 0
-        self.show_current_image()
-
-    def show_current_image(self):
-        """Display the current image"""
-        if not self.image_queue or self.current_index >= len(self.image_queue):
-            messagebox.showinfo("Complete", "All images processed!")
-            self.status_label.config(text="All images processed!")
-            return
-
-        self.current_image_path = self.image_queue[self.current_index]
-
-        # Skip if it's a PDF (can't display with PIL)
-        if self.current_image_path.suffix.lower() == ".pdf":
-            # Auto-accept PDFs or move to next
-            self.accept_scan()
-            return
-
-        # Check if this is a pending scan approval
-        is_pending = (
-            self.pending_scan is not None
-            and self.current_image_path == self.pending_scan
+    try:
+        output_path = (
+            image_path.parent / f"{image_path.stem}_dewarped{image_path.suffix}"
         )
 
-        # Update status
-        status_text = f"Image {self.current_index + 1}/{len(self.image_queue)}"
-        if is_pending:
-            status_text += " [REVIEWING SCAN - Right=Accept, Left=Reject]"
-        status_text += f" - {self.current_image_path.name}"
-        self.status_label.config(text=status_text)
+        result = subprocess.run(
+            ["page-dewarp", "-o", "file", str(image_path)],
+            capture_output=True,
+            timeout=30,
+        )
 
-        # Load and display image
-        try:
-            # Load image with PIL
-            img = Image.open(self.current_image_path)
+        expected_output = image_path.parent / f"{image_path.stem}_thresh.png"
 
-            # Resize to fit canvas while maintaining aspect ratio
-            canvas_width = self.canvas.winfo_width()
-            canvas_height = self.canvas.winfo_height()
-
-            if canvas_width <= 1 or canvas_height <= 1:
-                # Canvas not yet sized, use defaults
-                canvas_width, canvas_height = 1000, 600
-
-            img.thumbnail(
-                (canvas_width - 40, canvas_height - 40), Image.Resampling.LANCZOS
-            )
-
-            # Convert to PhotoImage
-            self.photo = ImageTk.PhotoImage(img)
-
-            # Clear canvas and display
-            self.canvas.delete("all")
-            self.canvas.create_image(
-                canvas_width // 2,
-                canvas_height // 2,
-                image=self.photo,
-                anchor=tk.CENTER,
-            )
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load image: {str(e)}")
-
-    def handle_left_arrow(self):
-        """Skip current image or reject scan"""
-        if not self.image_queue:
-            return
-
-        # Check if we're reviewing a scanned PDF
-        if self.pending_scan and self.current_image_path == self.pending_scan:
-            # Reject the scan
-            self.reject_scan()
+        if result.returncode == 0 and expected_output.exists():
+            logger.info("Dewarping successful")
+            expected_output.rename(output_path)
+            return output_path
         else:
-            # Skip this image
-            self.current_index += 1
-            self.show_current_image()
+            logger.warning("Dewarping failed, skipping")
+            return image_path
 
-    def handle_right_arrow(self):
-        """Process image to PDF or accept scan"""
-        if not self.image_queue:
-            return
+    except subprocess.TimeoutExpired:
+        logger.warning("Dewarping timed out")
+        return image_path
+    except Exception as e:
+        logger.warning(f"Dewarping error: {e}")
+        return image_path
 
-        # Check if we're reviewing a scanned PDF
-        if self.pending_scan and self.current_image_path == self.pending_scan:
-            # Accept the scan
-            self.accept_scan()
+
+def _enhance_output(image: np.ndarray, logger: logging.Logger) -> np.ndarray:
+    """Enhance with contrast and sharpening."""
+    try:
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         else:
-            # Start scanning process
-            self.scan_to_pdf()
+            gray = image
 
-    def scan_to_pdf(self):
-        """Scan current image to PDF with enhancement"""
-        if not self.current_image_path:
-            return
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
 
-        try:
-            # Update status
-            self.status_label.config(
-                text=f"Processing {self.current_image_path.name}..."
+        denoised = cv2.fastNlMeansDenoising(enhanced, h=10)
+
+        logger.info("Image enhancement complete")
+        return denoised
+    except Exception as e:
+        logger.warning(f"Enhancement failed: {e}")
+        return image
+
+
+def professional_scan(
+    file_path: Path, archive_dir: Path, logger: logging.Logger
+) -> Path:
+    """
+    Professionally scan and clean up a document using unpaper + enhancements.
+
+    Processing pipeline:
+    1. Archive original file
+    2. Run unpaper (deskew, split pages, remove margins, cleanup)
+    3. Dewarp (if needed for curved pages)
+    4. Enhance contrast and sharpen
+
+    Args:
+        file_path: Path to the input document
+        archive_dir: Path to directory where original will be archived
+        logger: Logger instance for output
+
+    Returns:
+        Path to the processed document
+
+    Raises:
+        RuntimeError: If scanning fails
+    """
+    if not isinstance(file_path, Path):
+        raise TypeError(f"file_path must be Path object, got {type(file_path)}")
+
+    if not isinstance(archive_dir, Path):
+        raise TypeError(f"archive_dir must be Path object, got {type(archive_dir)}")
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"Input file not found: {file_path}")
+
+    try:
+        subprocess.run(["unpaper", "--version"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise RuntimeError(
+            "unpaper not installed. Install with:\n"
+            "  Linux: sudo apt-get install unpaper\n"
+            "  Mac: brew install unpaper"
+        )
+
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    archive_path = archive_dir / file_path.name
+    logger.info(f"Archiving original file to: {archive_path}")
+    shutil.copy2(file_path, archive_path)
+
+    file_extension = file_path.suffix.lower()
+
+    try:
+        if file_extension in {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".tiff",
+            ".tif",
+            ".bmp",
+            ".ppm",
+            ".pgm",
+            ".pbm",
+        }:
+            logger.info(f"Processing image: {file_path}")
+
+            image = cv2.imread(str(file_path))
+            if image is None:
+                raise RuntimeError(f"Failed to read image: {file_path}")
+
+            with tempfile.NamedTemporaryFile(suffix=".ppm", delete=False) as tmp:
+                temp_input = Path(tmp.name)
+
+            cv2.imwrite(str(temp_input), image)
+
+            logger.info(
+                "Step 1/3: Running unpaper (deskew, cleanup, remove margins)..."
             )
-            self.root.update()
+            temp_output = temp_input.parent / f"{temp_input.stem}_unpaper.ppm"
 
-            # 1. Make archive copy
-            archive_path = self.archive_dir / self.current_image_path.name
-            shutil.copy2(self.current_image_path, archive_path)
-            self.archive_copy = archive_path
-
-            # 2. Preprocess image with OpenCV
-            processed_img = self.preprocess_image(self.current_image_path)
-
-            # 3. Save preprocessed image temporarily
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                temp_img_path = Path(tmp.name)
-                cv2.imwrite(str(temp_img_path), processed_img)
-
-            # 4. Convert to PDF using img2pdf
-            pdf_name = self.current_image_path.stem + ".pdf"
-            temp_pdf = self.output_dir / f"temp_{pdf_name}"
-
-            with open(temp_pdf, "wb") as f:
-                f.write(img2pdf.convert(str(temp_img_path)))
-
-            # 5. Enhance with OCRmyPDF
-            final_pdf = self.output_dir / pdf_name
-            self.enhance_pdf(temp_pdf, final_pdf)
-
-            # Clean up temp files
-            temp_img_path.unlink()
-            temp_pdf.unlink(missing_ok=True)
-
-            # 6. Add PDF to queue for review
-            self.image_queue.append(final_pdf)
-            self.pending_scan = final_pdf
-
-            # 7. Move to next item
-            self.current_index += 1
-            self.show_current_image()
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to scan image: {str(e)}")
-            # Restore from archive if it exists
-            if self.archive_copy and self.archive_copy.exists():
-                shutil.copy2(self.archive_copy, self.current_image_path)
-
-    # def preprocess_image(self, image_path: Path) -> np.ndarray:
-    #     """Preprocess image with OpenCV for better scanning"""
-    #     # Read image
-    #     img = cv2.imread(str(image_path))
-    #
-    #     # Convert to grayscale
-    #     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    #
-    #     # Apply edge detection for document detection (optional - basic preprocessing)
-    #     # For a full document scanner, you'd add perspective correction here
-    #
-    #     # Denoise
-    #     denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-    #
-    #     # Increase contrast and brightness
-    #     alpha = 1.5  # Contrast
-    #     beta = 20  # Brightness
-    #     adjusted = cv2.convertScaleAbs(denoised, alpha=alpha, beta=beta)
-    #
-    #     # Apply adaptive thresholding for better text visibility
-    #     thresh = cv2.adaptiveThreshold(
-    #         adjusted, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 15
-    #     )
-    #
-    #     # Sharpen the image
-    #     kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-    #     sharpened = cv2.filter2D(thresh, -1, kernel)
-    #
-    #     return sharpened
-
-    def preprocess_image(self, image_path: Path) -> np.ndarray:
-        """Preprocess image with GENTLE enhancement (not destruction)"""
-        img = cv2.imread(str(image_path))
-
-        # Option 1: Keep color, just denoise and sharpen
-        denoised = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
-
-        # Slight sharpening
-        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-        sharpened = cv2.filter2D(denoised, -1, kernel)
-
-        return sharpened
-
-        # Option 2: If you MUST have grayscale (for smaller files):
-        # gray = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
-        # alpha = 1.3  # Gentle contrast
-        # adjusted = cv2.convertScaleAbs(gray, alpha=alpha, beta=10)
-        # return adjusted
-
-    def enhance_pdf(self, input_pdf: Path, output_pdf: Path):
-        """Enhance PDF using OCRmyPDF as a Python module"""
-        try:
-            import ocrmypdf
-
-            ocrmypdf.ocr(
-                input_file=str(input_pdf),
-                output_file=str(output_pdf),
-                deskew=True,
-                clean=True,
-                optimize=3,
-                output_type="pdf",
-                force_ocr=False,
-                skip_text=True,
+            unpaper_result = subprocess.run(
+                [
+                    "unpaper",
+                    "--layout",
+                    "single",
+                    "--no-blackfilter",
+                    "--no-grayfilter",
+                    "--deskew-scan-size",
+                    "50",
+                    str(temp_input),
+                    str(temp_output),
+                ],
+                capture_output=True,
+                timeout=60,
             )
 
-        except ocrmypdf.exceptions.PriorOcrFoundError:
-            # PDF already has text, just copy it
-            shutil.copy2(input_pdf, output_pdf)
-        except Exception as e:
-            raise Exception(f"OCR processing failed: {str(e)}")
+            if unpaper_result.returncode != 0 or not temp_output.exists():
+                logger.warning(f"unpaper failed: {unpaper_result.stderr.decode()}")
+                temp_output = temp_input
 
-    def accept_scan(self):
-        """Accept the scanned PDF"""
-        if not self.pending_scan:
-            return
+            logger.info("Step 2/3: Dewarping (if needed)...")
+            dewarped_path = _dewarp_page(temp_output, logger)
 
-        # Scan accepted, move to next
-        self.pending_scan = None
-        self.archive_copy = None
-        self.current_index += 1
-        self.show_current_image()
+            logger.info("Step 3/3: Enhancing output...")
+            processed = cv2.imread(str(dewarped_path))
+            if processed is None:
+                raise RuntimeError("Failed to read processed image")
 
-    def reject_scan(self):
-        """Reject the scan and restore original"""
-        if not self.pending_scan or not self.archive_copy:
-            return
+            final_image = _enhance_output(processed, logger)
 
-        try:
-            # Delete the rejected PDF
-            if self.pending_scan.exists():
-                self.pending_scan.unlink()
+            output_path = file_path.parent / file_path
+            cv2.imwrite(str(output_path), final_image)
 
-            # Remove from queue
-            self.image_queue.remove(self.pending_scan)
+            temp_input.unlink(missing_ok=True)
+            temp_output.unlink(missing_ok=True)
+            if dewarped_path != temp_output:
+                dewarped_path.unlink(missing_ok=True)
 
-            # Restore original from archive
-            original_path = self.archive_copy.parent.parent / self.archive_copy.name
-            if self.archive_copy.exists():
-                shutil.copy2(self.archive_copy, original_path)
+            logger.info(f"✅ Scanning complete: {output_path}")
+            convert_document(file_path=output_path, to_format="pdf")
+            return output_path
 
-            # Reset state
-            self.pending_scan = None
-            self.archive_copy = None
+        elif file_extension == ".pdf":
+            logger.info(f"Processing PDF: {file_path}")
 
-            # Don't increment index - show next image
-            self.show_current_image()
+            try:
+                output_path = file_path.parent / file_path
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to reject scan: {str(e)}")
+                result = subprocess.run(
+                    [
+                        "ocrmypdf",
+                        "--deskew",
+                        "--rotate-pages",
+                        "--clean",
+                        "--unpaper-args",
+                        "--layout single",
+                        "--skip-text",
+                        "--jobs",
+                        "4",
+                        str(file_path),
+                        str(output_path),
+                    ],
+                    capture_output=True,
+                    timeout=300,
+                )
 
+                if result.returncode == 0:
+                    logger.info(f"✅ PDF scanning complete: {output_path}")
 
-def main():
-    """Main entry point for the Document Scanner application"""
-    # Create the Tkinter root window
-    root = tk.Tk()
+                else:
+                    raise RuntimeError(f"OCRmyPDF failed: {result.stderr.decode()}")
+                    return output_path
+            except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                raise RuntimeError(
+                    "OCRmyPDF not available. Install with: pip install ocrmypdf"
+                ) from e
+        else:
+            raise UnsupportedOperation(f"Unsupported file format: {file_extension}")
 
-    # Initialize the Document Scanner
-    app = DocumentScanner(root)
-
-    # Optional: Auto-load a test directory on startup
-    # Uncomment and modify the path below to skip the file dialog
-    # test_dir = Path("C:/Users/YourName/Documents/test_scans")  # Windows
-    # test_dir = Path("/Users/yourname/Documents/test_scans")    # Mac
-    # test_dir = Path("/home/yourname/Documents/test_scans")     # Linux
-    # if test_dir.exists():
-    #     app.load_specific_directory(test_dir)
-
-    # Start the application
-    root.mainloop()
+    except Exception as e:
+        logger.error(f"❌ Scanning failed: {e}")
+        logger.info(f"Original file preserved at: {archive_path}")
+        raise RuntimeError(f"Failed to scan document: {e}") from e
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    if len(sys.argv) != 3:
+        print("Usage: python document_scanner.py <input_file> <archive_dir>")
+        sys.exit(1)
+
+    try:
+        output = professional_scan(Path(sys.argv[1]), Path(sys.argv[2]), logger)
+        print(f"✅ Success! Scanned document: {output}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)

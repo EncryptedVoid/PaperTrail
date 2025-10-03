@@ -591,9 +591,6 @@ def ensure_java(min_version: int = 11) -> str:
         return "java (unavailable)"
 
 
-# Keep other functions (libpff_python, apache_tika, pdfarranger) as they were
-
-
 def ensure_libpff_python(min_version: str = "20180714") -> str:
     """
     Ensure libpff-python is installed for reading Outlook PST/OST files.
@@ -1586,3 +1583,298 @@ def get_cuda_info() -> dict:
         pass
 
     return info
+
+
+def ensure_exiftool(min_version: str = "12.0") -> str:
+    """
+    Ensure ExifTool is installed for reading/writing file metadata.
+
+    Args:
+        min_version: Minimum required version (default: "12.0")
+
+    Returns:
+        Installed version string
+
+    Raises:
+        ModuleNotFoundError: If ExifTool cannot be installed or verified
+
+    Example verification commands:
+        exiftool -ver
+        exiftool -h
+    """
+    # Check if already installed
+    if shutil.which("exiftool"):
+        success, output = _run_command(["exiftool", "-ver"])
+        if success:
+            version = output.strip()
+            print(f"✓ ExifTool already installed: version {version}")
+            return f"exiftool {version}"
+
+    os_type = _get_os()
+    print(f"Installing ExifTool on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "libimage-exiftool-perl"],
+                check=False,
+                timeout=300,
+            )
+
+        elif os_type == "Windows":
+            # Try chocolatey first
+            if _install_via_choco("exiftool"):
+                print("✓ Installed via chocolatey")
+                _refresh_windows_path()
+            else:
+                print("⚠ Native install failed, using WSL...")
+                if _ensure_wsl():
+                    print("Installing ExifTool in WSL...")
+                    _run_in_wsl(
+                        "sudo apt update -y && sudo apt install -y libimage-exiftool-perl"
+                    )
+                    success, output = _run_in_wsl("exiftool -ver")
+                    if success:
+                        print("✓ ExifTool installed in WSL")
+                        return "exiftool (WSL)"
+                    else:
+                        print("⚠ WSL install incomplete")
+                else:
+                    print("⚠ WSL unavailable. ExifTool not installed.")
+                    print("  Manual install: https://exiftool.org/")
+                return "exiftool (unavailable)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(
+                    ["brew", "install", "exiftool"], check=False, timeout=300
+                )
+            else:
+                raise ModuleNotFoundError(
+                    "ExifTool installation failed: Homebrew not found.\n"
+                    "Install Homebrew from: https://brew.sh\n"
+                    "Then run: brew install exiftool\n"
+                    "Or download from: https://exiftool.org/"
+                )
+
+        # Verify installation
+        if shutil.which("exiftool"):
+            success, output = _run_command(["exiftool", "-ver"])
+            if success:
+                version = output.strip()
+                print(f"✓ ExifTool installed successfully: version {version}")
+                print("  Verify with: exiftool -ver")
+                return f"exiftool {version}"
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("exiftool -ver")
+            if success:
+                print("✓ ExifTool available in WSL")
+                return "exiftool (WSL)"
+
+        print("⚠ ExifTool not installed, metadata features unavailable")
+        return "exiftool (unavailable)"
+
+    except Exception as e:
+        print(f"⚠ ExifTool installation error: {e}")
+        print("   Download manually from: https://exiftool.org/")
+        return "exiftool (unavailable)"
+
+
+def ensure_7zip(min_version: str = "16.0") -> str:
+    """
+    Ensure 7-Zip is installed for file compression/encryption.
+
+    Args:
+                    min_version: Minimum required version (default: "16.0")
+
+    Returns:
+                    Installed version string
+
+    Example verification commands:
+                    7z --version
+                    7z i (shows detailed info)
+    """
+    # Check if already installed
+    cmd = "7z" if shutil.which("7z") else "7za" if shutil.which("7za") else None
+
+    if cmd:
+        success, output = _run_command([cmd], timeout=5)
+        if success and "7-Zip" in output:
+            # Parse version from output
+            import re
+
+            version_match = re.search(r"7-Zip.*?(\d+\.\d+)", output)
+            if version_match:
+                version = version_match.group(1)
+                print(f"✓ 7-Zip already installed: version {version}")
+                return f"7-Zip {version}"
+            print(f"✓ 7-Zip already installed")
+            return "7-Zip (installed)"
+
+    os_type = _get_os()
+    print(f"Installing 7-Zip on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "p7zip-full"], check=False, timeout=300
+            )
+
+        elif os_type == "Windows":
+            # Try winget first
+            if _install_via_winget("7zip.7zip"):
+                print("✓ Installed via winget")
+                _refresh_windows_path()
+            # Try chocolatey
+            elif _install_via_choco("7zip"):
+                print("✓ Installed via chocolatey")
+                _refresh_windows_path()
+            # Fallback to WSL
+            else:
+                print("⚠ Native install failed, using WSL...")
+                if _ensure_wsl():
+                    print("Installing 7-Zip in WSL...")
+                    _run_in_wsl("sudo apt update -y && sudo apt install -y p7zip-full")
+                    success, output = _run_in_wsl("7z")
+                    if success:
+                        print("✓ 7-Zip installed in WSL")
+                        return "7-Zip (WSL)"
+                    else:
+                        print("⚠ WSL install incomplete")
+                else:
+                    print("⚠ WSL unavailable. 7-Zip not installed.")
+                    print("  Download from: https://www.7-zip.org/download.html")
+                return "7-Zip (unavailable)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "p7zip"], check=False, timeout=300)
+            else:
+                print("⚠ Homebrew not found")
+                print("  Install with: brew install p7zip")
+                return "7-Zip (unavailable)"
+
+        # Verify installation
+        cmd = "7z" if shutil.which("7z") else "7za" if shutil.which("7za") else None
+        if cmd:
+            success, output = _run_command([cmd], timeout=5)
+            if success:
+                import re
+
+                version_match = re.search(r"7-Zip.*?(\d+\.\d+)", output)
+                version_str = version_match.group(1) if version_match else "unknown"
+                print(f"✓ 7-Zip installed successfully: version {version_str}")
+                print("  Verify with: 7z --version")
+                return f"7-Zip {version_str}"
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("7z")
+            if success:
+                print("✓ 7-Zip available in WSL")
+                return "7-Zip (WSL)"
+
+        print("⚠ 7-Zip not installed, encryption features unavailable")
+        return "7-Zip (unavailable)"
+
+    except Exception as e:
+        print(f"⚠ 7-Zip installation error: {e}")
+        print("   Download manually from: https://www.7-zip.org/")
+        return "7-Zip (unavailable)"
+
+
+def ensure_keepassxc(min_version: str = "2.6") -> str:
+    """
+    Ensure KeePassXC is installed for password database management.
+
+    Args:
+                    min_version: Minimum required version (default: "2.6")
+
+    Returns:
+                    Installed version string
+
+    Example verification commands:
+                    keepassxc-cli --version
+                    keepassxc-cli db-info database.kdbx
+    """
+    # Check if already installed
+    if shutil.which("keepassxc-cli"):
+        success, output = _run_command(["keepassxc-cli", "--version"])
+        if success:
+            version_line = output.strip().split("\n")[0]
+            print(f"✓ KeePassXC already installed: {version_line}")
+            return version_line
+
+    os_type = _get_os()
+    print(f"Installing KeePassXC on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "keepassxc"], check=False, timeout=300
+            )
+
+        elif os_type == "Windows":
+            # Try winget first
+            if _install_via_winget("KeePassXCTeam.KeePassXC"):
+                print("✓ Installed via winget")
+                _refresh_windows_path()
+            # Try chocolatey
+            elif _install_via_choco("keepassxc"):
+                print("✓ Installed via chocolatey")
+                _refresh_windows_path()
+            # Fallback to WSL
+            else:
+                print("⚠ Native install failed, using WSL...")
+                if _ensure_wsl():
+                    print("Installing KeePassXC in WSL...")
+                    _run_in_wsl("sudo apt update -y && sudo apt install -y keepassxc")
+                    success, output = _run_in_wsl("keepassxc-cli --version")
+                    if success:
+                        print("✓ KeePassXC installed in WSL")
+                        return "KeePassXC (WSL)"
+                    else:
+                        print("⚠ WSL install incomplete")
+                else:
+                    print("⚠ WSL unavailable. KeePassXC not installed.")
+                    print("  Download from: https://keepassxc.org/download/")
+                return "KeePassXC (unavailable)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(
+                    ["brew", "install", "--cask", "keepassxc"], check=False, timeout=300
+                )
+            else:
+                print("⚠ Homebrew not found")
+                print("  Install with: brew install --cask keepassxc")
+                return "KeePassXC (unavailable)"
+
+        # Verify installation
+        if shutil.which("keepassxc-cli"):
+            success, output = _run_command(["keepassxc-cli", "--version"])
+            if success:
+                version_line = output.strip().split("\n")[0]
+                print(f"✓ KeePassXC installed successfully: {version_line}")
+                print("  Verify with: keepassxc-cli --version")
+                return version_line
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("keepassxc-cli --version")
+            if success:
+                print("✓ KeePassXC available in WSL")
+                return "KeePassXC (WSL)"
+
+        print("⚠ KeePassXC not installed, password management unavailable")
+        return "KeePassXC (unavailable)"
+
+    except Exception as e:
+        print(f"⚠ KeePassXC installation error: {e}")
+        print("   Download manually from: https://keepassxc.org/download/")
+        return "KeePassXC (unavailable)"
