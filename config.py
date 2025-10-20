@@ -594,3 +594,53 @@ ARCHIVE_EMAILS: bool = True
 PDF_ARRANGER_EXE_PATH = (
     r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\pdfarranger.exe"
 )
+
+OUTLOOK_EMAIL_ADDRESS: str = "agazi064@uottawa.ca"
+GMAIL_EMAIL_ADDRESS: str = "ashiqarib@gmail.com"
+
+EMAILS_FOR_ARCHIVAL: Dict[str, any] = {  # {
+    #     "name": "gmail",                                                               # Human-readable label (you choose this)
+    #     "email": "you@gmail.com",                                                      # Your actual email address
+    #     "maildir": Path.home() / "Maildir/Gmail",                                      # Where emails are downloaded locally
+    #     "oauth_provider": "google",                                                    # Which OAuth system (google/microsoft)
+    #     "token_file": Path.home() / ".cache/mutt_oauth2/google_you@gmail.com.tokens",  # Where tokens are stored
+    #     "oauth_helper": Path.home() / "bin/mutt_oauth2.py",                            # Script that manages tokens
+    # }
+    {
+        "name": "gmail",
+        "email": GMAIL_EMAIL_ADDRESS,
+        "maildir": "Maildir/Gmail",
+        "oauth_provider": "google",
+        "token_file": f".cache/mutt_oauth2/{GMAIL_EMAIL_ADDRESS}.tokens",
+        "oauth_helper": "bin/mutt_oauth2.py",
+    },
+    {
+        "name": "outlook",
+        "email": OUTLOOK_EMAIL_ADDRESS,
+        "maildir": "Maildir/Outlook",
+        "oauth_provider": "microsoft",
+        "token_file": f".cache/oauth2ms/{OUTLOOK_EMAIL_ADDRESS}.json",
+        "oauth_helper": "oauth2ms",  # Command-line tool
+    },
+}
+
+CONFIG = {
+    "mbsync_config": Path.home() / ".mbsyncrc",
+    "output_dirs": {
+        "sanitization": Path("/mnt/papertrail/SANITIZATION"),
+        "calendars": Path("/mnt/papertrail/CALENDARS"),
+        "archive_only": Path("/mnt/papertrail/EMAILS_ARCHIVE_ONLY"),
+        "phishing_review": Path("/mnt/papertrail/REVIEW/phishing"),
+        "raw_emails": Path("/mnt/papertrail/ARCHIVE/emails_raw"),
+    },
+    "llm": {
+        "model": "qwen2.5:14b",  # Using smaller model as recommended
+        "api_url": "http://localhost:11434/api/generate",  # Ollama
+        "timeout": 30,
+    },
+    "phishing": {
+        "rspamd_cmd": "rspamc",
+        "threshold": 5.0,
+        "use_llm_confirmation": True,
+    },
+}
