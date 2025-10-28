@@ -24,6 +24,63 @@ classifiers = [
 
 dependencies = [
     # ============================================================================
+    # Email Processing & OAuth2 Authentication
+    # ============================================================================
+    "icalendar>=5.0.0", # Calendar extraction from emails (.ics files)
+    # 👉 icalendar AUTO-INSTALLS:
+    #    - python-dateutil ✓ (already from pandas!)
+    #    - pytz ✓ (already from pandas!)
+
+    "weasyprint>=60.0", # Email → PDF conversion (modern HTML renderer)
+    # 👉 weasyprint AUTO-INSTALLS:
+    #    - Pillow ✓ (already installed)
+    #    - cffi, cssselect2, tinycss2, pydyf, brotli, fonttools, html5lib
+
+    "chardet>=5.0.0", # Character encoding detection for emails
+    # 👉 chardet AUTO-INSTALLS: (standalone library)
+
+    # === Google OAuth2 (for Gmail) ===
+    "google-auth>=2.27.0", # Google OAuth2 authentication
+    # 👉 google-auth AUTO-INSTALLS:
+    #    - cachetools, pyasn1, pyasn1-modules, rsa
+
+    "google-auth-oauthlib>=1.2.0", # Google OAuth2 flow handler
+    # 👉 google-auth-oauthlib AUTO-INSTALLS:
+    #    - google-auth ✓ (already listed)
+    #    - requests-oauthlib
+
+    "google-auth-httplib2>=0.2.0", # Google API HTTP client
+    # 👉 google-auth-httplib2 AUTO-INSTALLS:
+    #    - google-auth ✓
+    #    - httplib2
+
+    "google-api-python-client>=2.116.0", # Gmail API client
+    # 👉 google-api-python-client AUTO-INSTALLS:
+    #    - google-auth ✓
+    #    - google-auth-httplib2 ✓
+    #    - httplib2, uritemplate
+
+    # === Microsoft OAuth2 (for Outlook/Office365) ===
+    "msal>=1.26.0", # Microsoft Authentication Library
+    # 👉 msal AUTO-INSTALLS:
+    #    - requests ✓
+    #    - PyJWT, cryptography
+
+    # === Optional: Packaged OAuth2 helper (alternative to manual scripts) ===
+    "mutt-oauth2>=0.0.1", # Packaged version of mutt_oauth2.py (uses keyring instead of GPG)
+    # 👉 mutt-oauth2 AUTO-INSTALLS:
+    #    - keyring, click
+    # ⚠️ NOTE: This is optional - can also use manual mutt_oauth2.py script
+
+    # === Environment variable management ===
+    "python-dotenv>=1.0.1", # Environment variable management
+    # 👉 python-dotenv AUTO-INSTALLS: (standalone library)
+
+    # ❌ REMOVED: oauth2ms (NOT a PyPI package - install from GitHub separately)
+    # ❌ REMOVED: M2Crypto (optional, only if you want email encryption)
+    # ❌ REMOVED: python-gnupg (optional, only if you want GPG encryption)
+
+    # ============================================================================
     # Core Utilities
     # ============================================================================
     "cryptography>=41.0.0", # Encryption - NOT auto-installed, keep this
@@ -65,6 +122,10 @@ dependencies = [
     "EbookLib>=0.18",
     "beautifulsoup4>=4.12.0",
     # 👉 PyMuPDF AUTO-INSTALLS: (minimal - mostly self-contained)
+
+    "pdf2image>=1.16.3", # Convert PDF to images (requires poppler-utils system package)
+    # 👉 pdf2image AUTO-INSTALLS: pillow ✓
+    # ⚠️ SYSTEM REQUIREMENT: Needs 'poppler-utils' installed on system!
 
     "opencv-python>=4.8.0", # Computer vision
     # 👉 opencv-python AUTO-INSTALLS:
@@ -134,6 +195,13 @@ dependencies = [
     # 👉 py7zr AUTO-INSTALLS:
     #    - pycryptodomex, pyppmd, pyzstd, brotli, multivolumefile, inflate64, bcj-cffi
 
+    "rarfile>=4.0", # RAR archive support for password detection
+    # 👉 rarfile AUTO-INSTALLS: (standalone library)
+    # ⚠️ SYSTEM REQUIREMENT: Needs 'unrar' binary installed on system for extraction!
+    #    Note: Only used for password detection, not extraction in this use case
+
+    "extract-msg>=0.45.0", # Outlook MSG files
+
     "extract-msg>=0.45.0", # Outlook MSG files
     # 👉 extract-msg AUTO-INSTALLS:
     #    - compressed-rtf, ebcdic, olefile, red-black-tree-mod, RTFDE, tzlocal
@@ -168,6 +236,9 @@ dependencies = [
     # 👉 magika AUTO-INSTALLS:
     #    - numpy ✓
     #    - python-magic, onnxruntime, click
+    "pygame>=2.5.0", # Audio playback for manual review UI
+    "preview-generator",
+    "python-vlc"
 ]
 
 [project.optional-dependencies]
@@ -195,13 +266,17 @@ dev = [
 # ============================================================================
 # Vision Models - Install with: pip install papertrail[vision]
 # ============================================================================
+# ============================================================================
+# Vision Models - Install with: pip install papertrail[vision]
+# ============================================================================
 vision = [
-    "qwen-vl-utils>=0.0.1",
+    "qwen-vl-utils>=0.0.8", # Qwen Vision-Language model utilities
     # 👉 qwen-vl-utils AUTO-INSTALLS:
     #    - Pillow ✓
     #    - numpy ✓
     #    - torch ✓
     #    - transformers ✓
+    # ⚠️ NOTE: Package name has hyphens, import as: from qwen_vl_utils import ...
 
     "rawpy>=0.18.0", # RAW camera formats
     # 👉 rawpy AUTO-INSTALLS:

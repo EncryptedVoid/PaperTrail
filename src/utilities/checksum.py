@@ -3,13 +3,13 @@ import os
 from datetime import datetime
 from logging import Logger
 from pathlib import Path
-from typing import List, Set
+from typing import List , Set
 
 # Import all security-related constants from centralized configuration
 from config import (
-    CHECKSUM_ALGORITHM,
-    CHECKSUM_CHUNK_SIZE_BYTES,
-    CHECKSUM_HISTORY_FILE,
+	CHECKSUM_ALGORITHM ,
+	CHECKSUM_CHUNK_SIZE_BYTES ,
+	CHECKSUM_HISTORY_FILE ,
 )
 
 
@@ -248,7 +248,7 @@ def save_checksum(logger: Logger, checksum: str) -> None:
 
     Note:
         File I/O errors are logged but do not raise exceptions to prevent
-        interruption of processing processors. The checksum will still be
+        interruption of processing stages. The checksum will still be
         available in memory for the current session.
     """
     # Log the checksum save operation for audit trail

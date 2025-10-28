@@ -8,114 +8,73 @@ and system parameters.
 Author: Ashiq Gazi
 """
 
-from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Set
 
 
-class ProcessingMode(Enum):
-    """
-    Processing quality modes that determine the balance between speed and quality.
-
-    FAST: Optimized for speed with lower resolution and simpler processing
-    BALANCED: Good balance between speed and quality (default)
-    HIGH_QUALITY: Maximum quality with higher resolution and detailed processing
-    """
-
-    FAST = "fast"
-    BALANCED = "balanced"
-    HIGH_QUALITY = "high_quality"
-
-
-class PipelineStatus(Enum):
-    SUCCESS = "success"
-    FAILURE = "failure"
-    INCOMPLETE = "incomplete"
-
-
-class HashAlgorithm(Enum):
-    """
-    Comprehensive enumeration of supported cryptographic hash algorithms.
-
-    Security Classification:
-        RECOMMENDED: SHA-2, SHA-3, BLAKE2 families - suitable for all security applications
-        LEGACY: MD5, SHA1 - deprecated for security-critical applications
-        SPECIALIZED: SHAKE functions - for applications requiring variable-length output
-    """
-
-    # SHA-2 family - Industry standard, FIPS approved, widely supported
-    SHA256 = "sha256"
-    SHA384 = "sha384"
-    SHA512 = "sha512"
-    SHA224 = "sha224"
-
-    # SHA-3 family - Modern Keccak-based algorithms
-    SHA3_256 = "sha3_256"
-    SHA3_384 = "sha3_384"
-    SHA3_512 = "sha3_512"
-    SHA3_224 = "sha3_224"
-
-    # BLAKE2 family - Modern, fast, and secure
-    BLAKE2B = "blake2b"
-    BLAKE2S = "blake2s"
-
-    # SHAKE family - Extendable output functions
-    SHAKE_128 = "shake_128"
-    SHAKE_256 = "shake_256"
-
-    # Legacy algorithms - Deprecated for security-critical applications
-    MD5 = "md5"
-    SHA1 = "sha1"
-
-
-# ============================================================================
-# BASE DIRECTORIES AND PATHS
-# ============================================================================
-
 # Resource directories
-BASE_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail")
+TARGET_DRIVE: Path = Path("E\\")
+BASE_DIR: Path = Path(f"{TARGET_DRIVE}PAPERTRAIL-PROCESSING")
 UNPROCESSED_ARTIFACTS_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail-Load")
-PASSPHRASE_WORDLIST_PATH: Path = Path("assets/mit_wordlist.txt")
 
 # Immutable/permanent locations
 ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "DATA/artifact_profiles"
 CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "DATA/checksum_history.txt"
-LOG_DIR: Path = BASE_DIR / "DATA/logs"
-ARCHIVAL_DIR: Path = BASE_DIR / "DATA/archive"
+LOG_DIR: Path = BASE_DIR / "LOGS"
+ARCHIVAL_DIR: Path = BASE_DIR / "ARCHIVE"
 TEMP_DIR: Path = BASE_DIR / "TEMP"
 
+LINKWARDEN_DIR: Path = TARGET_DRIVE / "LINKWARDEN"
+ANKI_DIR: Path = TARGET_DRIVE / "ANKI"
+BITWARDEN_DIR: Path = TARGET_DRIVE / "BITWARDEN"
+FIREFLYIII_DIR: Path = TARGET_DRIVE / "FIREFLY-III"
+RESOURCESPACE_DIR: Path = TARGET_DRIVE / "RESOURCE-SPACE"
+IMMICH_DIR: Path = TARGET_DRIVE / "IMMICH"
+AFFINE_DIR: Path = TARGET_DRIVE / "AFFINE"
+PERFORMANCE_PORTFOLIO_DIR: Path = TARGET_DRIVE / "PERFORMANCE_PORTFOLIO"
+CALIBRE_LIBRARY_DIR: Path = TARGET_DRIVE / "CALIBRE_LIBRARY"
+GITLAB_DIR: Path = TARGET_DRIVE / "GITLAB"
+
 # Main processing pipeline stages
-FAILED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/00_review_failures"
-SANITIZED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/01_sanitized"
-REVIEWED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/02_reviewed"
-CONVERTED_ARTIFACT_DIR: Path = BASE_DIR / "PROCESSING/03_converted"
-ANALYSED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/04_analysed"
-ENCRYPTED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/05_encrypted"
-TABULATED_DIR: Path = BASE_DIR / "PROCESSING/06_tabulated"
-COMPLETED_ARTIFACTS_DIR: Path = BASE_DIR / "PROCESSING/07_completed"
+EMAIL_OUTPUT_DIR = BASE_DIR / "EMAIL_BACKUP"
+IMPORTANT_EMAILS_DIR = UNPROCESSED_ARTIFACTS_DIR
+UNIMPORTANT_EMAILS_DIR = ARCHIVAL_DIR
+EMAIL_ARTIFACTS_DIR = UNPROCESSED_ARTIFACTS_DIR
+
+DUPLICATE_ARTIFACTS_DIR: Path = BASE_DIR / "REVIEW/DUPLICATES"
+CORRUPTED_ARTIFACTS_DIR: Path = BASE_DIR / "REVIEW/CORRUPTED_ARTIFACTS"
+UNSUPPORTED_ARTIFACTS_DIR: Path = BASE_DIR / "REVIEW/UNSUPPORTED_ARTIFACTS"
+PASSWORD_PROTECTED_ARTIFACTS_DIR: Path = (
+    BASE_DIR / "REVIEW/PASSWORD_PROTECTED_ARTIFACTS"
+)
 
 # System directories collection
 SYSTEM_DIRECTORIES: Set[Path] = {
+    TARGET_DRIVE,
     BASE_DIR,
+    UNPROCESSED_ARTIFACTS_DIR,
     ARTIFACT_PROFILES_DIR,
     CHECKSUM_HISTORY_FILE,
     LOG_DIR,
     ARCHIVAL_DIR,
     TEMP_DIR,
-    FAILED_ARTIFACTS_DIR,
-    SANITIZED_ARTIFACTS_DIR,
-    REVIEWED_ARTIFACTS_DIR,
-    CONVERTED_ARTIFACT_DIR,
-    ANALYSED_ARTIFACTS_DIR,
-    ENCRYPTED_ARTIFACTS_DIR,
-    TABULATED_DIR,
-    COMPLETED_ARTIFACTS_DIR,
+    LINKWARDEN_DIR,
+    ANKI_DIR,
+    BITWARDEN_DIR,
+    FIREFLYIII_DIR,
+    RESOURCESPACE_DIR,
+    IMMICH_DIR,
+    AFFINE_DIR,
+    PERFORMANCE_PORTFOLIO_DIR,
+    EMAIL_OUTPUT_DIR,
+    IMPORTANT_EMAILS_DIR,
+    UNIMPORTANT_EMAILS_DIR,
+    EMAIL_ARTIFACTS_DIR,
+    DUPLICATE_ARTIFACTS_DIR,
+    CORRUPTED_ARTIFACTS_DIR,
+    UNSUPPORTED_ARTIFACTS_DIR,
+    PASSWORD_PROTECTED_ARTIFACTS_DIR,
 }
-
-
-# ============================================================================
-# FILE TYPE DEFINITIONS
-# ============================================================================
 
 EMAIL_TYPES = ["eml", "msg", "mbox", "emlx"]
 
@@ -193,51 +152,56 @@ ARCHIVE_TYPES = [
     "tar.xz",
 ]
 
-CODE_TYPES = [
-    "python",
-    "javascript",
-    "java",
-    "cpp",
-    "c",
-    "csharp",
-    "html",
-    "css",
-    "php",
-    "ruby",
-    "go",
-    "rust",
-    "sql",
+CODE_EXTENSIONS = [
+    ".py",
+    ".js",
+    ".java",
+    ".cpp",
+    ".c",
+    ".cs",
+    ".html",
+    ".css",
+    ".php",
+    ".rb",
+    ".go",
+    ".rs",
+    ".sql",
+    ".swift",
+    ".kt",
+    ".ts",
+    ".sh",
+    ".ps1",
+    ".pl",
+    ".r",
+    ".jl",
+    ".lua",
+    ".scala",
+    ".m",
+    ".asm",
 ]
 
-
-# ============================================================================
-# SECURITY AND ENCRYPTION SETTINGS
-# ============================================================================
+# SHA-2 family - Industry standard, FIPS approved, widely supported
+# SHA256 = "sha256"
+# SHA384 = "sha384"
+# SHA512 = "sha512"
+# SHA224 = "sha224"
+# SHA3_256 = "sha3_256"
+# SHA3_384 = "sha3_384"
+# SHA3_512 = "sha3_512"
+# SHA3_224 = "sha3_224"
+# BLAKE2 family - Modern, fast, and secure
+# BLAKE2B = "blake2b"
+# BLAKE2S = "blake2s"
+# SHAKE family - Extendable output functions
+# SHAKE_128 = "shake_128"
+# SHAKE_256 = "shake_256"
+# Legacy algorithms - Deprecated for security-critical applications
+# MD5 = "md5"
+# SHA1 = "sha1"
 
 # Checksum algorithm for duplicate detection and integrity verification
-CHECKSUM_ALGORITHM: HashAlgorithm = HashAlgorithm.SHA3_512
+CHECKSUM_ALGORITHM = "sha3_512"
 CHECKSUM_CHUNK_SIZE_BYTES: int = 8192
-
-# File encryption constants
-SALT_LENGTH_BYTES: int = 16
-KEY_DERIVATION_ITERATIONS: int = 100000
-ENCRYPTED_FILE_EXTENSION: str = ".encrypted"
-
-# Password generation constants
-DEFAULT_PASSWORD_LENGTH: int = 16
-DEFAULT_PASSPHRASE_WORD_COUNT: int = 6
-DEFAULT_WORD_SEPARATOR: str = "-"
-SIMILAR_CHARACTERS: str = "0O1lI|"  # Characters that look similar
-SYMBOL_CHARACTERS: str = r"!@#$%^&*()_+-=[]{}|;:,.<>?"
-MINIMUM_WORD_LENGTH: int = 3
-RANDOM_NUMBER_MIN: int = 10
-RANDOM_NUMBER_MAX: int = 99
-MAX_PASSWORD_GENERATION_ATTEMPTS: int = 50
-MINIMUM_WORD_LENGTH = 3  # Minimum word length for passphrase generation
-
-# ============================================================================
-# ARTIFACT AND PROFILE NAMING
-# ============================================================================
 
 ARTIFACT_PREFIX: str = "ARTIFACT"
 PROFILE_PREFIX: str = "PROFILE"
@@ -247,139 +211,13 @@ UUID_PREFIX: str = ""
 INCLUDE_TIMESTAMP_ON_UUID: bool = False
 UUID_ENTROPY: int = 16
 
-
-# ============================================================================
-# PROCESSING LIMITS AND THRESHOLDS
-# ============================================================================
-
-# Performance and processing limits
-MAX_FILE_SIZE_MB: int = 500
-MAX_FILES_PER_BATCH: int = 1000
-METADATA_EXTRACTION_TIMEOUT: int = 300  # seconds
-
-# GPU and memory settings
-GPU_MEMORY_LIMIT_PERCENT: float = 75.0
-MODEL_REFRESH_INTERVAL: int = 20
-MAX_MEMORY_THRESHOLD_PERCENT: float = 75.0
-
-# Processing thresholds
-MAX_PROCESSING_TIME_PER_DOC: float = 60.0  # seconds
-MIN_TEXT_SUCCESS_RATE: float = 0.8
-MIN_DESCRIPTION_SUCCESS_RATE: float = 0.8
-MAX_AVERAGE_PROCESSING_TIME: float = 30.0  # seconds
-MAX_GPU_MEMORY_PERCENT: float = 90.0
-
-
-# ============================================================================
-# LOGGING CONFIGURATION
-# ============================================================================
-
 LOG_LEVEL: str = "INFO"
 LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-LOG_FILE_MAX_SIZE: int = 10 * 1024 * 1024  # 10MB
-LOG_FILE_BACKUP_COUNT: int = 5
 SESSION_LOG_FILE_PREFIX: str = "PAPERTRAIL-SESSION"
-
-
-# ============================================================================
-# PROCESSING FLAGS
-# ============================================================================
-
-ENABLE_ADVANCED_METADATA: bool = True
-ENABLE_INTEGRITY_VERIFICATION: bool = True
-ENABLE_ROLLBACK_RECORDS: bool = True
-ENABLE_PROGRESS_TRACKING: bool = True
-ENABLE_DETAILED_LOGGING: bool = True
-
-
-# ============================================================================
-# CONVERSION AND ENHANCEMENT SETTINGS
-# ============================================================================
-
-# File detection settings
-USE_CONTENT_DETECTION: bool = True
-REQUIRE_DETECTION_AGREEMENT: bool = False
-
-# Quality enhancement settings
-ENABLE_IMAGE_ENHANCEMENT: bool = True
-ENABLE_VIDEO_ENHANCEMENT: bool = True
-ENABLE_AUDIO_ENHANCEMENT: bool = True
-ENABLE_UPSCALING: bool = True
-
-# Image processing settings
-IMAGE_TARGET_SIZE: int = 1920  # HD minimum for upscaling
-IMAGE_SHARPENING_FACTOR: float = 1.1
-IMAGE_CONTRAST_FACTOR: float = 1.05
-IMAGE_UPSCALE_THRESHOLD: int = 1920
-PNG_COMPRESS_LEVEL: int = 0  # 0 = no compression, 9 = max compression
-
-# Video processing settings
-VIDEO_CRF: int = 18  # Lower = better quality (0-51 scale)
-VIDEO_PRESET: str = "slow"
-VIDEO_CODEC: str = "libx264"
-VIDEO_PIXEL_FORMAT: str = "yuv420p"
-VIDEO_UPSCALE_THRESHOLD: int = 1920
-VIDEO_4K_THRESHOLD: int = 3840
-VIDEO_TARGET_1080P: int = 1080
-VIDEO_TARGET_4K: int = 2160
-
-# Audio processing settings
-AUDIO_BITRATE: str = "320k"
-AUDIO_SAMPLE_RATE: int = 48000
-AUDIO_CODEC: str = "libmp3lame"
-
-# Document processing settings
-LIBREOFFICE_TIMEOUT: int = 60  # seconds
-
-
-# ============================================================================
-# AI MODEL CONFIGURATION
-# ============================================================================
 
 # Preferred models
 PREFERRED_VISUAL_MODEL: str = "Qwen/Qwen2-VL-2B-Instruct"
 PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
-
-# Visual processing settings
-DEFAULT_REFRESH_INTERVAL: int = 5
-DEFAULT_MEMORY_THRESHOLD: float = 80.0
-DEFAULT_AUTO_MODEL_SELECTION: bool = True
-DEFAULT_PROCESSING_MODE: ProcessingMode = ProcessingMode.HIGH_QUALITY
-
-# Hardware resource allocation ratios
-RAM_USAGE_RATIO: float = 0.7  # Use 70% of total RAM
-VRAM_USAGE_RATIO: float = 0.8  # Use 80% of total VRAM
-
-# PDF processing zoom factors
-ZOOM_FACTOR_FAST: float = 1.5
-ZOOM_FACTOR_BALANCED: float = 2.0
-ZOOM_FACTOR_HIGH_QUALITY: float = 3.0
-
-# Model specifications
-QWEN2VL_2B_MIN_VRAM: float = 4.0
-QWEN2VL_2B_MIN_RAM: float = 8.0
-QWEN2VL_2B_QUALITY: int = 7
-QWEN2VL_2B_MAX_TOKENS: int = 512
-
-QWEN2VL_7B_MIN_VRAM: float = 14.0
-QWEN2VL_7B_MIN_RAM: float = 16.0
-QWEN2VL_7B_QUALITY: int = 9
-QWEN2VL_7B_MAX_TOKENS: int = 512
-
-QWEN2VL_72B_MIN_VRAM: float = 144.0
-QWEN2VL_72B_MIN_RAM: float = 200.0
-QWEN2VL_72B_QUALITY: int = 10
-QWEN2VL_72B_MAX_TOKENS: int = 1024
-
-QWEN2VL_7B_CPU_MIN_VRAM: float = 0.0
-QWEN2VL_7B_CPU_MIN_RAM: float = 32.0
-QWEN2VL_7B_CPU_QUALITY: int = 8
-QWEN2VL_7B_CPU_MAX_TOKENS: int = 512
-
-
-# ============================================================================
-# LLM FIELD EXTRACTION PROMPTS
-# ============================================================================
 
 SYSTEM_PROMPT: str = """You are a document extraction tool. Extract ONLY the requested information.
 
@@ -464,13 +302,6 @@ Note:
 Present observations in formal, official terminology suitable for administrative records.""",
 }
 
-# Password vault for storing encryption passwords securely
-PASSWORD_VAULT_PATH = Path("data/password_vault.encrypted")
-VAULT_MASTER_KEY: str = "password"
-
-USE_PASSPHRASE_ENCRYPTION: bool = False
-ENCRYPT_ARTIFACTS: bool = True
-
 # File type mappings
 EXTENSION_MAPPING = {
     # Images
@@ -513,9 +344,9 @@ TARGET_FORMATS = {
 }
 
 JAVA_PATH: str = "java"
-TIKA_APP_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
-TIKA_SERVER_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
-TIKA_SERVER_STANDARD_JAR_PATH = r"/assets/tika-app-3.2.3.jar"
+TIKA_APP_JAR_PATH = (
+    r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\tika-app-3.2.3.jar"
+)
 MIN_JAVA_VERSION: int = 11
 MIN_FILE_TYPE_CONF_SCORE: float = 75.0
 
@@ -524,9 +355,7 @@ MIN_SILENCE_LEN_MS: int = 1000
 MIN_NONSILENT_RATIO: float = 0.01
 RMS_ENERGY_THRESHOLD_DB: float = -40.0
 PREFERRED_AUDIO_MODEL = "large-v3"  # or "medium", "base", "small", "tiny"
-MIN_TRANSCRIPTION_SUCCESS_RATE = 0.7  # 70% minimum success rate
-MAX_PDF_SIZE_BEFORE_SUBSETTING: int = 8
-
+MIN_TRANSCRIPTION_SUCCESS_RATE = 0.9  # 90% minimum success rate
 
 # Language code mapping (ISO 639-3 to full names for pdf2zh)
 LANGUAGE_MAP = {
@@ -586,61 +415,9 @@ TRANSLATION_WATERMARKS: Dict[str, str] = {
     "ENG": f"This document has been translated using PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) from English",
 }
 
-INCLUDE_SPECIAL_SYMBOLS_IN_PASSWORD: bool = True
-EXCLUDE_VISUALLY_SIMILAR_CHARS_IN_PASSWORD: bool = True
-
-ARCHIVE_EMAILS: bool = True
-
 PDF_ARRANGER_EXE_PATH = (
     r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\pdfarranger.exe"
 )
 
-OUTLOOK_EMAIL_ADDRESS: str = "agazi064@uottawa.ca"
-GMAIL_EMAIL_ADDRESS: str = "ashiqarib@gmail.com"
-
-EMAILS_FOR_ARCHIVAL: Dict[str, any] = {  # {
-    #     "name": "gmail",                                                               # Human-readable label (you choose this)
-    #     "email": "you@gmail.com",                                                      # Your actual email address
-    #     "maildir": Path.home() / "Maildir/Gmail",                                      # Where emails are downloaded locally
-    #     "oauth_provider": "google",                                                    # Which OAuth system (google/microsoft)
-    #     "token_file": Path.home() / ".cache/mutt_oauth2/google_you@gmail.com.tokens",  # Where tokens are stored
-    #     "oauth_helper": Path.home() / "bin/mutt_oauth2.py",                            # Script that manages tokens
-    # }
-    {
-        "name": "gmail",
-        "email": GMAIL_EMAIL_ADDRESS,
-        "maildir": "Maildir/Gmail",
-        "oauth_provider": "google",
-        "token_file": f".cache/mutt_oauth2/{GMAIL_EMAIL_ADDRESS}.tokens",
-        "oauth_helper": "bin/mutt_oauth2.py",
-    },
-    {
-        "name": "outlook",
-        "email": OUTLOOK_EMAIL_ADDRESS,
-        "maildir": "Maildir/Outlook",
-        "oauth_provider": "microsoft",
-        "token_file": f".cache/oauth2ms/{OUTLOOK_EMAIL_ADDRESS}.json",
-        "oauth_helper": "oauth2ms",  # Command-line tool
-    },
-}
-
-CONFIG = {
-    "mbsync_config": Path.home() / ".mbsyncrc",
-    "output_dirs": {
-        "sanitization": Path("/mnt/papertrail/SANITIZATION"),
-        "calendars": Path("/mnt/papertrail/CALENDARS"),
-        "archive_only": Path("/mnt/papertrail/EMAILS_ARCHIVE_ONLY"),
-        "phishing_review": Path("/mnt/papertrail/REVIEW/phishing"),
-        "raw_emails": Path("/mnt/papertrail/ARCHIVE/emails_raw"),
-    },
-    "llm": {
-        "model": "qwen2.5:14b",  # Using smaller model as recommended
-        "api_url": "http://localhost:11434/api/generate",  # Ollama
-        "timeout": 30,
-    },
-    "phishing": {
-        "rspamd_cmd": "rspamc",
-        "threshold": 5.0,
-        "use_llm_confirmation": True,
-    },
-}
+GMAIL_ADDRESS = "ashiqarib@gmail.com"
+OUTLOOK_ADDRESS = "agazi064@uottawa.ca"

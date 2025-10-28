@@ -1,3 +1,4 @@
+import os
 import platform
 import shutil
 import subprocess
@@ -931,12 +932,17 @@ def ensure_pdfarranger(min_version: str = "1.8") -> str:
         raise ModuleNotFoundError(f"pdfarranger installation failed: {e}")
 
 
-def ensure_ollama(min_version: str = "0.1") -> str:
+def ensure_ollama(
+    min_version: str = "0.1", start_server: bool = True, port: int = 11434
+) -> str:
     """
-    Ensure Ollama is installed for running local LLMs.
+    Ensure Ollama is installed and optionally start the server.
+    Kills any existing Ollama servers to ensure clean state.
 
     Args:
                     min_version: Minimum required version (default: "0.1")
+                    start_server: Whether to start ollama serve (default: True)
+                    port: Port for Ollama server (default: 11434)
 
     Returns:
                     Installed version string
@@ -949,66 +955,187 @@ def ensure_ollama(min_version: str = "0.1") -> str:
                     ollama list
                     ollama serve (to start the server)
     """
+    import psutil
+    import time
+    import requests
+
     # Check if already installed
     if shutil.which("ollama"):
         success, output = _run_command(["ollama", "--version"])
         if success:
             version_line = output.strip()
             print(f"✓ Ollama already installed: {version_line}")
-            return version_line
-
-    # Install based on OS
-    os_type = _get_os()
-    print(f"Installing Ollama on {os_type}...")
-
-    try:
-        if os_type == "Linux":
-            # Use official install script
-            print("Running official Ollama install script...")
-            install_script = "curl -fsSL https://ollama.com/install.sh | sh"
-            subprocess.run(install_script, shell=True, check=True, timeout=300)
-        elif os_type == "Windows":
-            if shutil.which("winget"):
-                subprocess.run(
-                    ["winget", "install", "--id", "Ollama.Ollama", "-e"],
-                    check=True,
-                    timeout=300,
-                )
-            else:
-                raise ModuleNotFoundError(
-                    "Ollama installation failed: winget not found.\n"
-                    "Download installer from: https://ollama.com/download/windows"
-                )
-        elif os_type == "Darwin":
-            # Check if Homebrew available
-            if shutil.which("brew"):
-                subprocess.run(["brew", "install", "ollama"], check=True, timeout=300)
-            else:
-                # Suggest manual download
-                raise ModuleNotFoundError(
-                    "Ollama installation failed: Homebrew not found.\n"
-                    "Download from: https://ollama.com/download/mac\n"
-                    "Or install with: brew install ollama"
-                )
         else:
-            raise ModuleNotFoundError(f"Unsupported OS: {os_type}")
+            version_line = "unknown"
+    else:
+        # Install based on OS
+        os_type = _get_os()
+        print(f"Installing Ollama on {os_type}...")
 
-        # Verify installation
-        if shutil.which("ollama"):
-            success, output = _run_command(["ollama", "--version"])
-            if success:
-                version_line = output.strip()
-                print(f"✓ Ollama installed successfully: {version_line}")
-                print("  Verify with: ollama --version")
-                print("  Start server with: ollama serve")
-                return version_line
+        try:
+            if os_type == "Linux":
+                # Use official install script
+                print("Running official Ollama install script...")
+                install_script = "curl -fsSL https://ollama.com/install.sh | sh"
+                subprocess.run(install_script, shell=True, check=True, timeout=300)
+            elif os_type == "Windows":
+                if shutil.which("winget"):
+                    subprocess.run(
+                        ["winget", "install", "--id", "Ollama.Ollama", "-e"],
+                        check=True,
+                        timeout=300,
+                    )
+                else:
+                    raise ModuleNotFoundError(
+                        "Ollama installation failed: winget not found.\n"
+                        "Download installer from: https://ollama.com/download/windows"
+                    )
+            elif os_type == "Darwin":
+                # Check if Homebrew available
+                if shutil.which("brew"):
+                    subprocess.run(
+                        ["brew", "install", "ollama"], check=True, timeout=300
+                    )
+                else:
+                    # Suggest manual download
+                    raise ModuleNotFoundError(
+                        "Ollama installation failed: Homebrew not found.\n"
+                        "Download from: https://ollama.com/download/mac\n"
+                        "Or install with: brew install ollama"
+                    )
+            else:
+                raise ModuleNotFoundError(f"Unsupported OS: {os_type}")
 
-        raise ModuleNotFoundError(
-            "Ollama installation completed but command not found in PATH"
-        )
+            # Verify installation
+            if shutil.which("ollama"):
+                success, output = _run_command(["ollama", "--version"])
+                if success:
+                    version_line = output.strip()
+                    print(f"✓ Ollama installed successfully: {version_line}")
+                else:
+                    version_line = "unknown"
+            else:
+                raise ModuleNotFoundError(
+                    "Ollama installation completed but command not found in PATH"
+                )
 
-    except subprocess.CalledProcessError as e:
-        raise ModuleNotFoundError(f"Ollama installation failed: {e}")
+        except subprocess.CalledProcessError as e:
+            raise ModuleNotFoundError(f"Ollama installation failed: {e}")
+
+    # =========================================================================
+    # SERVER MANAGEMENT
+    # =========================================================================
+
+    if start_server:
+        print("\n" + "=" * 60)
+        print("Ollama Server Management")
+        print("=" * 60)
+
+        # Step 1: Kill any existing Ollama processes
+        print("Checking for existing Ollama servers...")
+        killed_count = 0
+
+        try:
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                try:
+                    # Check if process is ollama serve
+                    if proc.info["name"] and "ollama" in proc.info["name"].lower():
+                        cmdline = proc.info.get("cmdline", [])
+                        if cmdline and any(
+                            "serve" in str(arg).lower() for arg in cmdline
+                        ):
+                            print(
+                                f"  Killing existing Ollama server (PID: {proc.info['pid']})"
+                            )
+                            proc.kill()
+                            killed_count += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+            if killed_count > 0:
+                print(f"✓ Killed {killed_count} existing Ollama server(s)")
+                time.sleep(2)  # Give processes time to clean up
+            else:
+                print("✓ No existing Ollama servers found")
+
+        except Exception as e:
+            print(f"⚠️  Warning: Could not check for existing processes: {e}")
+
+        # Step 2: Start new Ollama server
+        print(f"\nStarting Ollama server on port {port}...")
+
+        os_type = _get_os()
+
+        try:
+            if os_type == "Windows":
+                # Windows: Start as detached process
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                server_process = subprocess.Popen(
+                    ["ollama", "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    startupinfo=startupinfo,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    | subprocess.DETACHED_PROCESS,
+                )
+            else:
+                # Linux/Mac: Start as background process
+                server_process = subprocess.Popen(
+                    ["ollama", "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,  # Detach from parent
+                )
+
+            print(f"  Started Ollama server (PID: {server_process.pid})")
+
+            # Step 3: Wait for server to be ready
+            print("  Waiting for server to be ready...", end="", flush=True)
+
+            max_wait = 30  # seconds
+            start_time = time.time()
+            server_ready = False
+
+            while time.time() - start_time < max_wait:
+                try:
+                    response = requests.get(
+                        f"http://localhost:{port}/api/tags", timeout=2
+                    )
+                    if response.status_code == 200:
+                        server_ready = True
+                        break
+                except requests.exceptions.RequestException:
+                    pass
+
+                print(".", end="", flush=True)
+                time.sleep(1)
+
+            print()  # Newline
+
+            if server_ready:
+                print(f"✓ Ollama server is ready on http://localhost:{port}")
+                print(f"  Server PID: {server_process.pid}")
+                print(f"  Verify with: curl http://localhost:{port}/api/tags")
+            else:
+                print(
+                    f"⚠️  Warning: Server started but not responding after {max_wait}s"
+                )
+                print(f"  Server may still be initializing...")
+                print(f"  Check manually: curl http://localhost:{port}/api/tags")
+
+        except FileNotFoundError:
+            raise ModuleNotFoundError(
+                "Ollama command not found. Installation may have failed."
+            )
+        except Exception as e:
+            raise ModuleNotFoundError(f"Failed to start Ollama server: {e}")
+
+        print("=" * 60)
+
+    return version_line
 
 
 def ensure_unpaper(min_version: str = "6.1") -> str:
@@ -1878,3 +2005,775 @@ def ensure_keepassxc(min_version: str = "2.6") -> str:
         print(f"⚠ KeePassXC installation error: {e}")
         print("   Download manually from: https://keepassxc.org/download/")
         return "KeePassXC (unavailable)"
+
+
+def ensure_isync(min_version: str = "1.3") -> str:
+    """
+    Ensure isync (mbsync) is installed for IMAP mailbox synchronization.
+
+    Args:
+                    min_version: Minimum required version (default: "1.3")
+
+    Returns:
+                    Installed version string
+
+    Example verification commands:
+                    mbsync --version
+                    mbsync -h
+    """
+    # Check if already installed
+    if shutil.which("mbsync"):
+        success, output = _run_command(["mbsync", "--version"])
+        if success:
+            version_line = output.strip().split("\n")[0]
+            print(f"✓ isync (mbsync) already installed: {version_line}")
+            return version_line
+
+    os_type = _get_os()
+    print(f"Installing isync (mbsync) on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "isync"], check=False, timeout=300
+            )
+
+        elif os_type == "Windows":
+            # Try winget first
+            if _install_via_winget("isync.isync"):
+                print("✓ Installed via winget")
+                _refresh_windows_path()
+            # Try chocolatey
+            elif _install_via_choco("isync"):
+                print("✓ Installed via chocolatey")
+                _refresh_windows_path()
+            # Fallback to WSL
+            else:
+                print("⚠ Native install failed, using WSL...")
+                if _ensure_wsl():
+                    print("Installing isync in WSL...")
+                    _run_in_wsl("sudo apt update -y && sudo apt install -y isync")
+                    success, output = _run_in_wsl("mbsync --version")
+                    if success:
+                        print("✓ isync (mbsync) installed in WSL")
+                        return "isync (WSL)"
+                    else:
+                        print("⚠ WSL install incomplete")
+                else:
+                    print("⚠ WSL unavailable. isync not installed.")
+                    print("  Build from source: https://isync.sourceforge.io/")
+                return "isync (unavailable)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "isync"], check=False, timeout=300)
+            else:
+                print("⚠ Homebrew not found")
+                print("  Install with: brew install isync")
+                return "isync (unavailable)"
+
+        # Verify installation
+        if shutil.which("mbsync"):
+            success, output = _run_command(["mbsync", "--version"])
+            if success:
+                version_line = output.strip().split("\n")[0]
+                print(f"✓ isync (mbsync) installed successfully: {version_line}")
+                print("  Verify with: mbsync --version")
+                return version_line
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("mbsync --version")
+            if success:
+                print("✓ isync (mbsync) available in WSL")
+                return "isync (WSL)"
+
+        print("⚠ isync (mbsync) not installed, email sync unavailable")
+        return "isync (unavailable)"
+
+    except Exception as e:
+        print(f"⚠ isync installation error: {e}")
+        print("   Visit: https://isync.sourceforge.io/")
+        return "isync (unavailable)"
+
+
+def ensure_rspamd(min_version: str = "2.0") -> str:
+    """
+    Ensure rspamd is installed for spam/phishing detection (optional).
+
+    Args:
+                    min_version: Minimum required version (default: "2.0")
+
+    Returns:
+                    Installed version string
+
+    Example verification commands:
+                    rspamd --version
+                    rspamadm --help
+    """
+    # Check if already installed
+    if shutil.which("rspamd"):
+        success, output = _run_command(["rspamd", "--version"])
+        if success:
+            version_line = output.strip().split("\n")[0]
+            print(f"✓ rspamd already installed: {version_line}")
+            return version_line
+
+    os_type = _get_os()
+    print(f"Installing rspamd on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "rspamd"], check=False, timeout=300
+            )
+
+        elif os_type == "Windows":
+            print("⚠ rspamd has limited Windows support, using WSL...")
+            if _ensure_wsl():
+                print("Installing rspamd in WSL...")
+                _run_in_wsl("sudo apt update -y && sudo apt install -y rspamd")
+                success, output = _run_in_wsl("rspamd --version")
+                if success:
+                    print("✓ rspamd installed in WSL")
+                    return "rspamd (WSL)"
+                else:
+                    print("⚠ WSL install incomplete")
+            else:
+                print("⚠ WSL unavailable. rspamd not installed.")
+                print("  This is optional - email will work without it")
+            return "rspamd (unavailable - optional)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "rspamd"], check=False, timeout=300)
+            else:
+                print("⚠ Homebrew not found")
+                print("  Install with: brew install rspamd")
+                return "rspamd (unavailable - optional)"
+
+        # Verify installation
+        if shutil.which("rspamd"):
+            success, output = _run_command(["rspamd", "--version"])
+            if success:
+                version_line = output.strip().split("\n")[0]
+                print(f"✓ rspamd installed successfully: {version_line}")
+                print("  Verify with: rspamd --version")
+                return version_line
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("rspamd --version")
+            if success:
+                print("✓ rspamd available in WSL")
+                return "rspamd (WSL)"
+
+        print("⚠ rspamd not installed (optional - spam detection unavailable)")
+        return "rspamd (unavailable - optional)"
+
+    except Exception as e:
+        print(f"⚠ rspamd installation error: {e}")
+        print("   This is optional - email will work without it")
+        return "rspamd (unavailable - optional)"
+
+
+def ensure_wget(min_version: str = "1.19") -> str:
+    """
+    Ensure wget is installed for downloading files.
+
+    Args:
+                    min_version: Minimum required version (default: "1.19")
+
+    Returns:
+                    Installed version string
+
+    Example verification commands:
+                    wget --version
+    """
+    # Check if already installed
+    if shutil.which("wget"):
+        success, output = _run_command(["wget", "--version"])
+        if success:
+            version_line = output.strip().split("\n")[0]
+            print(f"✓ wget already installed: {version_line}")
+            return version_line
+
+    os_type = _get_os()
+    print(f"Installing wget on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "wget"], check=False, timeout=300
+            )
+
+        elif os_type == "Windows":
+            # wget is built into Windows 10+ PowerShell, but the GNU version is better
+            if _install_via_winget("GNU.Wget2"):
+                print("✓ Installed via winget")
+                _refresh_windows_path()
+            elif _install_via_choco("wget"):
+                print("✓ Installed via chocolatey")
+                _refresh_windows_path()
+            else:
+                print("⚠ Native install failed, using WSL...")
+                if _ensure_wsl():
+                    print("Installing wget in WSL...")
+                    _run_in_wsl("sudo apt update -y && sudo apt install -y wget")
+                    success, output = _run_in_wsl("wget --version")
+                    if success:
+                        print("✓ wget installed in WSL")
+                        return "wget (WSL)"
+                return "wget (unavailable)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "wget"], check=False, timeout=300)
+            else:
+                print("⚠ Homebrew not found")
+                print("  Install with: brew install wget")
+                return "wget (unavailable)"
+
+        # Verify installation
+        if shutil.which("wget"):
+            success, output = _run_command(["wget", "--version"])
+            if success:
+                version_line = output.strip().split("\n")[0]
+                print(f"✓ wget installed successfully: {version_line}")
+                print("  Verify with: wget --version")
+                return version_line
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("wget --version")
+            if success:
+                print("✓ wget available in WSL")
+                return "wget (WSL)"
+
+        print("⚠ wget not installed")
+        return "wget (unavailable)"
+
+    except Exception as e:
+        print(f"⚠ wget installation error: {e}")
+        return "wget (unavailable)"
+
+
+def ensure_git(min_version: str = "2.0") -> str:
+    """
+    Ensure git is installed for version control.
+
+    Args:
+                    min_version: Minimum required version (default: "2.0")
+
+    Returns:
+                    Installed version string
+
+    Example verification commands:
+                    git --version
+    """
+    # Check if already installed
+    if shutil.which("git"):
+        success, output = _run_command(["git", "--version"])
+        if success:
+            version_line = output.strip()
+            print(f"✓ git already installed: {version_line}")
+            return version_line
+
+    os_type = _get_os()
+    print(f"Installing git on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "git"], check=False, timeout=300
+            )
+
+        elif os_type == "Windows":
+            # Try winget first
+            if _install_via_winget("Git.Git"):
+                print("✓ Installed via winget")
+                _refresh_windows_path()
+            # Try chocolatey
+            elif _install_via_choco("git"):
+                print("✓ Installed via chocolatey")
+                _refresh_windows_path()
+            # Fallback to WSL
+            else:
+                print("⚠ Native install failed, using WSL...")
+                if _ensure_wsl():
+                    print("Installing git in WSL...")
+                    _run_in_wsl("sudo apt update -y && sudo apt install -y git")
+                    success, output = _run_in_wsl("git --version")
+                    if success:
+                        print("✓ git installed in WSL")
+                        return "git (WSL)"
+                return "git (unavailable)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "git"], check=False, timeout=300)
+            else:
+                # Git is often pre-installed on macOS via Xcode tools
+                print("⚠ Homebrew not found, but git may be available via Xcode")
+                print("  Install with: xcode-select --install")
+                print("  Or: brew install git")
+                return "git (unavailable)"
+
+        # Verify installation
+        if shutil.which("git"):
+            success, output = _run_command(["git", "--version"])
+            if success:
+                version_line = output.strip()
+                print(f"✓ git installed successfully: {version_line}")
+                print("  Verify with: git --version")
+                return version_line
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("git --version")
+            if success:
+                print("✓ git available in WSL")
+                return "git (WSL)"
+
+        print("⚠ git not installed")
+        return "git (unavailable)"
+
+    except Exception as e:
+        print(f"⚠ git installation error: {e}")
+        return "git (unavailable)"
+
+
+def ensure_oauth2ms(min_version: str = "0.1") -> str:
+    """
+    Ensure oauth2ms Python package is installed for OAuth2 authentication.
+
+    Args:
+                    min_version: Minimum required version (default: "0.1")
+
+    Returns:
+                    Installed version string
+
+    Example verification commands:
+                    oauth2ms --version
+                    python -c "import oauth2ms; print(oauth2ms.__version__)"
+    """
+    # Check if already installed
+    if shutil.which("oauth2ms"):
+        success, output = _run_command(["oauth2ms", "--version"])
+        if success:
+            version_line = output.strip()
+            print(f"✓ oauth2ms already installed: {version_line}")
+            return version_line
+
+    # Try importing as Python module
+    try:
+        import oauth2ms
+
+        version = getattr(oauth2ms, "__version__", "unknown")
+        print(f"✓ oauth2ms already installed (Python module): version {version}")
+        return f"oauth2ms {version}"
+    except ImportError:
+        pass
+
+    os_type = _get_os()
+    print(f"Installing oauth2ms on {os_type}...")
+
+    try:
+        # Install via pip
+        print("Installing oauth2ms via pip...")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "oauth2ms"],
+            check=False,
+            timeout=300,
+        )
+
+        # Verify installation
+        if shutil.which("oauth2ms"):
+            success, output = _run_command(["oauth2ms", "--version"])
+            if success:
+                version_line = output.strip()
+                print(f"✓ oauth2ms installed successfully: {version_line}")
+                print("  Verify with: oauth2ms --version")
+                return version_line
+
+        # Try importing as module
+        try:
+            import oauth2ms
+
+            version = getattr(oauth2ms, "__version__", "unknown")
+            print(f"✓ oauth2ms installed successfully: version {version}")
+            print(f"  Verify with: {sys.executable} -m oauth2ms --version")
+            return f"oauth2ms {version}"
+        except ImportError:
+            pass
+
+        # Windows WSL fallback
+        if os_type == "Windows":
+            if _ensure_wsl():
+                print("Installing oauth2ms in WSL...")
+                _run_in_wsl("pip3 install oauth2ms")
+                success, output = _run_in_wsl("oauth2ms --version")
+                if success:
+                    print("✓ oauth2ms installed in WSL")
+                    return "oauth2ms (WSL)"
+
+        print("⚠ oauth2ms not installed")
+        return "oauth2ms (unavailable)"
+
+    except Exception as e:
+        print(f"⚠ oauth2ms installation error: {e}")
+        print("   Try manually: pip install oauth2ms")
+        return "oauth2ms (unavailable)"
+
+
+def ensure_mutt_oauth2(install_dir: str = None) -> str:
+    """
+    Ensure mutt_oauth2.py script is downloaded and available.
+
+    Args:
+                    install_dir: Directory to install the script (default: ~/bin)
+
+    Returns:
+                    Path to the mutt_oauth2.py script
+
+    Example verification commands:
+                    ls -la ~/bin/mutt_oauth2.py
+                    python ~/bin/mutt_oauth2.py --help
+    """
+    # Set install directory
+    if install_dir is None:
+        install_dir = os.path.expanduser("~/bin")
+
+    script_path = os.path.join(install_dir, "mutt_oauth2.py")
+
+    # Check if already installed
+    if os.path.exists(script_path):
+        # Verify it's executable and valid Python
+        if os.access(script_path, os.X_OK):
+            print(f"✓ mutt_oauth2.py already installed: {script_path}")
+            return script_path
+        else:
+            print(f"⚠ mutt_oauth2.py exists but not executable, fixing...")
+            try:
+                os.chmod(script_path, 0o755)
+                print(f"✓ Made executable: {script_path}")
+                return script_path
+            except:
+                pass
+
+    os_type = _get_os()
+    print(f"Installing mutt_oauth2.py on {os_type}...")
+
+    try:
+        # Create install directory
+        os.makedirs(install_dir, exist_ok=True)
+
+        # URL to download from
+        script_url = "https://raw.githubusercontent.com/alejandrogallo/mutt-oauth2/master/mutt_oauth2.py"
+
+        print(f"Downloading mutt_oauth2.py...")
+        print(f"  From: {script_url}")
+        print(f"  To: {script_path}")
+
+        # Try using wget first
+        if shutil.which("wget"):
+            success, _ = _run_command(
+                ["wget", "-O", script_path, script_url], timeout=60
+            )
+            if not success:
+                print("⚠ wget download failed, trying curl...")
+
+        # Try curl if wget failed or unavailable
+        if not os.path.exists(script_path) and shutil.which("curl"):
+            success, _ = _run_command(
+                ["curl", "-L", "-o", script_path, script_url], timeout=60
+            )
+            if not success:
+                print("⚠ curl download failed, trying Python urllib...")
+
+        # Fallback to Python urllib
+        if not os.path.exists(script_path):
+            import urllib.request
+
+            print("Downloading with Python urllib...")
+            urllib.request.urlretrieve(script_url, script_path)
+
+        # Verify download
+        if os.path.exists(script_path) and os.path.getsize(script_path) > 1000:
+            # Make executable
+            os.chmod(script_path, 0o755)
+
+            print(f"✓ mutt_oauth2.py downloaded successfully: {script_path}")
+            print(f"  Verify with: ls -la {script_path}")
+            print(f"  Test with: python {script_path} --help")
+
+            return script_path
+
+        raise Exception("Download completed but file is invalid or too small")
+
+    except Exception as e:
+        # Clean up partial download
+        if os.path.exists(script_path):
+            try:
+                os.remove(script_path)
+            except:
+                pass
+
+        print(f"⚠ mutt_oauth2.py download failed: {e}")
+        print(f"   Manual download:")
+        print(f"   mkdir -p {install_dir}")
+        print(f"   wget -O {script_path} {script_url}")
+        print(f"   chmod +x {script_path}")
+        return "mutt_oauth2.py (unavailable)"
+
+
+def ensure_poppler(min_version: str = "0.86") -> str:
+    """
+    Ensure Poppler is installed for PDF rendering and conversion.
+    Required by pdf2image library.
+
+    Args:
+        min_version: Minimum required version (default: "0.86")
+
+    Returns:
+        Installed version string
+
+    Raises:
+        ModuleNotFoundError: If Poppler cannot be installed or verified
+
+    Example verification commands:
+        pdftoppm -v
+        pdfinfo -v
+        pdftotext -v
+    """
+    # Check if already installed (check for pdftoppm which is part of poppler-utils)
+    if shutil.which("pdftoppm"):
+        success, output = _run_command(["pdftoppm", "-v"])
+        if success:
+            # Parse version from output
+            import re
+
+            version_match = re.search(r"(\d+\.\d+)", output)
+            if version_match:
+                version = version_match.group(1)
+                print(f"✓ Poppler already installed: version {version}")
+                return f"poppler {version}"
+            print(f"✓ Poppler already installed")
+            return "poppler (installed)"
+
+    os_type = _get_os()
+    print(f"Installing Poppler on {os_type}...")
+
+    try:
+        if os_type == "Linux":
+            subprocess.run(["sudo", "apt", "update", "-y"], check=False, timeout=60)
+            subprocess.run(
+                ["sudo", "apt", "install", "-y", "poppler-utils"],
+                check=False,
+                timeout=300,
+            )
+
+        elif os_type == "Windows":
+            # Try chocolatey first
+            if _install_via_choco("poppler"):
+                print("✓ Installed via chocolatey")
+                _refresh_windows_path()
+            else:
+                print("⚠ Chocolatey failed, using WSL...")
+                if _ensure_wsl():
+                    print("Installing Poppler in WSL...")
+                    _run_in_wsl(
+                        "sudo apt update -y && sudo apt install -y poppler-utils"
+                    )
+                    success, output = _run_in_wsl("pdftoppm -v")
+                    if success:
+                        print("✓ Poppler installed in WSL")
+                        print(
+                            "\n⚠️ IMPORTANT: pdf2image will use WSL for PDF conversion"
+                        )
+                        print("   This may be slower than native installation")
+                        return "poppler (WSL)"
+                    else:
+                        print("⚠ WSL install incomplete")
+                else:
+                    print("⚠ WSL unavailable. Poppler not installed.")
+                    print("\n📦 Manual Installation:")
+                    print(
+                        "   1. Download from: https://github.com/oschwartz10612/poppler-windows/releases/"
+                    )
+                    print("   2. Extract to C:\\Program Files\\poppler")
+                    print("   3. Add C:\\Program Files\\poppler\\Library\\bin to PATH")
+                    raise ModuleNotFoundError(
+                        "Poppler installation failed.\n"
+                        "Download from: https://github.com/oschwartz10612/poppler-windows/releases/"
+                    )
+                return "poppler (unavailable)"
+
+        elif os_type == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "poppler"], check=False, timeout=300)
+            else:
+                raise ModuleNotFoundError(
+                    "Poppler installation failed: Homebrew not found.\n"
+                    "Install Homebrew from: https://brew.sh\n"
+                    "Then run: brew install poppler"
+                )
+
+        else:
+            raise ModuleNotFoundError(f"Unsupported OS: {os_type}")
+
+        # Verify installation
+        if shutil.which("pdftoppm"):
+            success, output = _run_command(["pdftoppm", "-v"])
+            if success:
+                import re
+
+                version_match = re.search(r"(\d+\.\d+)", output)
+                version_str = version_match.group(1) if version_match else "unknown"
+                print(f"✓ Poppler installed successfully: version {version_str}")
+                print("  Verify with: pdftoppm -v")
+                print(
+                    '  Test pdf2image with: python -c "from pdf2image import convert_from_path"'
+                )
+                return f"poppler {version_str}"
+
+        # Check WSL as fallback
+        if os_type == "Windows":
+            success, output = _run_in_wsl("pdftoppm -v")
+            if success:
+                print("✓ Poppler available in WSL")
+                return "poppler (WSL)"
+
+        raise ModuleNotFoundError(
+            "Poppler installation completed but pdftoppm not found in PATH"
+        )
+
+    except subprocess.CalledProcessError as e:
+        raise ModuleNotFoundError(f"Poppler installation failed: {e}")
+
+
+def ensure_gmvault():
+    """Install Gmvault if not present"""
+    print("\n📦 Checking Gmvault...")
+
+    if check_command_exists("gmvault"):
+        print("   ✅ Gmvault already installed")
+        return True
+
+    print("   📥 Installing Gmvault via pip...")
+    success, output = run_cmd(
+        f"{sys.executable} -m pip install gmvault", "Installing gmvault", capture=False
+    )
+
+    if success:
+        print("   ✅ Gmvault installed successfully")
+        return True
+    else:
+        print("   ❌ Failed to install Gmvault")
+        return False
+
+
+def ensure_gyb():
+    """Check/Install GYB"""
+    print("\n📦 Checking GYB (Got Your Back)...")
+
+    if check_command_exists("gyb"):
+        print("   ✅ GYB already installed")
+        return True
+
+    system = platform.system()
+
+    if system == "Windows":
+        print("   ⚠️  GYB not found. Please install manually:")
+        print(
+            "   👉 Download: https://github.com/GAM-team/got-your-back/releases/Setup.msi"
+        )
+        print("   👉 Run the installer, then run this script again")
+        return False
+
+    elif system in ["Linux", "Darwin"]:  # Darwin = macOS
+        print("   📥 Installing GYB...")
+        success, _ = run_cmd(
+            "bash <(curl -s -S -L https://git.io/gyb-install)",
+            "Installing GYB",
+            capture=False,
+        )
+
+        if success:
+            print("   ✅ GYB installed successfully")
+            return True
+        else:
+            print("   ❌ Failed to install GYB automatically")
+            print(
+                "   👉 Try manual install: bash <(curl -s -S -L https://git.io/gyb-install)"
+            )
+            return False
+
+    return False
+
+
+def ensure_ollama():
+    """Check Ollama and pull model"""
+    print("\n📦 Checking Ollama...")
+
+    if not check_command_exists("ollama"):
+        print("   ⚠️  Ollama not found. Please install manually:")
+        print("   👉 Download from: https://ollama.com")
+        print("   👉 Install it, then run this script again")
+        return False
+
+    print("   ✅ Ollama installed")
+    print("   📥 Checking model llama3.2:3b...")
+
+    # Check if model exists
+    success, output = run_cmd("ollama list", "Checking models", capture=True)
+
+    if "llama3.2:3b" in output:
+        print("   ✅ Model already downloaded")
+        return True
+
+    print("   📥 Downloading llama3.2:3b (this may take a few minutes)...")
+    success, _ = run_cmd("ollama pull llama3.2:3b", "Pulling model", capture=False)
+
+    if success:
+        print("   ✅ Model downloaded successfully")
+        return True
+    else:
+        print("   ❌ Failed to download model")
+        return False
+
+
+def ensure_oauth(email_address, tool_name, test_cmd):
+    """Guide user through OAuth setup if needed"""
+    print(f"\n🔐 Checking OAuth for {email_address}...")
+
+    # Try to run a test command
+    success, output = run_cmd(test_cmd, f"Testing {tool_name}", capture=True)
+
+    if "oauth" in output.lower() or "authori" in output.lower() or not success:
+        print(f"   ⚠️  OAuth not set up yet for {email_address}")
+        print(f"\n   {'='*50}")
+        print(f"   🌐 OAuth Setup Required")
+        print(f"   {'='*50}")
+        print(f"   This will open your browser to authorize {tool_name}.")
+        print(f"   You only need to do this ONCE.\n")
+
+        input("   Press ENTER to start OAuth setup...")
+
+        # Run the auth command interactively
+        result = subprocess.run(test_cmd, shell=True)
+
+        if result.returncode == 0:
+            print(f"   ✅ OAuth set up successfully!")
+            return True
+        else:
+            print(f"   ⚠️  OAuth setup incomplete. You can try again by running:")
+            print(f"   {test_cmd}")
+            return False
+    else:
+        print(f"   ✅ OAuth already configured")
+        return True
