@@ -10,15 +10,15 @@ import zipfile
 from pathlib import Path
 
 from config import (
-	ARCHIVE_TYPES ,
-	AUDIO_TYPES ,
-	CODE_EXTENSIONS ,
-	DOCUMENT_TYPES ,
-	EMAIL_TYPES ,
-	IMAGE_TYPES ,
-	TEXT_TYPES ,
-	TIKA_APP_JAR_PATH ,
-	VIDEO_TYPES ,
+    ARCHIVE_TYPES,
+    AUDIO_TYPES,
+    CODE_EXTENSIONS,
+    DOCUMENT_TYPES,
+    EMAIL_TYPES,
+    IMAGE_TYPES,
+    TEXT_TYPES,
+    TIKA_APP_JAR_PATH,
+    VIDEO_TYPES,
 )
 from visual_processor import VisualProcessor
 

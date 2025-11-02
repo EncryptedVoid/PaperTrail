@@ -15,12 +15,12 @@ import logging
 from datetime import datetime
 
 from config import (
-	LOG_DIR ,
-	LOG_FORMAT ,
-	LOG_LEVEL ,
-	SESSION_LOG_FILE_PREFIX ,
-	SYSTEM_DIRECTORIES ,
-	UNPROCESSED_ARTIFACTS_DIR ,
+    LOG_DIR,
+    LOG_FORMAT,
+    LOG_LEVEL,
+    SESSION_LOG_FILE_PREFIX,
+    SYSTEM_DIRECTORIES,
+    UNPROCESSED_ARTIFACTS_DIR,
 )
 from stages.archive_emails import archiving_emails
 from stages.auto_sort import automatically_sorting

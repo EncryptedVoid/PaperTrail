@@ -6,24 +6,24 @@ from typing import List
 from tqdm import tqdm
 
 from config import (
-	ANKI_DIR ,
-	BITWARDEN_DIR ,
-	CALIBRE_LIBRARY_DIR ,
-	FIREFLYIII_DIR ,
-	GITLAB_DIR ,
-	LINKWARDEN_DIR ,
-	PERFORMANCE_PORTFOLIO_DIR ,
-	RESOURCESPACE_DIR ,
-	UNSUPPORTED_ARTIFACTS_DIR ,
+    ANKI_DIR,
+    BITWARDEN_DIR,
+    CALIBRE_LIBRARY_DIR,
+    DIGITAL_ASSET_MANAGEMENT_DIR,
+    FIREFLYIII_DIR,
+    GITLAB_DIR,
+    LINKWARDEN_DIR,
+    PERFORMANCE_PORTFOLIO_DIR,
+    UNSUPPORTED_ARTIFACTS_DIR,
 )
 from utilities.automatic_sorting import (
-	is_anki_deck ,
-	is_backup_codes_file ,
-	is_book ,
-	is_bookmark_file ,
-	is_code ,
-	is_financial_document ,
-	is_supported ,
+    is_anki_deck,
+    is_backup_codes_file,
+    is_book,
+    is_bookmark_file,
+    is_code,
+    is_financial_document,
+    is_supported,
 )
 from utilities.visual_processor import VisualProcessor
 
@@ -66,7 +66,7 @@ def automatically_sorting(
         ):
             shutil.copy2(src=artifact, dst=FIREFLYIII_DIR)
             shutil.copy2(src=artifact, dst=PERFORMANCE_PORTFOLIO_DIR)
-            shutil.move(src=artifact, dst=RESOURCESPACE_DIR)
+            shutil.move(src=artifact, dst=DIGITAL_ASSET_MANAGEMENT_DIR)
         elif not is_supported(file_path=artifact):
             shutil.move(src=artifact, dst=UNSUPPORTED_ARTIFACTS_DIR)
 

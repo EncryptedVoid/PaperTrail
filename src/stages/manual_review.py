@@ -127,10 +127,18 @@ class FileReviewUI:
             "ARCHIVE": self.folder_path / "ARCHIVE",
             "COMBINATION": self.folder_path / "COMBINATION",
             "IMMICH": self.folder_path / "IMMICH",
-            "RESOURCESPACE": self.folder_path / "RESOURCESPACE",
+            "DIGITAL_ASSET_MANAGER": self.folder_path / "DIGITAL_ASSET_MANAGER",
             "AFFINE": self.folder_path / "AFFINE",
             "OTHER": self.folder_path / "OTHER",
         }
+        # self.folders = {
+        # 	"ARCHIVE": ARCHIVAL_DIR,
+        # 	"COMBINATION": self.folder_path / "COMBINATION",
+        # 	"IMMICH": IMMICH_DIR,
+        # 	"DIGITAL_ASSET_MANAGER": DIGITAL_ASSET_MANAGEMENT_DIR,
+        # 	"AFFINE": AFFINE_DIR,
+        # 	"OTHER": UNSUPPORTED_ARTIFACTS_DIR,
+        # }
         for folder in self.folders.values():
             folder.mkdir(exist_ok=True)
 
@@ -294,14 +302,14 @@ class FileReviewUI:
             btn_frame.grid_columnconfigure(i, weight=1, uniform="button")
 
         actions = [
-            ("1 - Archive", "1", self.colors["accent1"]),
-            ("2 - Handwriting", "2", self.colors["accent2"]),
-            ("3 - Document", "3", self.colors["accent3"]),
-            ("4 - Combine", "4", self.colors["accent4"]),
-            ("5 - Video→Audio", "5", self.colors["accent5"]),
-            ("I - Immich", "i", "#66BB6A"),
-            ("R - ResourceSpace", "r", "#17A2B8"),
-            ("A - AFFiNE", "a", "#F48024"),
+            ("X - ARCHIVE/DELETE", "x", self.colors["accent1"]),
+            ("1 - SCAN HANDWRITING", "1", self.colors["accent2"]),
+            ("2 - SCAN DOCUMENTS", "2", self.colors["accent3"]),
+            ("3 - COMBINE DOCUMENTS", "3", self.colors["accent4"]),
+            ("4 - CONVERT Video→Audio", "4", self.colors["accent5"]),
+            ("I - IMMICH PERSONAL PHOTOS&VIDEOS", "i", "#66BB6A"),
+            ("D - DIGITAL ASSET MANAGER", "d", "#17A2B8"),
+            ("A - AFFiNE NOTES", "a", "#F48024"),
             ("O - Other", "o", "#DC3545"),
         ]
         for i, (label, key, color) in enumerate(actions):
@@ -484,14 +492,15 @@ class FileReviewUI:
                 return
 
         action_map = {
-            "1": ("move", "ARCHIVE"),
-            "2": ("process_2", "AFFINE"),
-            "3": ("process_3", "RESOURCESPACE"),
-            "5": ("process_5", "IMMICH"),
-            "i": ("move", "IMMICH"),
-            "r": ("move", "RESOURCESPACE"),
-            "a": ("move", "AFFINE"),
-            "o": ("move", "OTHER"),
+            "X": ("PERFORM", "ARCHIVE/DELETE"),
+            "1": ("SCAN", "HANDWRITING"),
+            "2": ("SCAN", "DOCUMENTS"),
+            "3": ("PERFORM", "COMBINE DOCUMENTS"),
+            "4": ("CONVERT", "Video→Audio"),
+            "I": ("UPLOAD", "IMMICH PERSONAL PHOTOS&VIDEO"),
+            "D": ("UPLOAD", "DIGITAL ASSET MANAGER"),
+            "A": ("UPLOAD", "AFFiNE NOTES"),
+            "O": ("PERFORM", "PROCESS LATER"),
         }
         if key in action_map:
             self.pending_actions[self.current_file] = action_map[key]
