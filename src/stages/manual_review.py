@@ -64,7 +64,7 @@ except:
 
 
 class FileReviewUI:
-    def __init__(self, folder_path: Path):
+    def __init__(self, review_directory: Path):
         self.root = ctk.CTk()
         self.root.title("File Review Queue - Simple Edition")
         self.root.geometry("1800x1000")
@@ -84,7 +84,7 @@ class FileReviewUI:
             "card_bg": "#2d2d2d",
         }
 
-        self.folder_path = Path(folder_path)
+        self.review_directory = Path(review_directory)
         self.queue = deque()
         self.history = []
         self.current_index = -1
@@ -124,16 +124,16 @@ class FileReviewUI:
 
     def _setup_folders(self):
         self.folders = {
-            "ARCHIVE": self.folder_path / "ARCHIVE",
-            "COMBINATION": self.folder_path / "COMBINATION",
-            "IMMICH": self.folder_path / "IMMICH",
-            "DIGITAL_ASSET_MANAGER": self.folder_path / "DIGITAL_ASSET_MANAGER",
-            "AFFINE": self.folder_path / "AFFINE",
-            "OTHER": self.folder_path / "OTHER",
+            "ARCHIVE": self.review_directory / "ARCHIVE",
+            "COMBINATION": self.review_directory / "COMBINATION",
+            "IMMICH": self.review_directory / "IMMICH",
+            "DIGITAL_ASSET_MANAGER": self.review_directory / "DIGITAL_ASSET_MANAGER",
+            "AFFINE": self.review_directory / "AFFINE",
+            "OTHER": self.review_directory / "OTHER",
         }
         # self.folders = {
         # 	"ARCHIVE": ARCHIVAL_DIR,
-        # 	"COMBINATION": self.folder_path / "COMBINATION",
+        # 	"COMBINATION": self.review_directory / "COMBINATION",
         # 	"IMMICH": IMMICH_DIR,
         # 	"DIGITAL_ASSET_MANAGER": DIGITAL_ASSET_MANAGEMENT_DIR,
         # 	"AFFINE": AFFINE_DIR,
@@ -145,8 +145,8 @@ class FileReviewUI:
     def _load_files(self):
         files = [
             f
-            for f in self.folder_path.iterdir()
-            if f.is_file() and f.parent == self.folder_path
+            for f in self.review_directory.iterdir()
+            if f.is_file() and f.parent == self.review_directory
         ]
         self.queue.extend(files)
         print(f"✓ Loaded {len(self.queue)} files")
@@ -685,7 +685,7 @@ class FileReviewUI:
             messagebox.showwarning("Error", "Select 2+ PDFs to merge.")
             return
 
-        output = self.folder_path / f"MERGED_{int(time.time())}.pdf"
+        output = self.review_directory / f"MERGED_{int(time.time())}.pdf"
         if PIKEPDF_AVAILABLE:
             try:
                 pdf = pikepdf.new()

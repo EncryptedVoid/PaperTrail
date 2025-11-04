@@ -27,7 +27,7 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any , Dict , List , Optional , TypedDict
 
 import exiftool
 import ollama
@@ -35,32 +35,32 @@ import pypdf
 from tqdm import tqdm
 
 from config import (
-    ARTIFACT_PREFIX,
-    ARTIFACT_PROFILES_DIR,
-    AUDIO_TYPES,
-    CODE_TYPES,
-    DOCUMENT_TYPES,
-    FIELD_PROMPTS,
-    IMAGE_TYPES,
-    JAVA_PATH,
-    MAX_PDF_SIZE_BEFORE_SUBSETTING,
-    METADATA_EXTRACTION_TIMEOUT,
-    PREFERRED_LANGUAGE_MODEL,
-    PROFILE_PREFIX,
-    SYSTEM_PROMPT,
-    TEMP_DIR,
-    TEXT_TYPES,
-    TIKA_APP_JAR_PATH,
-    VIDEO_TYPES,
+	ARTIFACT_PREFIX ,
+	ARTIFACT_PROFILES_DIR ,
+	AUDIO_TYPES ,
+	CODE_TYPES ,
+	DOCUMENT_TYPES ,
+	FIELD_PROMPTS ,
+	IMAGE_TYPES ,
+	JAVA_PATH ,
+	MAX_PDF_SIZE_BEFORE_SUBSETTING ,
+	METADATA_EXTRACTION_TIMEOUT ,
+	PREFERRED_LANGUAGE_MODEL ,
+	PROFILE_PREFIX ,
+	SYSTEM_PROMPT ,
+	TEMP_DIR ,
+	TEXT_TYPES ,
+	TIKA_APP_JAR_PATH ,
+	VIDEO_TYPES ,
 )
 from utilities import (
-    AudioProcessor,
-    VisualProcessor,
-    compile_doc_subset,
-    compile_video_snapshot_subset,
-    ensure_apache_tika,
-    ensure_java,
-    ensure_ollama,
+	AudioProcessor ,
+	VisualProcessor ,
+	compile_doc_subset ,
+	compile_video_snapshot_subset ,
+	ensure_apache_tika ,
+	ensure_java ,
+	ensure_ollama ,
 )
 from utilities.dependancy_ensurance import ensure_exiftool
 

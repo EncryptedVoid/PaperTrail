@@ -15,21 +15,21 @@ import logging
 from datetime import datetime
 
 from config import (
-    LOG_DIR,
-    LOG_FORMAT,
-    LOG_LEVEL,
-    SESSION_LOG_FILE_PREFIX,
-    SYSTEM_DIRECTORIES,
-    UNPROCESSED_ARTIFACTS_DIR,
+	LOG_DIR ,
+	LOG_FORMAT ,
+	LOG_LEVEL ,
+	SESSION_LOG_FILE_PREFIX ,
+	SYSTEM_DIRECTORIES ,
+	UNPROCESSED_ARTIFACTS_DIR ,
 )
 from stages.archive_emails import archiving_emails
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
 from stages.identify_duplicates import DuplicateReviewer
 from stages.manual_review import FileReviewUI
+from stages.metadata_extraction import extracting_metadata
 from stages.sanitize import sanitizing
-from utilities.metadata_extraction import extracting_metadata
-from utilities.semantics_extraction import extracting_semantics
+from stages.semantics_extraction import extracting_semantics
 from utilities.visual_processor import VisualProcessor
 
 # ============================================================================
@@ -46,19 +46,19 @@ for directory in SYSTEM_DIRECTORIES:
 # LOGGING CONFIGURATION
 # ============================================================================
 
-# Generate a unique log file name for this session using timestamp
-# Format: prefix-YYYY-MM-DD_HH-MM-SS.log
-# This ensures each run has its own log file for auditing and debugging
-log_file_name = (
-    f"{SESSION_LOG_FILE_PREFIX}-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
-)
 
 # Setup dual logging: console output for real-time monitoring and file output for persistence
 # Console handler allows operators to monitor progress in real-time
 # File handler creates a permanent record of all processing activities
 handlers = [
     logging.FileHandler(
-        (LOG_DIR / log_file_name),  # Outputs log messages to timestamped file
+        # Generate a unique log file name for this session using timestamp
+        # Format: prefix-YYYY-MM-DD_HH-MM-SS.log
+        # This ensures each run has its own log file for auditing and debugging
+        (
+            LOG_DIR
+            / f"{SESSION_LOG_FILE_PREFIX}-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+        ),  # Outputs log messages to timestamped file
         encoding="utf-8",  # Ensures proper handling of international characters
     ),
 ]
@@ -86,7 +86,8 @@ logger.info("WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM")
 
 visual_processor = VisualProcessor(logger=logger)
 
-archiving_emails(logger=logger)
+archiving_emails(logger_param=logger)
+
 sanitizing(logger=logger, source_dir=UNPROCESSED_ARTIFACTS_DIR)
 
 app = DuplicateReviewer(UNPROCESSED_ARTIFACTS_DIR)
@@ -102,10 +103,15 @@ extracting_metadata(logger=logger, source_dir=UNPROCESSED_ARTIFACTS_DIR)
 
 converting_files(logger=logger, source_dir=UNPROCESSED_ARTIFACTS_DIR)
 
-app = FileReviewUI(UNPROCESSED_ARTIFACTS_DIR)
+sanitizing(logger=logger, source_dir=UNPROCESSED_ARTIFACTS_DIR)
+
+app = DuplicateReviewer(review_directory=UNPROCESSED_ARTIFACTS_DIR)
 app.run()
 
 extracting_semantics(logger=logger, source_dir=UNPROCESSED_ARTIFACTS_DIR)
+
+app = FileReviewUI(review_directory=UNPROCESSED_ARTIFACTS_DIR)
+app.run()
 
 # ============================================================================
 # PIPELINE COMPLETION
