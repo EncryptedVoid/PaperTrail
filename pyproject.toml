@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "papertrail"
-version = "1.3.0"
+version = "1.3.1"
 description = "A local LLM based, secure, document tabulating and organising system using SQLite, Ollama, and Python"
 authors = [{ name = "Ashiq Arib Gazi", email = "ashiqarib@gmail.com" }]
 readme = "README.md"
@@ -288,29 +288,12 @@ vision = [
     #    - pillow-heif-cffi
 ]
 
-email_archival = [
-    "google-auth>=2.27.0,<3.0.0",
-    "google-auth-oauthlib>=1.2.0,<2.0.0",
-    "google-auth-httplib2>=0.2.0,<1.0.0",
-    "google-api-python-client>=2.116.0,<3.0.0",
-    "msal>=1.26.0,<2.0.0",
-    "python-dotenv>=1.0.1,<2.0.0",
-    "requests>=2.31.0,<3.0.0",
-    "M2Crypto>=0.41.0,<1.0.0",
-    "python-gnupg>=0.5.2,<1.0.0",
-]
 # ============================================================================
 # All Extras - Install with: pip install papertrail[all]
 # ============================================================================
 all = [
-    "papertrail[dev,vision,email_archival]",
+    "papertrail[dev,vision]",
 ]
-
-#[project.scripts]
-## Command-line entry points - run these after installation
-#papertrail = "papertrail.cli:main"
-#papertrail-process = "papertrail.process:process_documents"
-#papertrail-setup = "papertrail.setup:initialize"
 
 [project.urls]
 Homepage = "https://github.com/EncryptedVoid/PaperTrail"

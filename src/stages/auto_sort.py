@@ -9,226 +9,200 @@ backup codes, books, and financial documents.
 
 import logging
 import shutil
-import time
 from pathlib import Path
 from typing import Dict , List
 
 from tqdm import tqdm
 
-from config import (
-	ANKI_DIR ,
-	BITWARDEN_DIR ,
-	CALIBRE_LIBRARY_DIR ,
-	DIGITAL_ASSET_MANAGEMENT_DIR ,
-	FIREFLYIII_DIR ,
-	GITLAB_DIR ,
-	LINKWARDEN_DIR ,
-	PERFORMANCE_PORTFOLIO_DIR ,
-	UNSUPPORTED_ARTIFACTS_DIR ,
-)
+from config import (AFFINE_DIR , ANKI_DIR , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
+										FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , LINKWARDEN_DIR , MANUALS_ARCHIVE_DIR , MONICA_CRM_DIR ,
+										ODOO_CRM_DIR ,
+										ODOO_INVENTORY_DIR ,
+										ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
+										PERSONAL_ARCHIVE_DIR , SOFTWARE_ARCHIVE_DIR , ULTIMAKER_CURA_DIR)
 from utilities.automatic_sorting import (
+	is_3d_file ,
 	is_anki_deck ,
 	is_backup_codes_file ,
 	is_book ,
 	is_bookmark_file ,
 	is_code ,
+	is_digital_contact_file ,
+	is_executable ,
 	is_financial_document ,
-	is_supported ,
 )
 from utilities.visual_processor import VisualProcessor
 
 
 def automatically_sorting(
-    logger: logging.Logger, visual_processor: VisualProcessor, source_dir: Path
-):
-    """
-    Automatically sort and organize artifact files from a source directory.
+		logger: logging.Logger , visual_processor: VisualProcessor , source_dir: Path ,
+) :
+	"""
+	Automatically sort and organize artifact files from a source directory.
 
-    This function discovers all files in the source directory, analyzes each one
-    to determine its type, and moves it to the appropriate destination directory.
-    Provides detailed logging and statistics about the sorting process.
+	This function discovers all files in the source directory, analyzes each one
+	to determine its type, and moves it to the appropriate destination directory.
+	Provides detailed logging and statistics about the sorting process.
 
-    Args:
-                    logger: Logger instance for recording process information and errors
-                    visual_processor: VisualProcessor instance for analyzing image/PDF content
-                    source_dir: Path object pointing to the directory containing artifacts to sort
+	Args:
+									logger: Logger instance for recording process information and errors
+									visual_processor: VisualProcessor instance for analyzing image/PDF content
+									source_dir: Path object pointing to the directory containing artifacts to sort
 
-    Returns:
-                    None: Function completes silently after processing all artifacts
+	Returns:
+									None: Function completes silently after processing all artifacts
 
-    Processing Order:
-                    Files are sorted by size (smallest first) to provide faster initial feedback
-                    and help identify processing issues early in the workflow.
-    """
-    # Record start time for performance tracking
-    start_time = time.time()
-    logger.info(f"Starting automatic sorting process for directory: {source_dir}")
+	Processing Order:
+									Files are sorted by size (smallest first) to provide faster initial feedback
+									and help identify processing issues early in the workflow.
+	"""
 
-    # Initialize statistics dictionary to track sorting results
-    # Keys represent destination categories, values are file counts
-    stats: Dict[str, int] = {
-        "bookmarks": 0,
-        "code": 0,
-        "anki_decks": 0,
-        "backup_codes": 0,
-        "books": 0,
-        "financial_docs": 0,
-        "unsupported": 0,
-        "errors": 0,
-    }
+	logger.info( f"Starting automatic sorting process for directory: {source_dir}" )
 
-    # Discover all artifact files in the source directory
-    # Using list() on iterdir() materializes the generator into a list for processing
-    try:
-        unprocessed_artifacts: List[Path] = [
-            item for item in source_dir.iterdir() if item.is_file()
-        ]
-    except Exception as e:
-        logger.error(f"Failed to read source directory {source_dir}: {e}")
-        return None
+	# Initialize statistics dictionary to track sorting results
+	# Keys represent destination categories, values are file counts
+	stats: Dict[ str , int ] = {
+		"unsupported" : 0 ,
+		"errors"      : 0 ,
+	}
 
-    # Handle empty directory case - exit early if no artifacts found
-    if not unprocessed_artifacts:
-        logger.info("No artifact files found in source directory")
-        elapsed_time = time.time() - start_time
-        logger.info(f"Sorting process completed in {elapsed_time:.2f} seconds")
-        return None
+	# Discover all artifact files in the source directory
+	# Using list() on iterdir() materializes the generator into a list for processing
+	unprocessed_artifacts: List[ Path ] = [
+		item for item in source_dir.iterdir( ) if item.is_file( )
+	]
 
-    # Sort files by size for consistent processing order (smaller files first)
-    # stat().st_size returns file size in bytes
-    # This provides faster initial feedback and helps identify issues early
-    unprocessed_artifacts.sort(key=lambda p: p.stat().st_size)
-    logger.info(f"Found {len(unprocessed_artifacts)} artifact files to process")
+	# Sort files by size for consistent processing order (smaller files first)
+	# stat().st_size returns file size in bytes
+	# This provides faster initial feedback and helps identify issues early
+	unprocessed_artifacts.sort( key=lambda p : p.stat( ).st_size )
+	logger.info( f"Found {len( unprocessed_artifacts )} artifact files to process" )
 
-    # Calculate total size of all artifacts for reporting
-    total_size_bytes = sum(item.stat().st_size for item in unprocessed_artifacts)
-    total_size_mb = total_size_bytes / (1024 * 1024)
-    logger.info(f"Total data to process: {total_size_mb:.2f} MB")
+	# Process each artifact file with progress tracking
+	# tqdm provides console progress bar, desc sets bar label, unit customizes counter
+	for artifact in tqdm(
+			unprocessed_artifacts ,
+			desc="Automatically sorting" ,
+			unit="artifacts" ,
+	) :
+		try :
+			# Log current file being processed with size information
+			logger.info( f"Processing file: {artifact.name} ({artifact.stat( ).st_size / 1024:.2f} KB)" )
 
-    # Process each artifact file with progress tracking
-    # tqdm provides console progress bar, desc sets bar label, unit customizes counter
-    for artifact in tqdm(
-        unprocessed_artifacts,
-        desc="Auto-sorting artifacts",
-        unit="artifacts",
-    ):
-        try:
-            # Log current file being processed with size information
-            file_size_kb = artifact.stat().st_size / 1024
-            logger.info(f"Processing file: {artifact.name} ({file_size_kb:.2f} KB)")
+			artifact_ext = artifact.suffix.lower( ).strip( ).strip( '.' )
 
-            # Check if file is an HTML bookmark export
-            # is_bookmark_file() analyzes HTML structure for Netscape bookmark format
-            if artifact.suffix == ".html" and is_bookmark_file(file_path=artifact):
-                logger.info(f"Detected bookmark file: {artifact.name}")
-                # shutil.move() performs atomic move operation to destination
-                shutil.move(src=artifact, dst=LINKWARDEN_DIR)
-                stats["bookmarks"] += 1
-                logger.info(f"Moved bookmark file to: {LINKWARDEN_DIR}")
+			if "manual" in artifact.stem.lower( ).strip( ) :
+				shutil.move( src=artifact , dst=MANUALS_ARCHIVE_DIR )
+				logger.info( f"Moved file to: {MANUALS_ARCHIVE_DIR}" )
 
-            # Check if file is source code based on file extension
-            # is_code() matches extension against CODE_EXTENSIONS from config
-            elif is_code(file_path=artifact):
-                logger.info(f"Detected code file: {artifact.name}")
-                shutil.move(src=artifact, dst=GITLAB_DIR)
-                stats["code"] += 1
-                logger.info(f"Moved code file to: {GITLAB_DIR}")
+			elif artifact_ext in [ "arw" , "cr2" ] :
+				shutil.move( src=artifact , dst=IMMICH_DIR )
+				logger.info( f"Moved file to: {IMMICH_DIR}" )
 
-            # Check if file is an Anki flashcard deck
-            # is_anki_deck() supports .apkg, .colpkg, .anki2, .anki21, and text formats
-            elif is_anki_deck(file_path=artifact):
-                logger.info(f"Detected Anki deck: {artifact.name}")
-                shutil.move(src=artifact, dst=ANKI_DIR)
-                stats["anki_decks"] += 1
-                logger.info(f"Moved Anki deck to: {ANKI_DIR}")
+			elif artifact_ext in [ "iso" ] :
+				shutil.move( src=artifact , dst=PERSONAL_ARCHIVE_DIR )
+				logger.info( f"Moved file to: {PERSONAL_ARCHIVE_DIR}" )
 
-            # Check if file contains 2FA backup/recovery codes
-            # is_backup_codes_file() analyzes content for code patterns
-            elif is_backup_codes_file(file_path=artifact):
-                logger.info(f"Detected backup codes file: {artifact.name}")
-                shutil.move(src=artifact, dst=BITWARDEN_DIR)
-                stats["backup_codes"] += 1
-                logger.info(f"Moved backup codes to: {BITWARDEN_DIR}")
+			elif artifact_ext in [ "onepkg" ] :
+				shutil.copy2( src=artifact , dst=AFFINE_DIR )
+				logger.info( f"Copied file to: {AFFINE_DIR}" )
 
-            # Check if file is a book (EPUB, PDF with ISBN, etc.)
-            # is_book() uses metadata analysis and content inspection
-            elif is_book(file_path=artifact):
-                logger.info(f"Detected book: {artifact.name}")
-                shutil.move(src=artifact, dst=CALIBRE_LIBRARY_DIR)
-                stats["books"] += 1
-                logger.info(f"Moved book to: {CALIBRE_LIBRARY_DIR}")
+				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR )
+				logger.info( f"Moved file to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 
-            # Check if file is a financial document (invoice, receipt, statement)
-            # is_financial_document() uses visual_processor for OCR and text analysis
-            elif is_financial_document(
-                file_path=artifact, visual_processor=visual_processor, logger=logger
-            ):
-                logger.info(f"Detected financial document: {artifact.name}")
+			# Check if file is an HTML bookmark export
+			elif artifact_ext in [ "html" ] and is_bookmark_file( artifact_location=artifact ) :
+				logger.info( f"Detected bookmark file: {artifact.name}" )
+				shutil.move( src=artifact , dst=LINKWARDEN_DIR )
+				logger.info( f"Moved bookmark file to: {LINKWARDEN_DIR}" )
 
-                # Financial documents need to be copied to multiple locations
-                # shutil.copy2() preserves metadata (timestamps, permissions)
-                logger.info(f"Copying financial document to: {FIREFLYIII_DIR}")
-                shutil.copy2(src=artifact, dst=FIREFLYIII_DIR)
+			elif is_executable( artifact_location=artifact ) :
+				logger.info( f"Detected executable file: {artifact.name}" )
 
-                logger.info(
-                    f"Copying financial document to: {PERFORMANCE_PORTFOLIO_DIR}"
-                )
-                shutil.copy2(src=artifact, dst=PERFORMANCE_PORTFOLIO_DIR)
+				shutil.move( src=artifact , dst=SOFTWARE_ARCHIVE_DIR )
+				logger.info( f"Moved file to: {SOFTWARE_ARCHIVE_DIR}" )
 
-                # Final move to primary storage location
-                logger.info(
-                    f"Moving financial document to: {DIGITAL_ASSET_MANAGEMENT_DIR}"
-                )
-                shutil.move(src=artifact, dst=DIGITAL_ASSET_MANAGEMENT_DIR)
+			# Check if file is an Anki flashcard deck
+			elif is_anki_deck( artifact_location=artifact ) :
+				logger.info( f"Detected Anki deck: {artifact.name}" )
+				shutil.move( src=artifact , dst=ANKI_DIR )
+				logger.info( f"Moved Anki deck to: {ANKI_DIR}" )
 
-                stats["financial_docs"] += 1
-                logger.info(
-                    f"Completed financial document processing for: {artifact.name}"
-                )
+			elif is_3d_file( artifact_location=artifact ) :
+				logger.info( f"Detected 3D file: {artifact.name}" )
+				shutil.move( src=artifact , dst=ULTIMAKER_CURA_DIR )
+				logger.info( f"Moved code file to: {ULTIMAKER_CURA_DIR}" )
 
-            # Check if file type is supported but didn't match specific categories
-            # is_supported() checks against known file type lists (EMAIL_TYPES, etc.)
-            elif not is_supported(file_path=artifact):
-                logger.warning(f"Unsupported file type: {artifact.name}")
-                shutil.move(src=artifact, dst=UNSUPPORTED_ARTIFACTS_DIR)
-                stats["unsupported"] += 1
-                logger.info(f"Moved unsupported file to: {UNSUPPORTED_ARTIFACTS_DIR}")
+			# Check if file is source code based on file extension
+			elif artifact_ext not in "html" and (artifact.stem == "README" or is_code( artifact_location=artifact )) :
+				logger.info( f"Detected code file: {artifact.name}" )
+				shutil.move( src=artifact , dst=GITLAB_DIR )
+				logger.info( f"Moved code file to: {GITLAB_DIR}" )
 
-            else:
-                # File is supported but didn't match any category
-                # Leave in source directory for manual review
-                logger.warning(
-                    f"Supported file type but no category match: {artifact.name}"
-                )
+			elif is_digital_contact_file( artifact_location=artifact ) :
+				logger.info( f"Detected digital contact document: {artifact.name}" )
 
-        except Exception as e:
-            # Catch and log any errors during file processing
-            # Continue processing remaining files despite errors
-            stats["errors"] += 1
-            logger.error(f"Error processing {artifact.name}: {e}", exc_info=True)
+				logger.info( f"Copying digital contact document to: {MONICA_CRM_DIR}" )
+				shutil.copy2( src=artifact , dst=MONICA_CRM_DIR )
 
-    # Calculate elapsed time for performance reporting
-    elapsed_time = time.time() - start_time
+				logger.info( f"Moving digital contact document to: {ODOO_CRM_DIR}" )
+				shutil.move( src=artifact , dst=ODOO_CRM_DIR )
 
-    # Log comprehensive sorting statistics
-    logger.info("Sorting process completed")
-    logger.info(f"Total processing time: {elapsed_time:.2f} seconds")
-    logger.info(f"Total files processed: {len(unprocessed_artifacts)}")
+			# Check if file contains 2FA backup/recovery codes
+			elif is_backup_codes_file( artifact_location=artifact ) :
+				logger.info( f"Detected backup codes file: {artifact.name}" )
+				shutil.move( src=artifact , dst=BITWARDEN_DIR )
+				logger.info( f"Moved backup codes to: {BITWARDEN_DIR}" )
 
-    # Log breakdown of sorted files by category
-    logger.info("Sorting statistics by category:")
-    logger.info(f"  Bookmarks: {stats['bookmarks']}")
-    logger.info(f"  Code files: {stats['code']}")
-    logger.info(f"  Anki decks: {stats['anki_decks']}")
-    logger.info(f"  Backup codes: {stats['backup_codes']}")
-    logger.info(f"  Books: {stats['books']}")
-    logger.info(f"  Financial documents: {stats['financial_docs']}")
-    logger.info(f"  Unsupported files: {stats['unsupported']}")
-    logger.info(f"  Errors encountered: {stats['errors']}")
+			# Check if file is a book (EPUB, PDF with ISBN, etc.)
+			elif is_book( artifact_location=artifact ) :
+				logger.info( f"Detected book: {artifact.name}" )
+				shutil.move( src=artifact , dst=CALIBRE_LIBRARY_DIR )
+				logger.info( f"Moved book to: {CALIBRE_LIBRARY_DIR}" )
 
-    # Calculate and log average processing time per file
-    if len(unprocessed_artifacts) > 0:
-        avg_time = elapsed_time / len(unprocessed_artifacts)
-        logger.info(f"Average time per file: {avg_time:.3f} seconds")
+			# Check if file is a financial document (invoice, receipt, statement)
+			elif is_financial_document(
+					artifact_location=artifact ,
+					visual_processor=visual_processor ,
+					logger=logger ,
+			) :
+				logger.info( f"Detected financial document: {artifact.name}" )
 
-    return None
+				# Financial documents need to be copied to multiple locations
+				# shutil.copy2() preserves metadata (timestamps, permissions)
+				logger.info( f"Copying financial document to: {FIREFLYIII_DIR}" )
+				shutil.copy2( src=artifact , dst=FIREFLYIII_DIR )
+
+				logger.info( f"Copying financial document to: {PERFORMANCE_PORTFOLIO_DIR}" )
+				shutil.copy2( src=artifact , dst=PERFORMANCE_PORTFOLIO_DIR )
+
+				logger.info( f"Copying financial document to: {ODOO_MAINTENANCE_DIR}" )
+				shutil.copy2( src=artifact , dst=ODOO_MAINTENANCE_DIR )
+
+				logger.info( f"Copying financial document to: {ODOO_PLM_DIR}" )
+				shutil.copy2( src=artifact , dst=ODOO_PLM_DIR )
+
+				logger.info( f"Copying financial document to: {ODOO_PURCHASE_DIR}" )
+				shutil.copy2( src=artifact , dst=ODOO_PURCHASE_DIR )
+
+				logger.info( f"Copying financial document to: {ODOO_INVENTORY_DIR}" )
+				shutil.copy2( src=artifact , dst=ODOO_INVENTORY_DIR )
+
+				# Final move to primary storage location
+				logger.info( f"Moving financial document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
+				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR )
+
+			else :
+				# File is supported but didn't match any category
+				# Leave in source directory for manual review
+				logger.warning(
+						f"Could not find automated group to sort {artifact.name}" ,
+				)
+
+		except Exception as e :
+			# Catch and log any errors during file processing
+			# Continue processing remaining files despite errors
+			stats[ "errors" ] += 1
+			logger.error( f"Error processing {artifact.name}: {e}" , exc_info=True )
+
+	return None

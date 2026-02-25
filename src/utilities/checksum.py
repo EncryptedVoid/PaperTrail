@@ -3,13 +3,13 @@ import os
 from datetime import datetime
 from logging import Logger
 from pathlib import Path
-from typing import List , Set
+from typing import List, Set
 
 # Import all security-related constants from centralized configuration
 from config import (
-	CHECKSUM_ALGORITHM ,
-	CHECKSUM_CHUNK_SIZE_BYTES ,
-	CHECKSUM_HISTORY_FILE ,
+    CHECKSUM_ALGORITHM,
+    CHECKSUM_CHUNK_SIZE_BYTES,
+    CHECKSUM_HISTORY_FILE,
 )
 
 
@@ -48,7 +48,7 @@ def generate_checksum(logger: Logger, artifact_path: Path) -> str:
     """
     # Log the start of checksum generation for audit trail
     logger.debug(
-        f"Starting checksum generation for {artifact_path.name} using {CHECKSUM_ALGORITHM.value}"
+        f"Starting checksum generation for {artifact_path.name} using {CHECKSUM_ALGORITHM}"
     )
 
     # Validate file exists before attempting to process
@@ -59,14 +59,14 @@ def generate_checksum(logger: Logger, artifact_path: Path) -> str:
 
     # Initialize the cryptographic hash object with validation
     try:
-        hash_object = hashlib.new(CHECKSUM_ALGORITHM.value)
-        logger.debug(f"Initialized {CHECKSUM_ALGORITHM.value} hash object successfully")
+        hash_object = hashlib.new(CHECKSUM_ALGORITHM)
+        logger.debug(f"Initialized {CHECKSUM_ALGORITHM} hash object successfully")
 
     except ValueError as algorithm_error:
         # Provide detailed error message with available alternatives
         available_algorithms: List[str] = sorted(hashlib.algorithms_available)
         error_msg = (
-            f"Unsupported hash CHECKSUM_ALGORITHM: {CHECKSUM_ALGORITHM.value}. "
+            f"Unsupported hash CHECKSUM_ALGORITHM: {CHECKSUM_ALGORITHM}. "
             f"Available algorithms: {', '.join(available_algorithms)}"
         )
         logger.error(error_msg)
@@ -121,7 +121,7 @@ def generate_checksum(logger: Logger, artifact_path: Path) -> str:
 
     # Log completion with performance metrics for monitoring
     logger.info(
-        f"Generated {CHECKSUM_ALGORITHM.value} checksum for {artifact_path.name}: "
+        f"Generated {CHECKSUM_ALGORITHM} checksum for {artifact_path.name}: "
         f"{final_checksum[:16]}... ({bytes_processed:,} bytes in {processing_duration:.2f}s)"
     )
 

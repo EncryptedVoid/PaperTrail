@@ -7,217 +7,206 @@ and system parameters.
 
 Author: Ashiq Gazi
 """
-
+import os
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict
 
+# ── Root Directories ──────────────────────────────────────────────────────────
+# Primary drive where all PaperTrail data is loaded from
+# TARGET_DRIVE: Path = Path("E:")
+TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop" )
+# Root directory for all processing operations and derived outputs
+BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
+# Source directory for artifacts awaiting ingestion into the pipeline
+UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PaperTrail-Load" )
 
-# Resource directories
-TARGET_DRIVE: Path = Path("E\\")
-BASE_DIR: Path = Path(f"{TARGET_DRIVE}PAPERTRAIL-PROCESSING")
-UNPROCESSED_ARTIFACTS_DIR: Path = Path(r"C:\Users\UserX\Desktop\PaperTrail-Load")
+# ── Processing Directories ─────────────────────────────────────────────────────
+# Archive storage for fully processed and verified artifacts
+ARCHIVAL_DIR: Path = Path( BASE_DIR / "ARCHIVE" )
+# Persistent JSON/YAML profiles describing each processed artifact
+ARTIFACT_PROFILES_DIR: Path = Path( BASE_DIR / "ARTIFACT_PROFILES" )
+# Running log of all artifact checksums for integrity tracking
+CHECKSUM_HISTORY_FILE: Path = Path( BASE_DIR / "checksum_history.txt" )
+# Output directory for application logs
+LOG_DIR: Path = Path( BASE_DIR / "LOGS" )
+# Scratch space for intermediate files during processing
+TEMP_DIR: Path = Path( BASE_DIR / "TEMP" )
 
-# Immutable/permanent locations
-ARTIFACT_PROFILES_DIR: Path = BASE_DIR / "DATA/artifact_profiles"
-CHECKSUM_HISTORY_FILE: Path = BASE_DIR / "DATA/checksum_history.txt"
-LOG_DIR: Path = BASE_DIR / "LOGS"
-ARCHIVAL_DIR: Path = BASE_DIR / "ARCHIVE"
-TEMP_DIR: Path = BASE_DIR / "TEMP"
-
-LINKWARDEN_DIR: Path = TARGET_DRIVE / "LINKWARDEN"
-ANKI_DIR: Path = TARGET_DRIVE / "ANKI"
-BITWARDEN_DIR: Path = TARGET_DRIVE / "BITWARDEN"
-FIREFLYIII_DIR: Path = TARGET_DRIVE / "FIREFLY-III"
-DIGITAL_ASSET_MANAGEMENT_DIR: Path = TARGET_DRIVE / "RESOURCE-SPACE"
-IMMICH_DIR: Path = TARGET_DRIVE / "IMMICH"
-AFFINE_DIR: Path = TARGET_DRIVE / "AFFINE"
-PERFORMANCE_PORTFOLIO_DIR: Path = TARGET_DRIVE / "PERFORMANCE_PORTFOLIO"
-CALIBRE_LIBRARY_DIR: Path = TARGET_DRIVE / "CALIBRE_LIBRARY"
-GITLAB_DIR: Path = TARGET_DRIVE / "GITLAB"
-
-# Main processing pipeline stages
-EMAIL_OUTPUT_DIR = BASE_DIR / "EMAIL_BACKUP"
-IMPORTANT_EMAILS_DIR = UNPROCESSED_ARTIFACTS_DIR
-UNIMPORTANT_EMAILS_DIR = ARCHIVAL_DIR
-EMAIL_ARTIFACTS_DIR = UNPROCESSED_ARTIFACTS_DIR
-
-DUPLICATE_ARTIFACTS_DIR: Path = BASE_DIR / "REVIEW/DUPLICATES"
-CORRUPTED_ARTIFACTS_DIR: Path = BASE_DIR / "REVIEW/CORRUPTED_ARTIFACTS"
-UNSUPPORTED_ARTIFACTS_DIR: Path = BASE_DIR / "REVIEW/UNSUPPORTED_ARTIFACTS"
-PASSWORD_PROTECTED_ARTIFACTS_DIR: Path = (
-    BASE_DIR / "REVIEW/PASSWORD_PROTECTED_ARTIFACTS"
+# ── Review Directories ─────────────────────────────────────────────────────────
+# Artifacts flagged as corrupted and requiring manual inspection
+CORRUPTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/CORRUPTED_ARTIFACTS" )
+# Artifacts identified as duplicates of already-processed items
+DUPLICATE_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/DUPLICATE_ARTIFACTS" )
+# Artifacts that could not be processed due to password protection
+PASSWORD_PROTECTED_ARTIFACTS_DIR: Path = Path(
+		BASE_DIR / "REVIEW/PASSWORD_PROTECTED_ARTIFACTS" ,
 )
+# Artifacts with file types not supported by the current pipeline
+UNSUPPORTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/UNSUPPORTED_ARTIFACTS" )
+# Artifacts that require alterations to be done manually
+ALTERATIONS_REQUIRED_DIR: Path = Path( BASE_DIR / "REVIEW/ALTERATIONS_REQUIRED" )
+SCANNING_REQUIRED_DIR: Path = Path( ALTERATIONS_REQUIRED_DIR / "DOCUMENT_SCANNING_REQUIRED" )
+UNESSENTIAL_DIR: Path = Path( BASE_DIR / "UNESSENTIAL_ITEMS" )
 
-# System directories collection
-SYSTEM_DIRECTORIES: Set[Path] = {
-    TARGET_DRIVE,
-    BASE_DIR,
-    UNPROCESSED_ARTIFACTS_DIR,
-    ARTIFACT_PROFILES_DIR,
-    CHECKSUM_HISTORY_FILE,
-    LOG_DIR,
-    ARCHIVAL_DIR,
-    TEMP_DIR,
-    LINKWARDEN_DIR,
-    ANKI_DIR,
-    BITWARDEN_DIR,
-    FIREFLYIII_DIR,
-    DIGITAL_ASSET_MANAGEMENT_DIR,
-    IMMICH_DIR,
-    AFFINE_DIR,
-    PERFORMANCE_PORTFOLIO_DIR,
-    EMAIL_OUTPUT_DIR,
-    IMPORTANT_EMAILS_DIR,
-    UNIMPORTANT_EMAILS_DIR,
-    EMAIL_ARTIFACTS_DIR,
-    DUPLICATE_ARTIFACTS_DIR,
-    CORRUPTED_ARTIFACTS_DIR,
-    UNSUPPORTED_ARTIFACTS_DIR,
-    PASSWORD_PROTECTED_ARTIFACTS_DIR,
+# ── Application Data Directories ──────────────────────────────────────────────
+# AFFiNE knowledge base and workspace data
+AFFINE_DIR: Path = Path(
+		TARGET_DRIVE / "AFFINE" ,
+)  # https://docs.affine.pro/self-host-affine/install/docker-compose-recommend
+# Anki flashcard decks and media
+ANKI_DIR: Path = Path( TARGET_DRIVE / "ANKI" )  # https://apps.ankiweb.net/
+# Bitwarden vault exports and configuration
+BITWARDEN_DIR: Path = Path( TARGET_DRIVE / "BITWARDEN" )  # https://bitwarden.com/
+# Calibre e-book library and metadata
+CALIBRE_LIBRARY_DIR: Path = Path( TARGET_DRIVE / "CALIBRE_LIBRARY" )  # https://github.com/janeczku/calibre-web
+# Seafile digital asset management storage
+DIGITAL_ASSET_MANAGEMENT_DIR: Path = Path(
+		TARGET_DRIVE / "SEAFILE" ,
+)  # https://manual.seafile.com/11.0/docker/deploy_seafile_with_docker/
+# Firefly III personal finance data and exports
+FIREFLYIII_DIR: Path = Path(
+		TARGET_DRIVE / "FIREFLY-III" ,
+)  # https://docs.firefly-iii.org/how-to/firefly-iii/installation/docker/
+JELLYFIN_DIR: Path = Path( TARGET_DRIVE / "JELLYFIN" )  # https://jellyfin.org/
+# GitLab repository mirrors and CI artifacts
+GITLAB_DIR: Path = Path( TARGET_DRIVE / "GITLAB" )  # https://about.gitlab.com/
+# Immich photo and video library
+IMMICH_DIR: Path = Path( TARGET_DRIVE / "IMMICH" )  # https://docs.immich.app/overview/quick-start/
+# Linkwarden bookmarks and archived web content
+LINKWARDEN_DIR: Path = Path(
+		TARGET_DRIVE / "LINKWARDEN" ,
+)  # https://docs.linkwarden.app/self-hosting/installation#docker-
+# Monica CRM contacts and relationship data
+MONICA_CRM_DIR: Path = Path( TARGET_DRIVE / "MONICA_CRM" )  # https://www.monicahq.com/
+# Odoo business tools
+ODOO_CRM_DIR: Path = Path( TARGET_DRIVE / "ODOO_CRM" )  # https://www.odoo.com/app/crm
+ODOO_MAINTENANCE_DIR: Path = Path( TARGET_DRIVE / "ODOO_MAINTENANCE" )  # https://www.odoo.com/app/maintenance
+ODOO_PLM_DIR: Path = Path( TARGET_DRIVE / "ODOO_PLM" )  # https://www.odoo.com/app/plm
+ODOO_PURCHASE_DIR: Path = Path( TARGET_DRIVE / "ODOO_PURCHASE" )  # https://www.odoo.com/app/purchase
+ODOO_INVENTORY_DIR: Path = Path( TARGET_DRIVE / "ODOO_INVENTORY" )  # https://www.odoo.com/app/inventory
+# Performance portfolio documents and media
+PERFORMANCE_PORTFOLIO_DIR: Path = Path( TARGET_DRIVE / "PERFORMANCE_PORTFOLIO" )
+# Ultimaker Cura slicing profiles and print configurations
+ULTIMAKER_CURA_DIR: Path = Path( TARGET_DRIVE / "ULTIMAKER_CURA" )
+# Digital Office Workspace with LibreOffice
+LIBRE_OFFICE_DIR: Path = Path( TARGET_DRIVE / "LIBRE_OFFICE" )
+PERSONAL_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "PERSONAL_ARCHIVE" )  # https://archive.org/details/software
+
+GAMES_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "GAMES_ARCHIVE" )
+MANUALS_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "MANUALS_ARCHIVE" )
+SOFTWARE_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "SOFTWARE_ARCHIVE" )
+
+#  ── System Directory Index ─────────────────────────────────────────────────────
+# Complete set of all managed directories, excluding loose files
+SYSTEM_DIRECTORIES: set[ Path ] = {
+	TARGET_DRIVE ,
+	BASE_DIR ,
+	UNPROCESSED_ARTIFACTS_DIR ,
+	ARCHIVAL_DIR ,
+	ARTIFACT_PROFILES_DIR ,
+	LOG_DIR ,
+	TEMP_DIR ,
+	CORRUPTED_ARTIFACTS_DIR ,
+	DUPLICATE_ARTIFACTS_DIR ,
+	PASSWORD_PROTECTED_ARTIFACTS_DIR ,
+	UNSUPPORTED_ARTIFACTS_DIR ,
+	ALTERATIONS_REQUIRED_DIR ,
+	SCANNING_REQUIRED_DIR ,
+	UNESSENTIAL_DIR ,
+	AFFINE_DIR ,
+	ANKI_DIR ,
+	BITWARDEN_DIR ,
+	CALIBRE_LIBRARY_DIR ,
+	DIGITAL_ASSET_MANAGEMENT_DIR ,
+	FIREFLYIII_DIR ,
+	JELLYFIN_DIR ,
+	GITLAB_DIR ,
+	IMMICH_DIR ,
+	LINKWARDEN_DIR ,
+	MONICA_CRM_DIR ,
+	ODOO_CRM_DIR ,
+	ODOO_MAINTENANCE_DIR ,
+	ODOO_PLM_DIR ,
+	ODOO_PURCHASE_DIR ,
+	ODOO_INVENTORY_DIR ,
+	PERFORMANCE_PORTFOLIO_DIR ,
+	ULTIMAKER_CURA_DIR ,
+	LIBRE_OFFICE_DIR ,
+	PERSONAL_ARCHIVE_DIR ,
+	GAMES_ARCHIVE_DIR ,
+	MANUALS_ARCHIVE_DIR ,
+	SOFTWARE_ARCHIVE_DIR ,
 }
-
-EMAIL_TYPES = ["eml", "msg", "mbox", "emlx"]
-
-DOCUMENT_TYPES = [
-    "pdf",
-    "docx",
-    "doc",
-    "pptx",
-    "ppt",
-    "odt",
-    "odp",
-    "ods",
-    "rtf",
-    "epub",
-    "pub",
-]
-
-IMAGE_TYPES = [
-    "jpeg",
-    "jpg",
-    "png",
-    "bmp",
-    "tiff",
-    "webp",
-    "svg",
-    "ico",
-    "psd",
-    "heic",
-    "heif",
-    "cr2",
-]
-
-VIDEO_TYPES = [
-    "mp4",
-    "avi",
-    "mkv",
-    "mov",
-    "wmv",
-    "flv",
-    "webm",
-    "m4v",
-    "mpg",
-    "mpeg",
-    "3gp",
-    "ogv",
-]
-
-AUDIO_TYPES = ["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus", "aiff", "ape"]
-
-TEXT_TYPES = [
-    "txt",
-    "md",
-    "markdown",
-    "rst",
-    "csv",
-    "json",
-    "xml",
-    "yaml",
-    "yml",
-    "toml",
-    "ini",
-    "log",
-]
-
-ARCHIVE_TYPES = [
-    "zip",
-    "tar",
-    "gz",
-    "bz2",
-    "xz",
-    "7z",
-    "rar",
-    "tar.gz",
-    "tar.bz2",
-    "tar.xz",
-]
-
-CODE_EXTENSIONS = [
-    ".py",
-    ".js",
-    ".java",
-    ".cpp",
-    ".c",
-    ".cs",
-    ".html",
-    ".css",
-    ".php",
-    ".rb",
-    ".go",
-    ".rs",
-    ".sql",
-    ".swift",
-    ".kt",
-    ".ts",
-    ".sh",
-    ".ps1",
-    ".pl",
-    ".r",
-    ".jl",
-    ".lua",
-    ".scala",
-    ".m",
-    ".asm",
-]
-
-# SHA-2 family - Industry standard, FIPS approved, widely supported
-# SHA256 = "sha256"
-# SHA384 = "sha384"
-# SHA512 = "sha512"
-# SHA224 = "sha224"
-# SHA3_256 = "sha3_256"
-# SHA3_384 = "sha3_384"
-# SHA3_512 = "sha3_512"
-# SHA3_224 = "sha3_224"
-# BLAKE2 family - Modern, fast, and secure
-# BLAKE2B = "blake2b"
-# BLAKE2S = "blake2s"
-# SHAKE family - Extendable output functions
-# SHAKE_128 = "shake_128"
-# SHAKE_256 = "shake_256"
-# Legacy algorithms - Deprecated for security-critical applications
-# MD5 = "md5"
-# SHA1 = "sha1"
 
 # Checksum algorithm for duplicate detection and integrity verification
 CHECKSUM_ALGORITHM = "sha3_512"
 CHECKSUM_CHUNK_SIZE_BYTES: int = 8192
 
+MIN_FILE_TYPE_CONF_SCORE: float = 75.0
+MAX_PDF_SIZE_BEFORE_SUBSETTING = 10
+METADATA_EXTRACTION_TIMEOUT = 60
+
+HUGGING_FACE_TOKEN = os.getenv( "HUGGING_FACE_TOKEN" )
+
 ARTIFACT_PREFIX: str = "ARTIFACT"
 PROFILE_PREFIX: str = "PROFILE"
-
-# UUID generation settings
-UUID_PREFIX: str = ""
-INCLUDE_TIMESTAMP_ON_UUID: bool = False
-UUID_ENTROPY: int = 16
-
 LOG_LEVEL: str = "INFO"
 LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 SESSION_LOG_FILE_PREFIX: str = "PAPERTRAIL-SESSION"
 
-# Preferred models
-PREFERRED_VISUAL_MODEL: str = "Qwen/Qwen2-VL-2B-Instruct"
-PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
+# Tiers ordered largest→smallest.
+# "quantization" can be None, "int8", or "nf4" (4-bit NormalFloat via bitsandbytes).
+# VRAM estimates include headroom for activations and KV cache:
+#   bf16  raw weight size  ≈ params × 2 bytes
+#   int8  raw weight size  ≈ params × 1 byte   (+~15% overhead)
+#   nf4   raw weight size  ≈ params × 0.5 byte  (+~20% overhead)
+# Adjust thresholds if you observe OOM in practice.
+QWEN_VL_MODEL_TIERS = [
+	# ── Full precision tiers ──────────────────────────────────────────────
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-72B-Instruct" ,
+		"min_vram_gb"  : 80 ,
+		"quantization" : None ,
+	} ,
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-32B-Instruct" ,
+		"min_vram_gb"  : 40 ,
+		"quantization" : None ,
+	} ,
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 18 ,
+		"quantization" : None ,
+	} ,
+	# ── Quantized 7B tiers (fills the 10 / 12 / 16 GB gaps) ─────────────
+	# 16 GB: 7B bf16 is ~14 GB weights; fits with care but no headroom for
+	#         anything above the base prompt. Use int8 for a safer margin.
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 16 ,
+		"quantization" : "int8" ,
+	} ,
+	# 12 GB: int8 weights ~8 GB + activations fits comfortably.
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 12 ,
+		"quantization" : "int8" ,
+	} ,
+	# 10 GB: int8 is marginal; drop to nf4 (4-bit) for safe headroom.
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 10 ,
+		"quantization" : "nf4" ,
+	} ,
+	# ── 3B fallback tiers ────────────────────────────────────────────────
+	{ "model_id" : "Qwen/Qwen2.5-VL-3B-Instruct" , "min_vram_gb" : 8 , "quantization" : None } ,
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-3B-Instruct" ,
+		"min_vram_gb"  : 4 ,
+		"quantization" : "int8" ,
+	} ,
+]
+QWEN_VL_CPU_FALLBACK = "Qwen/Qwen2.5-VL-3B-Instruct"
 
 SYSTEM_PROMPT: str = """You are a document extraction tool. Extract ONLY the requested information.
 
@@ -232,15 +221,17 @@ GOOD: "Immigration and Refugee Board of Canada"
 BAD: "The document appears to be issued by the Immigration and Refugee Board of Canada"
 
 GOOD: "UNKNOWN"
-BAD: "document does not appear to have any official authority validating, certifying, witnessing, or authorizing it. Therefore, the answer is: UNKNOWN"
+BAD: "document does not appear to have any official authority validating, certifying, witnessing, or authorizing it. 
+Therefore, the answer is: UNKNOWN"
 
 Extract the information. Nothing else.
 
-Return ONLY the requested information. Any additional text, explanation, or reasoning will be considered an error and rejected causing immediate shutdown
+Return ONLY the requested information. Any additional text, explanation, or reasoning will be considered an error and 
+rejected causing immediate shutdown
 """
 
-FIELD_PROMPTS: Dict[str, str] = {
-    "title": """Create a descriptive title that captures the document's purpose and content.
+FIELD_PROMPTS: Dict[ str , str ] = {
+	"title"             : """Create a descriptive title that captures the document's purpose and content.
 
     If the document has an official title, use it. If not, synthesize a descriptive title based on:
     - Document type and purpose
@@ -252,23 +243,24 @@ FIELD_PROMPTS: Dict[str, str] = {
     - "Refugee Protection Division Hearing Preparation Guide"
     - "IRB Document Submission Requirements and Procedures"
 
-    Return ONLY the title. No quotes, no explanations.""",
-    "language": """Analyze the document text and identify the PREDOMINANT language present.
+    Return ONLY the title. No quotes, no explanations.""" ,
+	"language"          : """Analyze the document text and identify the PREDOMINANT language present.
     Document contains sections in multiple languages. List the PREDOMINANT/MAIN language found.
     Examples:
     - If English only: "English"
     - If French only: "French"
     - If both: "English, French", provide the language with more text
-    Return ONLY language names.""",
-    "issuing_body": """Identify any official authority that validated, certified, witnessed, or authorized this document.
+    Return ONLY language names.""" ,
+	"issuing_body"      : """Identify any official authority that validated, certified, witnessed, or authorized this 
+	document.
     Look for:
     - Notary public names and seals
     - Certifying agency names
     - Official witnesses or authorizing bodies
     - Government officials who signed or stamped
     - Licensing boards or regulatory authorities
-    Return ONLY the name of the official authority. If no official validation exists, return "UNKNOWN".""",
-    "version_notes": """Analyze document versioning, revision history, and administrative metadata.
+    Return ONLY the name of the official authority. If no official validation exists, return "UNKNOWN".""" ,
+	"version_notes"     : """Analyze document versioning, revision history, and administrative metadata.
 
 Look for:
 - Version numbers, revision dates, edition information
@@ -279,8 +271,9 @@ Look for:
 Provide a professional assessment of document currency and version status.
 If no versioning found, state: "No explicit version control information identified."
 
-Use formal, administrative language.""",
-    "utility_notes": """Provide a professional analysis of this document's administrative function and legal purpose.
+Use formal, administrative language.""" ,
+	"utility_notes"     : """Provide a professional analysis of this document's administrative function and legal 
+	purpose.
 
 Analyze:
 - Regulatory or statutory requirements this document fulfills
@@ -289,8 +282,9 @@ Analyze:
 - Institutional workflows it facilitates
 - Compliance requirements it addresses
 
-Write in formal, bureaucratic language appropriate for government documentation.""",
-    "executive_summary": """Summarize significant administrative, security, or procedural characteristics not covered elsewhere.
+Write in formal, bureaucratic language appropriate for government documentation.""" ,
+	"executive_summary" : """Summarize significant administrative, security, or procedural characteristics not covered 
+	elsewhere.
 
 Note:
 - Security classifications, handling restrictions
@@ -299,125 +293,977 @@ Note:
 - Document quality, preservation concerns
 - Cross-references to related administrative instruments
 
-Present observations in formal, official terminology suitable for administrative records.""",
+Present observations in formal, official terminology suitable for administrative records.""" ,
 }
+
+SPREADSHEET_TYPES = [ "xlsx" , "csv" ]
+
+EMAIL_TYPES = [
+	"eml" ,
+	"emlx" ,
+	"mbox" ,
+	"mbx" ,  # Generic mbox variant
+	"msg" ,
+	"ost" ,  # Outlook offline storage
+	"pst" ,  # Outlook personal storage
+]
+
+DOCUMENT_TYPES = [
+	"doc" ,
+	"docm" ,  # Word macro-enabled
+	"docx" ,
+	"epub" ,
+	"indd" ,  # Adobe InDesign
+	"key" ,  # Apple Keynote
+	"numbers" ,  # Apple Numbers
+	"odp" ,
+	"ods" ,
+	"odt" ,
+	"pages" ,  # Apple Pages
+	"pdf" ,
+	"ppt" ,
+	"pptm" ,  # PowerPoint macro-enabled
+	"pptx" ,
+	"pub" ,  # Microsoft Publisher
+	"rtf" ,
+	"tex" ,  # LaTeX source
+	"xls" ,
+	"xlsm" ,  # Excel macro-enabled
+	"xlsx" ,
+	"xps" ,  # XML Paper Specification
+	"chm" ,
+]
+
+MICROSOFT_FILE_TYPES = [
+	"accdb" ,  # Access database
+	"doc" ,
+	"docm" ,
+	"docx" ,
+	"mdb" ,  # Legacy Access database
+	"mpp" ,  # Microsoft Project
+	"one" ,  # OneNote
+	"ppt" ,
+	"pptm" ,
+	"pptx" ,
+	"pub" ,
+	"vsd" ,  # Visio (legacy)
+	"vsdx" ,  # Visio
+	"xls" ,
+	"xlsm" ,
+	"xlsx" ,
+]
+
+IMAGE_TYPES = [
+	"arw" ,  # Sony RAW
+	"avif" ,  # AV1 Image Format
+	"bmp" ,
+	"cr2" ,  # Canon RAW (gen 2)
+	"cr3" ,  # Canon RAW (gen 3)
+	"dng" ,  # Adobe Digital Negative
+	"eps" ,  # Encapsulated PostScript
+	"exr" ,  # OpenEXR HDR
+	"gif" ,
+	"hdr" ,  # Radiance HDR
+	"heic" ,
+	"heif" ,
+	"ico" ,
+	"jxl" ,  # JPEG XL
+	"jpeg" ,
+	"jpg" ,
+	"nef" ,  # Nikon RAW
+	"orf" ,  # Olympus RAW
+	"png" ,
+	"psd" ,
+	"raf" ,  # Fujifilm RAW
+	"raw" ,  # Generic RAW
+	"rw2" ,  # Panasonic RAW
+	"svg" ,
+	"tif" ,
+	"tiff" ,
+	"webp" ,
+	"xcf" ,  # GIMP native format
+]
+
+VIDEO_TYPES = [
+	"3gp" ,
+	"asf" ,  # Advanced Systems Format
+	"avi" ,
+	"divx" ,
+	"f4v" ,  # Flash MP4
+	"flv" ,
+	"m2ts" ,  # Blu-ray MPEG-2
+	"m4v" ,
+	"mkv" ,
+	"mov" ,
+	"mp4" ,
+	"mpeg" ,
+	"mpg" ,
+	"mts" ,  # AVCHD
+	"mxf" ,  # Material Exchange Format (broadcast)
+	"ogv" ,
+	"rm" ,  # RealMedia
+	"rmvb" ,  # RealMedia Variable Bitrate
+	"ts" ,  # MPEG Transport Stream
+	"vob" ,  # DVD Video Object
+	"webm" ,
+	"wmv" ,
+]
+
+AUDIO_TYPES = [
+	"aac" ,
+	"ac3" ,  # Dolby Digital
+	"aiff" ,
+	"amr" ,  # Adaptive Multi-Rate (mobile)
+	"ape" ,
+	"au" ,  # Sun/NeXT audio
+	"dsf" ,  # DSD audio
+	"dts" ,  # DTS audio
+	"flac" ,
+	"m4a" ,
+	"mid" ,  # MIDI
+	"midi" ,
+	"mka" ,  # Matroska audio
+	"mp3" ,
+	"ogg" ,
+	"opus" ,
+	"ra" ,  # RealAudio
+	"wav" ,
+	"wma" ,
+]
+
+TEXT_TYPES = [
+	"cfg" ,
+	"conf" ,
+	"csv" ,
+	"env" ,
+	"htm" ,
+	"html" ,
+	"ini" ,
+	"json" ,
+	"jsonl" ,  # JSON Lines
+	"log" ,
+	"markdown" ,
+	"md" ,
+	"nfo" ,
+	"rst" ,
+	"tex" ,
+	"toml" ,
+	"tsv" ,  # Tab-separated values
+	"txt" ,
+	"xml" ,
+	"yaml" ,
+	"yml" ,
+]
+
+ARCHIVE_TYPES = [
+	"7z" ,
+	"apk" ,  # Android package
+	"bz2" ,
+	"cab" ,  # Windows cabinet
+	"deb" ,  # Debian package
+	"dmg" ,  # macOS disk image
+	"gz" ,
+	"iso" ,  # Optical disc image
+	"lz" ,
+	"lzma" ,
+	"rar" ,
+	"rpm" ,  # Red Hat package
+	"tar" ,
+	"tar.bz2" ,
+	"tar.gz" ,
+	"tar.xz" ,
+	"tgz" ,
+	"tbz2" ,
+	"txz" ,
+	"xz" ,
+	"zip" ,
+	"zst" ,  # Zstandard
+]
+
+CODE_EXTENSIONS = [
+	"asm" ,
+	"awk" ,
+	"bash" ,
+	"bat" ,  # Windows batch
+	"c" ,
+	"clj" ,  # Clojure
+	"cmd" ,  # Windows command script
+	"cpp" ,
+	"cs" ,
+	"css" ,
+	"dart" ,
+	"elm" ,
+	"ex" ,  # Elixir
+	"exs" ,  # Elixir script
+	"f" ,  # Fortran
+	"f90" ,  # Fortran 90
+	"fish" ,  # Fish shell
+	"go" ,
+	"graphql" ,
+	"hs" ,  # Haskell
+	"hcl" ,  # HashiCorp config (Terraform)
+	"html" ,
+	"java" ,
+	"jl" ,
+	"js" ,
+	"jsx" ,
+	"kt" ,  # Kotlin
+	"lua" ,
+	"m" ,
+	"ml" ,  # OCaml
+	"mli" ,  # OCaml interface
+	"nim" ,
+	"php" ,
+	"pl" ,
+	"proto" ,  # Protocol Buffers
+	"py" ,
+	"r" ,
+	"rb" ,
+	"rs" ,
+	"scala" ,
+	"sh" ,
+	"sql" ,
+	"svelte" ,
+	"swift" ,
+	"tcl" ,
+	"tf" ,  # Terraform
+	"ts" ,
+	"tsx" ,
+	"v" ,  # Verilog
+	"vhd" ,  # VHDL
+	"vhdl" ,
+	"vue" ,
+	"wasm" ,
+	"zig" ,
+	"zsh" ,
+]
+
+EXECUTABLE_EXTENSIONS = [
+	"app" ,  # macOS application bundle
+	"appimage" ,  # Linux portable app
+	"bat" ,  # Windows batch script
+	"bin" ,  # Generic binary
+	"cmd" ,  # Windows command script
+	"deb" ,  # Debian installer
+	"dmg" ,  # macOS installer image
+	"exe" ,
+	"ipa" ,  # iOS app package
+	"msi" ,  # Windows installer
+	"rpm" ,  # Red Hat installer
+	"run" ,  # Linux self-executing binary
+	"sh" ,  # Shell script (executable)
+]
+
+ANKI_EXTENSIONS = [ "apkg" ]
+
+# Comprehensive 3D File Format Mapping
+# Covers: CAD, Mesh, Slicer/Print, Scan, Animation, Game Engine,
+#         Solid Modeling, BIM, Voxel, Point Cloud, Scene, and Exchange formats.
+CAD_FILES = [
+	# ─────────────────────────────────────────────
+	# SLICER / 3D PRINTING
+	# ─────────────────────────────────────────────
+	"gcode" ,
+	"bgcode" ,
+	# ─────────────────────────────────────────────
+	# MESH — POLYGON / TRIANGULATED
+	# ─────────────────────────────────────────────
+	"stl" ,
+]
+
+# Contact & Address Book File Format Mapping
+
+DIGITAL_CONTACT_EXTENSIONS = [
+	"vcf" ,
+	"vcard" ,
+	"contact" ,
+	"contacts" ,
+]
 
 # File type mappings
 EXTENSION_MAPPING = {
-    # Images
-    ".jpeg": "image",
-    ".jpg": "image",
-    ".png": "image",
-    ".heic": "image",
-    ".cr2": "image",
-    ".arw": "image",
-    ".nef": "image",
-    ".webp": "image",
-    # Videos
-    ".mov": "video",
-    ".mp4": "video",
-    ".webm": "video",
-    ".amv": "video",
-    ".3gp": "video_audio",  # Special case - need to probe
-    # Audio
-    ".wav": "audio",
-    ".mp3": "audio",
-    ".m4a": "audio",
-    ".ogg": "audio",
-    # Documents
-    ".pptx": "document",
-    ".doc": "document",
-    ".docx": "document",
-    ".rtf": "document",
-    ".epub": "document",
-    ".pub": "document",
-    ".djvu": "document",
-    ".pdf": "document",
+	# Images
+	".jpeg" : "image" ,
+	".jpg"  : "image" ,
+	".png"  : "image" ,
+	".heic" : "image" ,
+	".cr2"  : "image" ,
+	".arw"  : "image" ,
+	".nef"  : "image" ,
+	".webp" : "image" ,
+	# Videos
+	".mov"  : "video" ,
+	".mp4"  : "video" ,
+	".webm" : "video" ,
+	".amv"  : "video" ,
+	".3gp"  : "video_audio" ,  # Special case - need to probe
+	# Audio
+	".wav"  : "audio" ,
+	".mp3"  : "audio" ,
+	".m4a"  : "audio" ,
+	".ogg"  : "audio" ,
+	# Documents
+	".pptx" : "document" ,
+	".doc"  : "document" ,
+	".docx" : "document" ,
+	".rtf"  : "document" ,
+	".epub" : "document" ,
+	".pub"  : "document" ,
+	".djvu" : "document" ,
+	".pdf"  : "document" ,
 }
 
 # Target formats for each type
 TARGET_FORMATS = {
-    "image": ".png",
-    "video": ".mp4",
-    "audio": ".mp3",
-    "document": ".pdf",
+	"image"    : ".png" ,
+	"video"    : ".mp4" ,
+	"audio"    : ".mp3" ,
+	"document" : ".pdf" ,
 }
 
 JAVA_PATH: str = "java"
-TIKA_APP_JAR_PATH = (
-    r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\tika-app-3.2.3.jar"
-)
 MIN_JAVA_VERSION: int = 11
-MIN_FILE_TYPE_CONF_SCORE: float = 75.0
 
-SILENCE_THRESH_DB: float = -50.0
-MIN_SILENCE_LEN_MS: int = 1000
-MIN_NONSILENT_RATIO: float = 0.01
-RMS_ENERGY_THRESHOLD_DB: float = -40.0
-PREFERRED_AUDIO_MODEL = "large-v3"  # or "medium", "base", "small", "tiny"
-MIN_TRANSCRIPTION_SUCCESS_RATE = 0.9  # 90% minimum success rate
-
-# Language code mapping (ISO 639-3 to full names for pdf2zh)
-LANGUAGE_MAP = {
-    "ENG": "English",
-    "ZHO": "Simplified Chinese",
-    "ZHT": "Traditional Chinese",
-    "SPA": "Spanish",
-    "FRA": "French",
-    "DEU": "German",
-    "ITA": "Italian",
-    "POR": "Portuguese",
-    "RUS": "Russian",
-    "JPN": "Japanese",
-    "KOR": "Korean",
-    "ARA": "Arabic",
-    "HIN": "Hindi",
-    "BEN": "Bengali",
-    "VIE": "Vietnamese",
-    "THA": "Thai",
-    "TUR": "Turkish",
-    "POL": "Polish",
-    "NLD": "Dutch",
-    "GRE": "Greek",
-    "HEB": "Hebrew",
-    "SWE": "Swedish",
-    "NOR": "Norwegian",
-    "DAN": "Danish",
-    "FIN": "Finnish",
-    "CZE": "Czech",
-    "HUN": "Hungarian",
-    "ROM": "Romanian",
-    "UKR": "Ukrainian",
-    "IND": "Indonesian",
-    "MAY": "Malay",
-    "PER": "Persian",
-    "URD": "Urdu",
-}
-
-PREFERRED_LANGUAGE_TRANSLATIONS: List[str] = ["ENG", "FRA", "BEN", "DEU", "POL"]
-PREFERRED_TRANSLATION_MODEL: str = "ollama:gemma2:9b"
-
-# Watermark translations for different languages
-TRANSLATION_WATERMARKS: Dict[str, str] = {
-    "DEU": f"Dieses Dokument wurde mit PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) aus dem Englischen übersetzt",
-    "FRA": f"Ce document a été traduit de l'anglais avec PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
-    "SPA": f"Este documento ha sido traducido del inglés usando PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
-    "ITA": f"Questo documento è stato tradotto dall'inglese usando PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
-    "POR": f"Este documento foi traduzido do inglês usando PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
-    "RUS": f"Этот документ был переведен с английского с помощью PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
-    "JPN": f"この文書はPDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})を使用して英語から翻訳されました",
-    "KOR": f"이 문서는 PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})를 사용하여 영어에서 번역되었습니다",
-    "CHI": f"本文档已使用 PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) 从英文翻译",
-    "NLD": f"Dit document is vertaald uit het Engels met PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
-    "POL": f"Ten dokument został przetłumaczony z angielskiego za pomocą PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL})",
-    "TUR": f"Bu belge PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) kullanılarak İngilizceden çevrilmiştir",
-    "HIN": f"यह दस्तावेज़ PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) का उपयोग करके अंग्रेजी से अनुवादित किया गया है",
-    "ENG": f"This document has been translated using PDFMathTranslate (arxiv.org/pdf/2507.03009) ({PREFERRED_TRANSLATION_MODEL}) from English",
-}
-
-PDF_ARRANGER_EXE_PATH = (
-    r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\pdfarranger.exe"
+TIKA_APP_JAR_PATH: Path = (
+	r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\tika-app-3.2.3.jar"
 )
 
-GMAIL_ADDRESS = "ashiqarib@gmail.com"
-OUTLOOK_ADDRESS = "agazi064@uottawa.ca"
+PDF_ARRANGER_EXE_PATH: Path = (
+	r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\pdfarranger.exe"
+)
+
+# Apache Tika MIME Type → File Extension Mapping
+# Covers: Documents, Spreadsheets, Presentations, Images, Audio, Video,
+#         Archives, Code, Data, CAD, eBooks, Fonts, and more.
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MIME_TO_EXT_MAP  — Apache Tika MIME Type → preferred file extension
+# ══════════════════════════════════════════════════════════════════════════════
+MIME_TO_EXT_MAP: dict[ str , str ] = {
+	# ─────────────────────────────────────────────────────────────────────
+	# PLAIN TEXT & GENERIC MARKUP
+	# ─────────────────────────────────────────────────────────────────────
+	"text/plain"                                                                : ".txt" ,
+	"text/html"                                                                 : ".html" ,
+	"text/xml"                                                                  : ".xml" ,
+	"text/css"                                                                  : ".css" ,
+	"text/csv"                                                                  : ".csv" ,
+	"text/tab-separated-values"                                                 : ".tsv" ,
+	"text/calendar"                                                             : ".ics" ,
+	"text/vcard"                                                                : ".vcf" ,
+	"text/x-vcard"                                                              : ".vcf" ,
+	"text/x-vcalendar"                                                          : ".vcs" ,
+	"text/vtt"                                                                  : ".vtt" ,
+	"text/markdown"                                                             : ".md" ,
+	"text/x-rst"                                                                : ".rst" ,
+	"text/x-asciidoc"                                                           : ".adoc" ,
+	"text/troff"                                                                : ".man" ,
+	"text/x-tex"                                                                : ".tex" ,
+	"text/x-latex"                                                              : ".latex" ,
+	"text/sgml"                                                                 : ".sgml" ,
+	"text/x-log"                                                                : ".log" ,
+	"text/x-ini"                                                                : ".ini" ,
+	"text/x-properties"                                                         : ".properties" ,
+	"text/x-diff"                                                               : ".diff" ,
+	"text/x-patch"                                                              : ".patch" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# CODE — WEB / SCRIPTING
+	# ─────────────────────────────────────────────────────────────────────
+	"text/javascript"                                                           : ".js" ,
+	"application/javascript"                                                    : ".js" ,
+	"application/x-javascript"                                                  : ".js" ,
+	"application/typescript"                                                    : ".ts" ,
+	"text/x-typescript"                                                         : ".ts" ,
+	"text/x-python"                                                             : ".py" ,
+	"application/x-python-code"                                                 : ".pyc" ,
+	"text/x-ruby"                                                               : ".rb" ,
+	"text/x-perl"                                                               : ".pl" ,
+	"text/x-php"                                                                : ".php" ,
+	"application/x-httpd-php"                                                   : ".php" ,
+	"text/x-sh"                                                                 : ".sh" ,
+	"text/x-shellscript"                                                        : ".sh" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# CODE — COMPILED / SYSTEMS
+	# ─────────────────────────────────────────────────────────────────────
+	"text/x-java-source"                                                        : ".java" ,
+	"text/x-csrc"                                                               : ".c" ,
+	"text/x-chdr"                                                               : ".h" ,
+	"text/x-c++src"                                                             : ".cpp" ,
+	"text/x-c++hdr"                                                             : ".hpp" ,
+	"text/x-csharp"                                                             : ".cs" ,
+	"text/x-go"                                                                 : ".go" ,
+	"text/x-rust"                                                               : ".rs" ,
+	"text/x-swift"                                                              : ".swift" ,
+	"text/x-kotlin"                                                             : ".kt" ,
+	"text/x-scala"                                                              : ".scala" ,
+	"text/x-vb"                                                                 : ".vb" ,
+	"text/x-pascal"                                                             : ".pas" ,
+	"text/x-fortran"                                                            : ".f" ,
+	"text/x-fortran90"                                                          : ".f90" ,
+	"text/x-fortran95"                                                          : ".f95" ,
+	"text/x-asm"                                                                : ".asm" ,
+	"text/x-nasm"                                                               : ".asm" ,
+	"application/x-elf"                                                         : ".elf" ,
+	"application/x-sharedlib"                                                   : ".so" ,
+	"application/x-mach-binary"                                                 : ".dylib" ,
+	"application/x-java-class"                                                  : ".class" ,
+	"application/x-llvm"                                                        : ".bc" ,
+	"application/wasm"                                                          : ".wasm" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# CODE — DATA SCIENCE / STATISTICS / SCIENTIFIC
+	# ─────────────────────────────────────────────────────────────────────
+	"text/x-r"                                                                  : ".r" ,
+	"text/x-r-source"                                                           : ".r" ,
+	"text/x-matlab"                                                             : ".m" ,
+	"text/x-octave"                                                             : ".m" ,
+	"text/x-julia"                                                              : ".jl" ,
+	"text/x-lua"                                                                : ".lua" ,
+	"text/x-groovy"                                                             : ".groovy" ,
+	"text/x-clojure"                                                            : ".clj" ,
+	"text/x-haskell"                                                            : ".hs" ,
+	"text/x-erlang"                                                             : ".erl" ,
+	"text/x-elixir"                                                             : ".ex" ,
+	"text/x-fsharp"                                                             : ".fs" ,
+	"text/x-ocaml"                                                              : ".ml" ,
+	"text/x-nim"                                                                : ".nim" ,
+	"text/x-zig"                                                                : ".zig" ,
+	"text/x-crystal"                                                            : ".cr" ,
+	"text/x-dart"                                                               : ".dart" ,
+	"text/x-coffeescript"                                                       : ".coffee" ,
+	"application/x-ipynb+json"                                                  : ".ipynb" ,
+	"application/vnd.jupyter"                                                   : ".ipynb" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# CODE — BUILD / CONFIG / INFRA
+	# ─────────────────────────────────────────────────────────────────────
+	"text/x-makefile"                                                           : ".makefile" ,
+	"application/x-cmake"                                                       : ".cmake" ,
+	"text/x-dockerfile"                                                         : ".dockerfile" ,
+	"text/x-toml"                                                               : ".toml" ,
+	"application/toml"                                                          : ".toml" ,
+	"application/x-yaml"                                                        : ".yaml" ,
+	"text/x-yaml"                                                               : ".yaml" ,
+	"text/x-powershell"                                                         : ".ps1" ,
+	"application/x-bat"                                                         : ".bat" ,
+	"text/x-nsis"                                                               : ".nsi" ,
+	"text/x-gradle"                                                             : ".gradle" ,
+	"application/x-web-app-manifest+json"                                       : ".webapp" ,
+	"application/manifest+json"                                                 : ".webmanifest" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# CODE — SHADER / GPU
+	# ─────────────────────────────────────────────────────────────────────
+	"text/x-glsl"                                                               : ".glsl" ,
+	"text/x-hlsl"                                                               : ".hlsl" ,
+	"text/x-wgsl"                                                               : ".wgsl" ,
+	"text/x-metal"                                                              : ".metal" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# CODE — QUERY / DATABASE
+	# ─────────────────────────────────────────────────────────────────────
+	"text/x-sql"                                                                : ".sql" ,
+	"application/x-sqlite3"                                                     : ".sqlite" ,
+	"application/vnd.sqlite3"                                                   : ".sqlite" ,
+	"application/x-dbf"                                                         : ".dbf" ,
+	"application/vnd.ms-access"                                                 : ".mdb" ,
+	"application/x-parquet"                                                     : ".parquet" ,
+	"application/x-avro"                                                        : ".avro" ,
+	"application/x-orc"                                                         : ".orc" ,
+	"application/x-hdf"                                                         : ".h5" ,
+	"application/x-netcdf"                                                      : ".nc" ,
+	"application/x-matlab-data"                                                 : ".mat" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# XML VARIANTS
+	# ─────────────────────────────────────────────────────────────────────
+	"application/xml"                                                           : ".xml" ,
+	"application/xhtml+xml"                                                     : ".xhtml" ,
+	"application/atom+xml"                                                      : ".atom" ,
+	"application/rss+xml"                                                       : ".rss" ,
+	"application/rdf+xml"                                                       : ".rdf" ,
+	"application/soap+xml"                                                      : ".xml" ,
+	"application/wsdl+xml"                                                      : ".wsdl" ,
+	"application/xslt+xml"                                                      : ".xslt" ,
+	"application/mathml+xml"                                                    : ".mml" ,
+	"application/x-dtd"                                                         : ".dtd" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# JSON / DATA INTERCHANGE
+	# ─────────────────────────────────────────────────────────────────────
+	"application/json"                                                          : ".json" ,
+	"application/ld+json"                                                       : ".jsonld" ,
+	"application/geo+json"                                                      : ".geojson" ,
+	"application/schema+json"                                                   : ".json" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# PDF & POSTSCRIPT
+	# ─────────────────────────────────────────────────────────────────────
+	"application/pdf"                                                           : ".pdf" ,
+	"application/postscript"                                                    : ".ps" ,
+	"application/x-eps"                                                         : ".eps" ,
+	"image/x-eps"                                                               : ".eps" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# MICROSOFT OFFICE — LEGACY OLE2
+	# ─────────────────────────────────────────────────────────────────────
+	"application/msword"                                                        : ".doc" ,
+	"application/vnd.ms-excel"                                                  : ".xls" ,
+	"application/vnd.ms-powerpoint"                                             : ".ppt" ,
+	"application/vnd.ms-project"                                                : ".mpp" ,
+	"application/vnd.ms-works"                                                  : ".wks" ,
+	"application/vnd.ms-outlook"                                                : ".msg" ,
+	"application/vnd.ms-access"                                                 : ".mdb" ,
+	"application/vnd.ms-publisher"                                              : ".pub" ,
+	"application/vnd.visio"                                                     : ".vsd" ,
+	"application/vnd.ms-visio.drawing"                                          : ".vsd" ,
+	"application/x-mswrite"                                                     : ".wri" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# MICROSOFT OFFICE — OOXML (2007+)
+	# ─────────────────────────────────────────────────────────────────────
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document"   : ".docx" ,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.template"   : ".dotx" ,
+	"application/vnd.ms-word.document.macroEnabled.12"                          : ".docm" ,
+	"application/vnd.ms-word.template.macroEnabled.12"                          : ".dotm" ,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"         : ".xlsx" ,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.template"      : ".xltx" ,
+	"application/vnd.ms-excel.sheet.macroEnabled.12"                            : ".xlsm" ,
+	"application/vnd.ms-excel.template.macroEnabled.12"                         : ".xltm" ,
+	"application/vnd.ms-excel.addin.macroEnabled.12"                            : ".xlam" ,
+	"application/vnd.ms-excel.sheet.binary.macroEnabled.12"                     : ".xlsb" ,
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation" : ".pptx" ,
+	"application/vnd.openxmlformats-officedocument.presentationml.template"     : ".potx" ,
+	"application/vnd.openxmlformats-officedocument.presentationml.slideshow"    : ".ppsx" ,
+	"application/vnd.ms-powerpoint.presentation.macroEnabled.12"                : ".pptm" ,
+	"application/vnd.ms-powerpoint.template.macroEnabled.12"                    : ".potm" ,
+	"application/vnd.ms-powerpoint.slideshow.macroEnabled.12"                   : ".ppsm" ,
+	"application/vnd.ms-powerpoint.addin.macroEnabled.12"                       : ".ppam" ,
+	"application/vnd.openxmlformats-officedocument.presentationml.slide"        : ".sldx" ,
+	"application/vnd.ms-visio.drawing.main+xml"                                 : ".vsdx" ,
+	"application/vnd.ms-visio.stencil.main+xml"                                 : ".vssx" ,
+	"application/vnd.ms-visio.template.main+xml"                                : ".vstx" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# OPENDOCUMENT FORMAT (ODF / LibreOffice)
+	# ─────────────────────────────────────────────────────────────────────
+	"application/vnd.oasis.opendocument.text"                                   : ".odt" ,
+	"application/vnd.oasis.opendocument.text-template"                          : ".ott" ,
+	"application/vnd.oasis.opendocument.text-web"                               : ".oth" ,
+	"application/vnd.oasis.opendocument.text-master"                            : ".odm" ,
+	"application/vnd.oasis.opendocument.spreadsheet"                            : ".ods" ,
+	"application/vnd.oasis.opendocument.spreadsheet-template"                   : ".ots" ,
+	"application/vnd.oasis.opendocument.presentation"                           : ".odp" ,
+	"application/vnd.oasis.opendocument.presentation-template"                  : ".otp" ,
+	"application/vnd.oasis.opendocument.graphics"                               : ".odg" ,
+	"application/vnd.oasis.opendocument.graphics-template"                      : ".otg" ,
+	"application/vnd.oasis.opendocument.chart"                                  : ".odc" ,
+	"application/vnd.oasis.opendocument.formula"                                : ".odf" ,
+	"application/vnd.oasis.opendocument.database"                               : ".odb" ,
+	"application/vnd.oasis.opendocument.image"                                  : ".odi" ,
+	"application/vnd.oasis.opendocument.flat-xml"                               : ".fodt" ,
+	"application/vnd.sun.xml.writer"                                            : ".sxw" ,
+	"application/vnd.sun.xml.calc"                                              : ".sxc" ,
+	"application/vnd.sun.xml.impress"                                           : ".sxi" ,
+	"application/vnd.sun.xml.draw"                                              : ".sxd" ,
+	"application/vnd.sun.xml.math"                                              : ".sxm" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# APPLE iWORK
+	# ─────────────────────────────────────────────────────────────────────
+	"application/vnd.apple.pages"                                               : ".pages" ,
+	"application/vnd.apple.numbers"                                             : ".numbers" ,
+	"application/vnd.apple.keynote"                                             : ".key" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# RICH TEXT / LEGACY WORD PROCESSORS
+	# ─────────────────────────────────────────────────────────────────────
+	"application/rtf"                                                           : ".rtf" ,
+	"text/rtf"                                                                  : ".rtf" ,
+	"application/x-abiword"                                                     : ".abw" ,
+	"application/x-abiword-compressed"                                          : ".zabw" ,
+	"application/vnd.wordperfect"                                               : ".wpd" ,
+	"application/x-wordperfect"                                                 : ".wpd" ,
+	"application/vnd.lotus-wordpro"                                             : ".lwp" ,
+	"application/clarisworks"                                                   : ".cwk" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# DESKTOP PUBLISHING
+	# ─────────────────────────────────────────────────────────────────────
+	"application/x-indesign"                                                    : ".indd" ,
+	"application/vnd.adobe.indesign"                                            : ".indd" ,
+	"application/x-indesign-template"                                           : ".indt" ,
+	"application/x-quark-xpress"                                                : ".qxd" ,
+	"application/vnd.scribus"                                                   : ".sla" ,
+	"application/x-scribus"                                                     : ".sla" ,
+	"application/x-affinity-publisher"                                          : ".afpub" ,
+	"application/x-affinity-designer"                                           : ".afdesign" ,
+	"application/x-affinity-photo"                                              : ".afphoto" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# eBOOK / DIGITAL BOOK
+	# ─────────────────────────────────────────────────────────────────────
+	"application/epub+zip"                                                      : ".epub" ,
+	"application/epub"                                                          : ".epub" ,
+	"application/x-mobipocket-ebook"                                            : ".mobi" ,
+	"application/vnd.amazon.ebook"                                              : ".azw" ,
+	"application/x-amazon-ebook"                                                : ".azw3" ,
+	"application/x-kindle-book"                                                 : ".kfx" ,
+	"application/x-fictionbook+xml"                                             : ".fb2" ,
+	"application/x-fictionbook2"                                                : ".fb2" ,
+	"application/x-fictionbook2+zip"                                            : ".fbz" ,
+	"application/vnd.lit"                                                       : ".lit" ,
+	"application/x-sony-bbeb"                                                   : ".lrf" ,
+	"application/x-ibooks+zip"                                                  : ".ibooks" ,
+	"application/x-cbr"                                                         : ".cbr" ,
+	"application/x-cbz"                                                         : ".cbz" ,
+	"application/x-cbt"                                                         : ".cbt" ,
+	"application/x-cb7"                                                         : ".cb7" ,
+	"application/x-cbtar"                                                       : ".cbt" ,
+	"application/x-htmlz"                                                       : ".htmlz" ,
+	"application/x-snb"                                                         : ".snb" ,  # Bambook
+	"application/vnd.palm"                                                      : ".pdb" ,  # Palm eBook
+	"application/x-plucker"                                                     : ".pdb" ,
+	"application/vnd.openebook+zip"                                             : ".oebzip" ,
+	"application/x-dtbncx+xml"                                                  : ".ncx" ,  # EPUB nav
+	"application/x-dtbook+xml"                                                  : ".xml" ,  # DAISY
+	# ─────────────────────────────────────────────────────────────────────
+	# ARCHIVES & COMPRESSION
+	# ─────────────────────────────────────────────────────────────────────
+	"application/zip"                                                           : ".zip" ,
+	"application/x-zip-compressed"                                              : ".zip" ,
+	"application/x-tar"                                                         : ".tar" ,
+	"application/gzip"                                                          : ".gz" ,
+	"application/x-gzip"                                                        : ".gz" ,
+	"application/x-bzip2"                                                       : ".bz2" ,
+	"application/x-bzip"                                                        : ".bz" ,
+	"application/x-7z-compressed"                                               : ".7z" ,
+	"application/x-rar-compressed"                                              : ".rar" ,
+	"application/vnd.rar"                                                       : ".rar" ,
+	"application/x-lzma"                                                        : ".lzma" ,
+	"application/x-xz"                                                          : ".xz" ,
+	"application/x-compress"                                                    : ".z" ,
+	"application/x-lzip"                                                        : ".lz" ,
+	"application/x-lzop"                                                        : ".lzo" ,
+	"application/x-zstd"                                                        : ".zst" ,
+	"application/x-snappy-framed"                                               : ".sz" ,
+	"application/x-lha"                                                         : ".lha" ,
+	"application/x-arj"                                                         : ".arj" ,
+	"application/x-ace-compressed"                                              : ".ace" ,
+	"application/x-cpio"                                                        : ".cpio" ,
+	"application/x-ar"                                                          : ".ar" ,
+	"application/java-archive"                                                  : ".jar" ,
+	"application/x-apple-diskimage"                                             : ".dmg" ,
+	"application/x-iso9660-image"                                               : ".iso" ,
+	"application/x-ms-wim"                                                      : ".wim" ,
+	"application/x-cab"                                                         : ".cab" ,
+	"application/vnd.ms-cab-compressed"                                         : ".cab" ,
+	"application/x-stuffit"                                                     : ".sit" ,
+	"application/x-stuffitx"                                                    : ".sitx" ,
+	"application/x-deb"                                                         : ".deb" ,
+	"application/x-rpm"                                                         : ".rpm" ,
+	"application/x-nsis"                                                        : ".exe" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# IMAGES — RASTER
+	# ─────────────────────────────────────────────────────────────────────
+	"image/jpeg"                                                                : ".jpg" ,
+	"image/png"                                                                 : ".png" ,
+	"image/gif"                                                                 : ".gif" ,
+	"image/bmp"                                                                 : ".bmp" ,
+	"image/x-bmp"                                                               : ".bmp" ,
+	"image/tiff"                                                                : ".tiff" ,
+	"image/webp"                                                                : ".webp" ,
+	"image/heic"                                                                : ".heic" ,
+	"image/heif"                                                                : ".heif" ,
+	"image/avif"                                                                : ".avif" ,
+	"image/jxl"                                                                 : ".jxl" ,
+	"image/jp2"                                                                 : ".jp2" ,
+	"image/jpx"                                                                 : ".jpx" ,
+	"image/jpm"                                                                 : ".jpm" ,
+	"image/x-portable-bitmap"                                                   : ".pbm" ,
+	"image/x-portable-graymap"                                                  : ".pgm" ,
+	"image/x-portable-pixmap"                                                   : ".ppm" ,
+	"image/x-portable-anymap"                                                   : ".pnm" ,
+	"image/x-pcx"                                                               : ".pcx" ,
+	"image/vnd.microsoft.icon"                                                  : ".ico" ,
+	"image/x-icon"                                                              : ".ico" ,
+	"image/x-xcf"                                                               : ".xcf" ,
+	"image/x-photoshop"                                                         : ".psd" ,
+	"image/vnd.adobe.photoshop"                                                 : ".psd" ,
+	"image/x-raw-adobe"                                                         : ".dng" ,
+	"image/x-nikon-nef"                                                         : ".nef" ,
+	"image/x-canon-cr2"                                                         : ".cr2" ,
+	"image/x-canon-cr3"                                                         : ".cr3" ,
+	"image/x-canon-crw"                                                         : ".crw" ,
+	"image/x-sony-arw"                                                          : ".arw" ,
+	"image/x-sony-srf"                                                          : ".srf" ,
+	"image/x-olympus-orf"                                                       : ".orf" ,
+	"image/x-fuji-raf"                                                          : ".raf" ,
+	"image/x-panasonic-rw2"                                                     : ".rw2" ,
+	"image/x-sigma-x3f"                                                         : ".x3f" ,
+	"image/x-pentax-pef"                                                        : ".pef" ,
+	"image/x-leica-rwl"                                                         : ".rwl" ,
+	"image/x-hasselblad-3fr"                                                    : ".3fr" ,
+	"image/x-tga"                                                               : ".tga" ,
+	"image/x-sgi"                                                               : ".sgi" ,
+	"image/x-rgb"                                                               : ".rgb" ,
+	"image/x-exr"                                                               : ".exr" ,
+	"image/x-hdr"                                                               : ".hdr" ,
+	"image/x-dds"                                                               : ".dds" ,
+	"image/x-ktx"                                                               : ".ktx" ,
+	"image/x-ktx2"                                                              : ".ktx2" ,
+	"image/x-ilbm"                                                              : ".ilbm" ,
+	"image/x-wmf"                                                               : ".wmf" ,
+	"image/emf"                                                                 : ".emf" ,
+	"image/x-emf"                                                               : ".emf" ,
+	"image/vnd.dwg"                                                             : ".dwg" ,
+	"image/vnd.dxf"                                                             : ".dxf" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# IMAGES — VECTOR
+	# ─────────────────────────────────────────────────────────────────────
+	"image/svg+xml"                                                             : ".svg" ,
+	"image/svg+xml-compressed"                                                  : ".svgz" ,
+	"application/illustrator"                                                   : ".ai" ,
+	"application/vnd.corel-draw"                                                : ".cdr" ,
+	"application/x-corel-draw"                                                  : ".cdr" ,
+	"application/x-xfig"                                                        : ".fig" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# AUDIO
+	# ─────────────────────────────────────────────────────────────────────
+	"audio/mpeg"                                                                : ".mp3" ,
+	"audio/mp3"                                                                 : ".mp3" ,
+	"audio/mp2"                                                                 : ".mp2" ,
+	"audio/mp4"                                                                 : ".m4a" ,
+	"audio/x-m4a"                                                               : ".m4a" ,
+	"audio/ogg"                                                                 : ".ogg" ,
+	"audio/vorbis"                                                              : ".oga" ,
+	"audio/flac"                                                                : ".flac" ,
+	"audio/x-flac"                                                              : ".flac" ,
+	"audio/wav"                                                                 : ".wav" ,
+	"audio/x-wav"                                                               : ".wav" ,
+	"audio/vnd.wave"                                                            : ".wav" ,
+	"audio/aiff"                                                                : ".aiff" ,
+	"audio/x-aiff"                                                              : ".aiff" ,
+	"audio/aac"                                                                 : ".aac" ,
+	"audio/x-aac"                                                               : ".aac" ,
+	"audio/webm"                                                                : ".weba" ,
+	"audio/opus"                                                                : ".opus" ,
+	"audio/speex"                                                               : ".spx" ,
+	"audio/amr"                                                                 : ".amr" ,
+	"audio/x-ms-wma"                                                            : ".wma" ,
+	"audio/x-pn-realaudio"                                                      : ".ra" ,
+	"audio/vnd.rn-realaudio"                                                    : ".rm" ,
+	"audio/midi"                                                                : ".midi" ,
+	"audio/x-midi"                                                              : ".midi" ,
+	"audio/x-mod"                                                               : ".mod" ,
+	"audio/x-s3m"                                                               : ".s3m" ,
+	"audio/x-xm"                                                                : ".xm" ,
+	"audio/x-it"                                                                : ".it" ,
+	"audio/x-mpegurl"                                                           : ".m3u" ,
+	"audio/x-scpls"                                                             : ".pls" ,
+	"audio/x-ape"                                                               : ".ape" ,
+	"audio/x-musepack"                                                          : ".mpc" ,
+	"audio/x-wavpack"                                                           : ".wv" ,
+	"audio/x-tta"                                                               : ".tta" ,
+	"audio/x-caf"                                                               : ".caf" ,
+	"audio/3gpp"                                                                : ".3gp" ,
+	"audio/3gpp2"                                                               : ".3g2" ,
+	"audio/basic"                                                               : ".au" ,
+	"audio/x-au"                                                                : ".au" ,
+	"audio/gsm"                                                                 : ".gsm" ,
+	"audio/vnd.dolby.dd-raw"                                                    : ".ac3" ,
+	"audio/x-dts"                                                               : ".dts" ,
+	"audio/x-dsf"                                                               : ".dsf" ,  # DSD
+	"audio/x-dff"                                                               : ".dff" ,  # DSD
+	"audio/x-tak"                                                               : ".tak" ,
+	"audio/x-la"                                                                : ".la" ,  # Lossless Audio
+	# ─────────────────────────────────────────────────────────────────────
+	# VIDEO
+	# ─────────────────────────────────────────────────────────────────────
+	"video/mp4"                                                                 : ".mp4" ,
+	"video/x-m4v"                                                               : ".m4v" ,
+	"video/mpeg"                                                                : ".mpeg" ,
+	"video/x-mpeg"                                                              : ".mpg" ,
+	"video/ogg"                                                                 : ".ogv" ,
+	"video/webm"                                                                : ".webm" ,
+	"video/x-msvideo"                                                           : ".avi" ,
+	"video/x-ms-wmv"                                                            : ".wmv" ,
+	"video/x-ms-asf"                                                            : ".asf" ,
+	"video/quicktime"                                                           : ".mov" ,
+	"video/x-matroska"                                                          : ".mkv" ,
+	"video/x-flv"                                                               : ".flv" ,
+	"video/x-f4v"                                                               : ".f4v" ,
+	"video/3gpp"                                                                : ".3gp" ,
+	"video/3gpp2"                                                               : ".3g2" ,
+	"video/x-dv"                                                                : ".dv" ,
+	"video/x-ms-vob"                                                            : ".vob" ,
+	"video/dvd"                                                                 : ".vob" ,
+	"video/vnd.rn-realvideo"                                                    : ".rm" ,
+	"video/x-pn-realvideo"                                                      : ".rmvb" ,
+	"video/h264"                                                                : ".h264" ,
+	"video/h265"                                                                : ".h265" ,
+	"video/av1"                                                                 : ".av1" ,
+	"video/x-ogm"                                                               : ".ogm" ,
+	"video/mp2t"                                                                : ".ts" ,
+	"video/x-m2ts"                                                              : ".m2ts" ,
+	"video/mts"                                                                 : ".mts" ,
+	"video/x-mjpeg"                                                             : ".mjpeg" ,
+	"video/x-divx"                                                              : ".divx" ,
+	"video/x-xvid"                                                              : ".xvid" ,
+	"video/x-prores"                                                            : ".mov" ,  # Apple ProRes in MOV
+	"video/x-dnxhd"                                                             : ".mxf" ,  # Avid DNxHD
+	"application/mxf"                                                           : ".mxf" ,  # MXF broadcast
+	"video/x-cinema-dng"                                                        : ".dng" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# SUBTITLES / CAPTIONS
+	# ─────────────────────────────────────────────────────────────────────
+	"application/x-subrip"                                                      : ".srt" ,
+	"text/x-ssa"                                                                : ".ssa" ,
+	"text/x-ass"                                                                : ".ass" ,
+	"application/ttml+xml"                                                      : ".ttml" ,
+	"application/smil+xml"                                                      : ".smil" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# 3-D / CAD / SLICER
+	# ─────────────────────────────────────────────────────────────────────
+	# Slicer
+	"text/x-gcode"                                                              : ".gcode" ,
+	"application/x-gcode"                                                       : ".gcode" ,
+	"text/x-bgcode"                                                             : ".bgcode" ,
+	"application/x-bgcode"                                                      : ".bgcode" ,
+	"application/vnd.ms-3mfdocument"                                            : ".3mf" ,
+	"model/3mf"                                                                 : ".3mf" ,
+	"application/x-amf"                                                         : ".amf" ,
+	# Mesh / polygon
+	"model/stl"                                                                 : ".stl" ,
+	"application/sla"                                                           : ".stl" ,
+	"model/obj"                                                                 : ".obj" ,
+	"text/x-obj"                                                                : ".obj" ,
+	"model/gltf+json"                                                           : ".gltf" ,
+	"model/gltf-binary"                                                         : ".glb" ,
+	"model/vnd.collada+xml"                                                     : ".dae" ,
+	"application/x-3ds"                                                         : ".3ds" ,
+	"application/x-fbx"                                                         : ".fbx" ,
+	"application/vnd.autodesk.fbx"                                              : ".fbx" ,
+	"application/vnd.ms-pki.stl"                                                : ".stl" ,
+	"model/x3d+xml"                                                             : ".x3d" ,
+	"model/x3d+binary"                                                          : ".x3db" ,
+	"model/vrml"                                                                : ".wrl" ,
+	"model/vnd.vrml"                                                            : ".wrl" ,
+	# USD / AR
+	"model/vnd.usd"                                                             : ".usd" ,
+	"model/vnd.usda"                                                            : ".usda" ,
+	"model/vnd.usdc"                                                            : ".usdc" ,
+	"model/vnd.usdz+zip"                                                        : ".usdz" ,
+	# Alembic
+	"application/x-alembic"                                                     : ".abc" ,
+	# Solid modelling / STEP / IGES
+	"application/x-step"                                                        : ".step" ,
+	"model/step"                                                                : ".step" ,
+	"application/x-iges"                                                        : ".iges" ,
+	"model/iges"                                                                : ".iges" ,
+	# AutoCAD
+	"application/acad"                                                          : ".dwg" ,
+	"application/x-dwg"                                                         : ".dwg" ,
+	"application/x-dxf"                                                         : ".dxf" ,
+	"image/vnd.dwg"                                                             : ".dwg" ,
+	"image/vnd.dxf"                                                             : ".dxf" ,
+	"application/x-dwf"                                                         : ".dwf" ,
+	# Rhino
+	"application/x-rhino3d"                                                     : ".3dm" ,
+	# SketchUp
+	"application/x-koan"                                                        : ".skp" ,
+	"application/vnd.sketchup.skp"                                              : ".skp" ,
+	# Blender
+	"application/x-blender"                                                     : ".blend" ,
+	# BIM / IFC
+	"application/x-step-ifc"                                                    : ".ifc" ,
+	"application/ifc"                                                           : ".ifc" ,
+	# Point cloud
+	"application/x-lastools"                                                    : ".las" ,
+	"application/vnd.las"                                                       : ".las" ,
+	"application/x-e57"                                                         : ".e57" ,
+	"application/x-pcd"                                                         : ".pcd" ,
+	# Voxel
+	"application/x-magicavoxel"                                                 : ".vox" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# GEOSPATIAL
+	# ─────────────────────────────────────────────────────────────────────
+	"application/vnd.google-earth.kml+xml"                                      : ".kml" ,
+	"application/vnd.google-earth.kmz"                                          : ".kmz" ,
+	"application/x-esri-shape"                                                  : ".shp" ,
+	"application/gml+xml"                                                       : ".gml" ,
+	"application/gpx+xml"                                                       : ".gpx" ,
+	"application/x-filegdb"                                                     : ".gdb" ,
+	"application/x-mapinfo-mif"                                                 : ".mif" ,
+	"application/x-geotiff"                                                     : ".tif" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# FONTS
+	# ─────────────────────────────────────────────────────────────────────
+	"font/ttf"                                                                  : ".ttf" ,
+	"font/otf"                                                                  : ".otf" ,
+	"font/woff"                                                                 : ".woff" ,
+	"font/woff2"                                                                : ".woff2" ,
+	"application/vnd.ms-fontobject"                                             : ".eot" ,
+	"application/x-font-ttf"                                                    : ".ttf" ,
+	"application/x-font-otf"                                                    : ".otf" ,
+	"application/x-font-type1"                                                  : ".pfb" ,
+	"application/x-font-bdf"                                                    : ".bdf" ,
+	"application/x-font-pcf"                                                    : ".pcf" ,
+	"application/x-font-snf"                                                    : ".snf" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# EXECUTABLES & BINARIES
+	# ─────────────────────────────────────────────────────────────────────
+	"application/x-msdownload"                                                  : ".exe" ,
+	"application/vnd.microsoft.portable-executable"                             : ".exe" ,
+	"application/x-dosexec"                                                     : ".exe" ,
+	"application/x-elf"                                                         : ".elf" ,
+	"application/x-msi"                                                         : ".msi" ,
+	"application/x-ms-shortcut"                                                 : ".lnk" ,
+	"application/vnd.android.package-archive"                                   : ".apk" ,
+	"application/x-ios-app"                                                     : ".ipa" ,
+	"application/x-ms-pdb"                                                      : ".pdb" ,
+	"application/x-chrome-extension"                                            : ".crx" ,
+	"application/x-xpinstall"                                                   : ".xpi" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# EMAIL & MESSAGING
+	# ─────────────────────────────────────────────────────────────────────
+	"message/rfc822"                                                            : ".eml" ,
+	"application/mbox"                                                          : ".mbox" ,
+	"message/x-emlx"                                                            : ".emlx" ,
+	"application/pkcs7-mime"                                                    : ".p7m" ,
+	"application/vnd.ms-tnef"                                                   : ".tnef" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# CRYPTOGRAPHY & SECURITY
+	# ─────────────────────────────────────────────────────────────────────
+	"application/x-x509-ca-cert"                                                : ".cer" ,
+	"application/x-pem-file"                                                    : ".pem" ,
+	"application/pkcs12"                                                        : ".p12" ,
+	"application/pkcs8"                                                         : ".p8" ,
+	"application/pgp-encrypted"                                                 : ".pgp" ,
+	"application/pgp-signature"                                                 : ".sig" ,
+	"application/pgp-keys"                                                      : ".asc" ,
+	"application/x-ssh-key"                                                     : ".pub" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# SCIENTIFIC / CHEMISTRY / BIOLOGY
+	# ─────────────────────────────────────────────────────────────────────
+	"chemical/x-cdx"                                                            : ".cdx" ,
+	"chemical/x-cif"                                                            : ".cif" ,
+	"chemical/x-cmdf"                                                           : ".cmdf" ,
+	"chemical/x-cml"                                                            : ".cml" ,
+	"chemical/x-csml"                                                           : ".csml" ,
+	"chemical/x-mol2"                                                           : ".mol2" ,
+	"chemical/x-mdl-molfile"                                                    : ".mol" ,
+	"chemical/x-mdl-sdfile"                                                     : ".sdf" ,
+	"chemical/x-pdb"                                                            : ".pdb" ,
+	"chemical/x-xyz"                                                            : ".xyz" ,
+	"application/x-bibtex-text-file"                                            : ".bib" ,
+	"application/x-research-info-systems"                                       : ".ris" ,
+	"application/x-endnote-refer"                                               : ".enw" ,
+	"application/x-hdf"                                                         : ".h5" ,
+	"application/x-netcdf"                                                      : ".nc" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# DIAGRAMMING
+	# ─────────────────────────────────────────────────────────────────────
+	"application/vnd.jgraph.mxfile"                                             : ".drawio" ,
+	"application/x-drawio"                                                      : ".drawio" ,
+	"application/x-mermaid"                                                     : ".mmd" ,
+	"application/x-graphviz"                                                    : ".dot" ,
+	"text/vnd.graphviz"                                                         : ".dot" ,
+	"application/x-plantuml"                                                    : ".puml" ,
+	# ─────────────────────────────────────────────────────────────────────
+	# MISC APPLICATION
+	# ─────────────────────────────────────────────────────────────────────
+	"application/octet-stream"                                                  : ".bin" ,
+	"application/x-binary"                                                      : ".bin" ,
+	"application/x-shockwave-flash"                                             : ".swf" ,
+	"application/x-director"                                                    : ".dcr" ,
+	"application/vnd.tcpdump.pcap"                                              : ".pcap" ,
+	"application/x-pcapng"                                                      : ".pcapng" ,
+	"application/x-torrent"                                                     : ".torrent" ,
+}
