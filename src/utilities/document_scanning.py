@@ -1,417 +1,95 @@
 """
-Interactive Document Scanner
-A module for reviewing images and converting them to enhanced PDFs
-
-Requirements:
-pip install pillow opencv-python numpy ocrmypdf img2pdf
+FOR HANDWRITTEN NOTES - Use noteshrink
+Specifically designed to clean up handwritten notes, removes:
+- Bleed-through from opposite side
+- Background artifacts
+- Smudges and noise
+- Makes ink colors vivid
 """
 
+# INSTALLATION
+# pip install numpy scipy pillow pdf2image img2pdf
+# Also needs ImageMagick: apt install imagemagick (Linux) or brew install imagemagick (Mac)
+
 import shutil
-import tempfile
-import tkinter as tk
+import subprocess
 from pathlib import Path
-from tkinter import filedialog , messagebox
-from typing import List , Optional
-
-import cv2
-import img2pdf
-import numpy as np
-from PIL import Image , ImageTk
-
-from dependancy_ensurance import (
-	ensure_ghostscript ,
-	ensure_jbig2enc ,
-	ensure_pngquant ,
-	ensure_tesseract ,
-	ensure_unpaper ,
-)
-
-
-class DocumentScanner:
-    def __init__(self, root: tk.Tk):
-        ensure_unpaper()
-        ensure_pngquant()
-        ensure_tesseract()
-        ensure_ghostscript()
-        ensure_jbig2enc()
-
-        self.root = root
-        self.root.title("Interactive Document Scanner")
-        self.root.geometry("1200x800")
-
-        # Queue management
-        self.image_queue: List[Path] = []
-        self.current_index = 0
-        self.archive_dir: Optional[Path] = None
-        self.output_dir: Optional[Path] = None
-
-        # State tracking
-        self.current_image_path: Optional[Path] = None
-        self.pending_scan: Optional[Path] = (
-            None  # Path to scanned PDF awaiting approval
-        )
-        self.archive_copy: Optional[Path] = None  # Path to archived original
-
-        self.setup_ui()
-        self.bind_keys()
-
-    def setup_ui(self):
-        """Setup the user interface"""
-        # Top frame for controls
-        control_frame = tk.Frame(self.root, bg="#2c3e50", pady=10)
-        control_frame.pack(fill=tk.X)
-
-        # Buttons
-        tk.Button(
-            control_frame,
-            text="Load Images",
-            command=self.load_images,
-            bg="#3498db",
-            fg="white",
-            font=("Arial", 12, "bold"),
-            padx=20,
-            pady=5,
-        ).pack(side=tk.LEFT, padx=10)
-
-        # Status label
-        self.status_label = tk.Label(
-            control_frame,
-            text="No images loaded",
-            bg="#2c3e50",
-            fg="white",
-            font=("Arial", 12),
-        )
-        self.status_label.pack(side=tk.LEFT, padx=20)
-
-        # Image display frame
-        self.image_frame = tk.Frame(self.root, bg="#34495e")
-        self.image_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-
-        # Canvas for image display
-        self.canvas = tk.Canvas(self.image_frame, bg="#34495e", highlightthickness=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        # Instructions
-        instructions = tk.Label(
-            self.root,
-            text="← Left Arrow: Skip | → Right Arrow: Scan to PDF | ESC: Quit",
-            bg="#2c3e50",
-            fg="#ecf0f1",
-            font=("Arial", 14, "bold"),
-            pady=15,
-        )
-        instructions.pack(fill=tk.X)
-
-    def bind_keys(self):
-        """Bind keyboard shortcuts"""
-        self.root.bind("<Left>", lambda e: self.handle_left_arrow())
-        self.root.bind("<Right>", lambda e: self.handle_right_arrow())
-        self.root.bind("<Escape>", lambda e: self.root.quit())
-
-    def load_images(self):
-        """Load images from a directory"""
-        directory = filedialog.askdirectory(title="Select Image Directory")
-        if not directory:
-            return
-
-        directory = Path(directory)
-
-        # Set up archive and output directories
-        self.archive_dir = directory / "archive"
-        self.output_dir = directory / "scanned_pdfs"
-        self.archive_dir.mkdir(exist_ok=True)
-        self.output_dir.mkdir(exist_ok=True)
-
-        # Supported image formats
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
-
-        # Load all images
-        self.image_queue = [
-            f
-            for f in directory.iterdir()
-            if f.is_file() and f.suffix.lower() in image_extensions
-        ]
-
-        if not self.image_queue:
-            messagebox.showinfo(
-                "No Images", "No image files found in the selected directory."
-            )
-            return
-
-        self.current_index = 0
-        self.show_current_image()
-
-    def show_current_image(self):
-        """Display the current image"""
-        if not self.image_queue or self.current_index >= len(self.image_queue):
-            messagebox.showinfo("Complete", "All images processed!")
-            self.status_label.config(text="All images processed!")
-            return
-
-        self.current_image_path = self.image_queue[self.current_index]
-
-        # Skip if it's a PDF (can't display with PIL)
-        if self.current_image_path.suffix.lower() == ".pdf":
-            # Auto-accept PDFs or move to next
-            self.accept_scan()
-            return
-
-        # Check if this is a pending scan approval
-        is_pending = (
-            self.pending_scan is not None
-            and self.current_image_path == self.pending_scan
-        )
-
-        # Update status
-        status_text = f"Image {self.current_index + 1}/{len(self.image_queue)}"
-        if is_pending:
-            status_text += " [REVIEWING SCAN - Right=Accept, Left=Reject]"
-        status_text += f" - {self.current_image_path.name}"
-        self.status_label.config(text=status_text)
-
-        # Load and display image
-        try:
-            # Load image with PIL
-            img = Image.open(self.current_image_path)
-
-            # Resize to fit canvas while maintaining aspect ratio
-            canvas_width = self.canvas.winfo_width()
-            canvas_height = self.canvas.winfo_height()
-
-            if canvas_width <= 1 or canvas_height <= 1:
-                # Canvas not yet sized, use defaults
-                canvas_width, canvas_height = 1000, 600
-
-            img.thumbnail(
-                (canvas_width - 40, canvas_height - 40), Image.Resampling.LANCZOS
-            )
-
-            # Convert to PhotoImage
-            self.photo = ImageTk.PhotoImage(img)
-
-            # Clear canvas and display
-            self.canvas.delete("all")
-            self.canvas.create_image(
-                canvas_width // 2,
-                canvas_height // 2,
-                image=self.photo,
-                anchor=tk.CENTER,
-            )
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load image: {str(e)}")
-
-    def handle_left_arrow(self):
-        """Skip current image or reject scan"""
-        if not self.image_queue:
-            return
-
-        # Check if we're reviewing a scanned PDF
-        if self.pending_scan and self.current_image_path == self.pending_scan:
-            # Reject the scan
-            self.reject_scan()
-        else:
-            # Skip this image
-            self.current_index += 1
-            self.show_current_image()
-
-    def handle_right_arrow(self):
-        """Process image to PDF or accept scan"""
-        if not self.image_queue:
-            return
-
-        # Check if we're reviewing a scanned PDF
-        if self.pending_scan and self.current_image_path == self.pending_scan:
-            # Accept the scan
-            self.accept_scan()
-        else:
-            # Start scanning process
-            self.scan_to_pdf()
-
-    def scan_to_pdf(self):
-        """Scan current image to PDF with enhancement"""
-        if not self.current_image_path:
-            return
-
-        try:
-            # Update status
-            self.status_label.config(
-                text=f"Processing {self.current_image_path.name}..."
-            )
-            self.root.update()
-
-            # 1. Make archive copy
-            archive_path = self.archive_dir / self.current_image_path.name
-            shutil.copy2(self.current_image_path, archive_path)
-            self.archive_copy = archive_path
-
-            # 2. Preprocess image with OpenCV
-            processed_img = self.preprocess_image(self.current_image_path)
-
-            # 3. Save preprocessed image temporarily
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                temp_img_path = Path(tmp.name)
-                cv2.imwrite(str(temp_img_path), processed_img)
-
-            # 4. Convert to PDF using img2pdf
-            pdf_name = self.current_image_path.stem + ".pdf"
-            temp_pdf = self.output_dir / f"temp_{pdf_name}"
-
-            with open(temp_pdf, "wb") as f:
-                f.write(img2pdf.convert(str(temp_img_path)))
-
-            # 5. Enhance with OCRmyPDF
-            final_pdf = self.output_dir / pdf_name
-            self.enhance_pdf(temp_pdf, final_pdf)
-
-            # Clean up temp files
-            temp_img_path.unlink()
-            temp_pdf.unlink(missing_ok=True)
-
-            # 6. Add PDF to queue for review
-            self.image_queue.append(final_pdf)
-            self.pending_scan = final_pdf
-
-            # 7. Move to next item
-            self.current_index += 1
-            self.show_current_image()
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to scan image: {str(e)}")
-            # Restore from archive if it exists
-            if self.archive_copy and self.archive_copy.exists():
-                shutil.copy2(self.archive_copy, self.current_image_path)
-
-    # def preprocess_image(self, image_path: Path) -> np.ndarray:
-    #     """Preprocess image with OpenCV for better scanning"""
-    #     # Read image
-    #     img = cv2.imread(str(image_path))
-    #
-    #     # Convert to grayscale
-    #     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    #
-    #     # Apply edge detection for document detection (optional - basic preprocessing)
-    #     # For a full document scanner, you'd add perspective correction here
-    #
-    #     # Denoise
-    #     denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-    #
-    #     # Increase contrast and brightness
-    #     alpha = 1.5  # Contrast
-    #     beta = 20  # Brightness
-    #     adjusted = cv2.convertScaleAbs(denoised, alpha=alpha, beta=beta)
-    #
-    #     # Apply adaptive thresholding for better text visibility
-    #     thresh = cv2.adaptiveThreshold(
-    #         adjusted, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 15
-    #     )
-    #
-    #     # Sharpen the image
-    #     kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-    #     sharpened = cv2.filter2D(thresh, -1, kernel)
-    #
-    #     return sharpened
-
-    def preprocess_image(self, image_path: Path) -> np.ndarray:
-        """Preprocess image with GENTLE enhancement (not destruction)"""
-        img = cv2.imread(str(image_path))
-
-        # Option 1: Keep color, just denoise and sharpen
-        denoised = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
-
-        # Slight sharpening
-        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-        sharpened = cv2.filter2D(denoised, -1, kernel)
-
-        return sharpened
-
-        # Option 2: If you MUST have grayscale (for smaller files):
-        # gray = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
-        # alpha = 1.3  # Gentle contrast
-        # adjusted = cv2.convertScaleAbs(gray, alpha=alpha, beta=10)
-        # return adjusted
-
-    def enhance_pdf(self, input_pdf: Path, output_pdf: Path):
-        """Enhance PDF using OCRmyPDF as a Python module"""
-        try:
-            import ocrmypdf
-
-            ocrmypdf.ocr(
-                input_file=str(input_pdf),
-                output_file=str(output_pdf),
-                deskew=True,
-                clean=True,
-                optimize=3,
-                output_type="pdf",
-                force_ocr=False,
-                skip_text=True,
-            )
-
-        except ocrmypdf.exceptions.PriorOcrFoundError:
-            # PDF already has text, just copy it
-            shutil.copy2(input_pdf, output_pdf)
-        except Exception as e:
-            raise Exception(f"OCR processing failed: {str(e)}")
-
-    def accept_scan(self):
-        """Accept the scanned PDF"""
-        if not self.pending_scan:
-            return
-
-        # Scan accepted, move to next
-        self.pending_scan = None
-        self.archive_copy = None
-        self.current_index += 1
-        self.show_current_image()
-
-    def reject_scan(self):
-        """Reject the scan and restore original"""
-        if not self.pending_scan or not self.archive_copy:
-            return
-
-        try:
-            # Delete the rejected PDF
-            if self.pending_scan.exists():
-                self.pending_scan.unlink()
-
-            # Remove from queue
-            self.image_queue.remove(self.pending_scan)
-
-            # Restore original from archive
-            original_path = self.archive_copy.parent.parent / self.archive_copy.name
-            if self.archive_copy.exists():
-                shutil.copy2(self.archive_copy, original_path)
-
-            # Reset state
-            self.pending_scan = None
-            self.archive_copy = None
-
-            # Don't increment index - show next image
-            self.show_current_image()
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to reject scan: {str(e)}")
-
-
-def main():
-    """Main entry point for the Document Scanner application"""
-    # Create the Tkinter root window
-    root = tk.Tk()
-
-    # Initialize the Document Scanner
-    app = DocumentScanner(root)
-
-    # Optional: Auto-load a test directory on startup
-    # Uncomment and modify the path below to skip the file dialog
-    # test_dir = Path("C:/Users/YourName/Documents/test_scans")  # Windows
-    # test_dir = Path("/Users/yourname/Documents/test_scans")    # Mac
-    # test_dir = Path("/home/yourname/Documents/test_scans")     # Linux
-    # if test_dir.exists():
-    #     app.load_specific_directory(test_dir)
-
-    # Start the application
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()
+
+
+def process_handwritten_notes( input_files , output_pdf="notes.pdf" ) :
+	"""
+	Clean up handwritten notes automatically.
+
+	Args:
+									input_files: Single image, list of images, or glob pattern like 'scans/*.jpg'
+									output_pdf: Output PDF filename
+
+	Features:
+	- Removes bleed-through from back of page
+	- Makes background pure white
+	- Makes ink colors vivid and clear
+	- Reduces file size by 90%+
+	- Perfect for handwritten class notes
+	"""
+
+	# Build command
+	if isinstance( input_files , str ) :
+		if "*" in input_files :
+			# Glob pattern - let shell expand it
+			cmd = (
+				f"cd noteshrink && ./noteshrink.py ../{input_files} -o ../{output_pdf}"
+			)
+			subprocess.run( cmd , shell=True , check=True )
+		else :
+			# Single file
+			cmd = [ "./noteshrink.py" , f"../{input_files}" , "-o" , f"../{output_pdf}" ]
+			subprocess.run( cmd , cwd="noteshrink" , check=True )
+	else :
+		# List of files
+		files = [ f"../{f}" for f in input_files ]
+		cmd = [ "./noteshrink.py" ] + files + [ "-o" , f"../{output_pdf}" ]
+		subprocess.run( cmd , cwd="noteshrink" , check=True )
+
+	print( f"\n✓ Done! Check: {output_pdf}" )
+	return output_pdf
+
+
+def process_printed_documents( input_path , output_dir="output" ) :
+	"""
+	For PRINTED documents with clean edges (like Adobe Scan).
+	Uses document-scanner package.
+	"""
+	input_path = Path( input_path )
+	output_dir = Path( output_dir )
+	output_dir.mkdir( exist_ok=True )
+
+	# Check if it's a PDF
+	if input_path.suffix.lower( ) == ".pdf" :
+		from pdf2image import convert_from_path
+
+		print( "Converting PDF to images..." )
+		images = convert_from_path( str( input_path ) , dpi=300 )
+
+		temp_dir = output_dir / "temp"
+		temp_dir.mkdir( exist_ok=True )
+
+		for i , img in enumerate( images ) :
+			img.save( temp_dir / f"page_{i + 1}.png" )
+
+		input_path = temp_dir
+
+	# Process with document-scanner
+	if input_path.is_dir( ) :
+		cmd = [ "document-scanner" , "--images" , str( input_path ) , str( output_dir ) ]
+	else :
+		cmd = [ "document-scanner" , "--image" , str( input_path ) , str( output_dir ) ]
+
+	print( "Processing documents..." )
+	subprocess.run( cmd , check=True )
+
+	# Clean up temp files
+	if "temp" in str( input_path ) :
+		shutil.rmtree( input_path )
+
+	print( f"\n✓ Done! Check: {output_dir}" )
+	return output_dir

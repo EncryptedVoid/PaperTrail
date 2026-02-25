@@ -48,7 +48,7 @@ def generate_checksum(logger: Logger, artifact_path: Path) -> str:
     """
     # Log the start of checksum generation for audit trail
     logger.debug(
-        f"Starting checksum generation for {artifact_path.name} using {CHECKSUM_ALGORITHM.value}"
+        f"Starting checksum generation for {artifact_path.name} using {CHECKSUM_ALGORITHM}"
     )
 
     # Validate file exists before attempting to process
@@ -59,14 +59,14 @@ def generate_checksum(logger: Logger, artifact_path: Path) -> str:
 
     # Initialize the cryptographic hash object with validation
     try:
-        hash_object = hashlib.new(CHECKSUM_ALGORITHM.value)
-        logger.debug(f"Initialized {CHECKSUM_ALGORITHM.value} hash object successfully")
+        hash_object = hashlib.new(CHECKSUM_ALGORITHM)
+        logger.debug(f"Initialized {CHECKSUM_ALGORITHM} hash object successfully")
 
     except ValueError as algorithm_error:
         # Provide detailed error message with available alternatives
         available_algorithms: List[str] = sorted(hashlib.algorithms_available)
         error_msg = (
-            f"Unsupported hash CHECKSUM_ALGORITHM: {CHECKSUM_ALGORITHM.value}. "
+            f"Unsupported hash CHECKSUM_ALGORITHM: {CHECKSUM_ALGORITHM}. "
             f"Available algorithms: {', '.join(available_algorithms)}"
         )
         logger.error(error_msg)
@@ -121,7 +121,7 @@ def generate_checksum(logger: Logger, artifact_path: Path) -> str:
 
     # Log completion with performance metrics for monitoring
     logger.info(
-        f"Generated {CHECKSUM_ALGORITHM.value} checksum for {artifact_path.name}: "
+        f"Generated {CHECKSUM_ALGORITHM} checksum for {artifact_path.name}: "
         f"{final_checksum[:16]}... ({bytes_processed:,} bytes in {processing_duration:.2f}s)"
     )
 
@@ -248,7 +248,7 @@ def save_checksum(logger: Logger, checksum: str) -> None:
 
     Note:
         File I/O errors are logged but do not raise exceptions to prevent
-        interruption of processing processors. The checksum will still be
+        interruption of processing stages. The checksum will still be
         available in memory for the current session.
     """
     # Log the checksum save operation for audit trail
