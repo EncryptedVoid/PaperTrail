@@ -220,11 +220,7 @@ def _contains_financial_content( text: str , logger: logging.Logger ) -> bool :
 
 def is_bookmark_file( artifact_location: Path ) -> bool :
 	"""
-	Detect if an HTML file is a browser bookmark export with high accuracy.
-
-	Analyzes HTML structure for Netscape bookmark file format markers including
-	DOCTYPE declaration, definition list structure, anchor tags, and timestamp
-	attributes. All conditions must be met for positive detection.
+	Detect if an HTML file is a browser bookmark export .
 
 	Args:
 		artifact_location: Path object pointing to the HTML file to analyze
@@ -234,40 +230,42 @@ def is_bookmark_file( artifact_location: Path ) -> bool :
 
 	"""
 
-	try :
-		# Read the HTML file content with UTF-8 encoding
-		# Using 'r' mode for text files, errors='ignore' handles encoding issues
-		with open( artifact_location , "r" , encoding="utf-8" , errors="ignore" ) as f :
-			html_content = f.read( )
-	except Exception as e :
-		# Return False if file cannot be read (permissions, encoding errors, etc.)
-		return False
+	# try :
+	# 	# Read the HTML file content with UTF-8 encoding
+	# 	# Using 'r' mode for text files, errors='ignore' handles encoding issues
+	# 	with open( artifact_location , "r" , encoding="utf-8" , errors="ignore" ) as f :
+	# 		html_content = f.read( )
+	# except Exception as e :
+	# 	# Return False if file cannot be read (permissions, encoding errors, etc.)
+	# 	return False
+	#
+	# # Check for required Netscape bookmark DOCTYPE declaration
+	# # re.IGNORECASE flag makes the search case-insensitive
+	# has_netscape_doctype = bool(
+	# 		re.search( r"<!DOCTYPE\s+NETSCAPE-Bookmark-file-1>" , html_content , re.IGNORECASE ) ,
+	# )
+	#
+	# # Check for definition list (DL) structure used in bookmark hierarchy
+	# # DL tags contain bookmark folders and items
+	# has_dl_structure = bool( re.search( r"<DL\s*>" , html_content , re.IGNORECASE ) )
+	#
+	# # Check for DT (definition term) entries with anchor tags
+	# # DT tags mark individual bookmarks, A tags contain the actual links
+	# has_dt_anchors = bool(
+	# 		re.search( r"<DT>\s*<A\s+[^>]*HREF\s*=" , html_content , re.IGNORECASE ) ,
+	# )
+	#
+	# # Check for ADD_DATE attribute specific to bookmark exports
+	# # ADD_DATE contains Unix timestamp when bookmark was created
+	# has_add_date = bool(
+	# 		re.search( r'ADD_DATE\s*=\s*["\']?\d+["\']?' , html_content , re.IGNORECASE ) ,
+	# )
+	#
+	# # All conditions must be met for absolute certainty
+	# # Boolean AND operation ensures strict matching
+	# return has_netscape_doctype and has_dl_structure and has_dt_anchors and has_add_date
 
-	# Check for required Netscape bookmark DOCTYPE declaration
-	# re.IGNORECASE flag makes the search case-insensitive
-	has_netscape_doctype = bool(
-			re.search( r"<!DOCTYPE\s+NETSCAPE-Bookmark-file-1>" , html_content , re.IGNORECASE ) ,
-	)
-
-	# Check for definition list (DL) structure used in bookmark hierarchy
-	# DL tags contain bookmark folders and items
-	has_dl_structure = bool( re.search( r"<DL\s*>" , html_content , re.IGNORECASE ) )
-
-	# Check for DT (definition term) entries with anchor tags
-	# DT tags mark individual bookmarks, A tags contain the actual links
-	has_dt_anchors = bool(
-			re.search( r"<DT>\s*<A\s+[^>]*HREF\s*=" , html_content , re.IGNORECASE ) ,
-	)
-
-	# Check for ADD_DATE attribute specific to bookmark exports
-	# ADD_DATE contains Unix timestamp when bookmark was created
-	has_add_date = bool(
-			re.search( r'ADD_DATE\s*=\s*["\']?\d+["\']?' , html_content , re.IGNORECASE ) ,
-	)
-
-	# All conditions must be met for absolute certainty
-	# Boolean AND operation ensures strict matching
-	return has_netscape_doctype and has_dl_structure and has_dt_anchors and has_add_date
+	return "bookmark" in artifact_location.stem.lower( ).strip( )
 
 
 def is_anki_deck( artifact_location: Path ) -> bool :

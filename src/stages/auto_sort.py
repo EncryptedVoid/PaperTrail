@@ -12,13 +12,14 @@ import shutil
 from pathlib import Path
 from typing import List
 
+from tqdm import tqdm
+
 from config import (AFFINE_DIR , ANKI_DIR , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
 										FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , LINKWARDEN_DIR , MANUALS_ARCHIVE_DIR , MONICA_CRM_DIR ,
 										ODOO_CRM_DIR ,
 										ODOO_INVENTORY_DIR ,
 										ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
 										SOFTWARE_ARCHIVE_DIR , ULTIMAKER_CURA_DIR)
-from tqdm import tqdm
 from utilities.automatic_sorting import (
 	is_3d_file ,
 	is_anki_deck ,
@@ -97,7 +98,7 @@ def automatically_sorting(
 				logger.info( f"Moved file to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 
 			# Check if file is an HTML bookmark export
-			elif (is_bookmark_file( artifact_location=artifact )) :
+			elif is_bookmark_file( artifact_location=artifact ) :
 				logger.info( f"Detected bookmark file: {artifact.name}" )
 				shutil.move( src=artifact , dst=LINKWARDEN_DIR )
 				logger.info( f"Moved bookmark file to: {LINKWARDEN_DIR}" )

@@ -1,0 +1,29 @@
+TODO:
+[ ] Investigate errors with stl and pdf and exe files
+[ ] Improve failure logs
+[ ] Give unique logger prefixes for each stage
+[ ] Add logging to the duplicate reviewer
+[ ] Add timeouts to the duplicate reviewer
+[ ] Improve comments and logs across all files
+[ ] Standardize format/structure of stage functions
+[ ] Standardize format/structure of utility functions
+[ ] Standardize error raising and handling behavior
+[ ] Update ensurance functions to remove unneeded functions, unneeded package checks, windows unsupported operations
+[ ] Update .toml with new package needs and version needs
+[ ] Remove popup in DuplicateReviewer
+[ ] Move Prompts into prompts.py
+[ ] Rename artifact at the end with LLM
+[ ] Unzipping review application - shows unzipped files and asks if it should be kept, zipped, or unzipped
+
+V2.0.0 TODO:
+[ ] Debriefing tool that asks user to input when file fails or cannot be progressed forward
+[ ] Entire process is monitored and displayed in GUI
+[ ] All FOSS are self-contained binaries
+[ ] Audio Transcription
+[ ] Audio Visualization
+[ ] Document detection in images
+[ ] Document scanning and enhancing in images and PDFs
+[ ] Improve book/textbook detection
+[ ] Add "is_movie" function
+[ ] Add "is_video_course" function
+[ ] Auto-run program when trigger folder has artifacts
