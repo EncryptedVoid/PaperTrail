@@ -17,7 +17,8 @@ from pathlib import Path
 
 from config import (
 	CHECKSUM_HISTORY_FILE ,
-	LOG_DIR ,
+	COMPLETED_FORMAT_CONVERSION_DIR , COMPLETED_METADATA_EXTRACTION_DIR , COMPLETED_SANITIZATION_DIR ,
+	COMPLETED_SEMANTICS_EXTRACTION_DIR , LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
 	SESSION_LOG_FILE_PREFIX ,
@@ -92,40 +93,51 @@ print( "Root handlers after basicConfig:" , logging.root.handlers )
 # This marks the beginning of a new processing session in the logs
 logger.info( "WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM" )
 
+visual_processor = VisualProcessor( logger=logger )
+duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
+manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
+
 sanitizing(
 		logger=logger ,
 		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
-		recursive_allowed_dir=Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" ) ,
+		dest_dir=COMPLETED_SANITIZATION_DIR ,
+		recursive_search_dir=Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" ) ,
 )
 
-if any( item.is_file( ) for item in UNPROCESSED_ARTIFACTS_DIR.iterdir( ) ) :
-	reviewer = DuplicateReviewer( logger=logger , source_dir=UNPROCESSED_ARTIFACTS_DIR )
-	reviewer.run( )
-
-extracting_metadata(
-		logger=logger ,
-		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
-)
-
-converting_files( logger=logger , source_dir=UNPROCESSED_ARTIFACTS_DIR )
-
-visual_processor = VisualProcessor( logger=logger )
+duplicate_reviewer.run( )
 
 automatically_sorting(
 		logger=logger ,
 		visual_processor=visual_processor ,
-		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
+		source_dir=COMPLETED_SANITIZATION_DIR ,
+)
+
+extracting_metadata(
+		logger=logger ,
+		source_dir=COMPLETED_SANITIZATION_DIR ,
+		dest_dir=COMPLETED_METADATA_EXTRACTION_DIR ,
+)
+
+converting_files(
+		logger=logger ,
+		source_dir=COMPLETED_METADATA_EXTRACTION_DIR ,
+		dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
+)
+
+automatically_sorting(
+		logger=logger ,
+		visual_processor=visual_processor ,
+		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
 
 extracting_semantics(
 		logger=logger ,
 		visual_processor=visual_processor ,
-		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
+		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
+		dest_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR ,
 )
 
-if any( item.is_file( ) for item in UNPROCESSED_ARTIFACTS_DIR.iterdir( ) ) :
-	triage = FileTriage( source_dir=UNPROCESSED_ARTIFACTS_DIR )
-	triage.run( )
+manual_artifact_triage.run( )
 
 # ============================================================================
 # PIPELINE COMPLETION

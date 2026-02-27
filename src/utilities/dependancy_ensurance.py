@@ -3028,3 +3028,51 @@ def ensure_bitsandbytes( min_version: str = "0.41.0" ) -> str :
 	except Exception as e :
 		print( f"⚠ bitsandbytes installation error: {e}" )
 		return "bitsandbytes (unavailable)"
+
+
+def find_libreoffice( ) -> str :
+	"""
+	Locate the LibreOffice 'soffice' executable on the current system.
+
+	On Windows, checks the two standard install paths first, then falls back to PATH.
+	On Linux/macOS, checks PATH for 'soffice' and 'libreoffice'.
+
+	Returns:
+		The full path to the soffice executable.
+
+	Raises:
+		RuntimeError: If LibreOffice cannot be found anywhere.
+	"""
+	import os
+
+	if platform.system( ) == "Windows" :
+		# Windows: LibreOffice is rarely on PATH — check default install locations
+		candidates = [
+			r"C:\Program Files\LibreOffice\program\soffice.exe" ,
+			r"C:\Program Files (x86)\LibreOffice\program\soffice.exe" ,
+		]
+		for path in candidates :
+			if os.path.isfile( path ) :
+				return path
+
+		# Last resort: maybe the user added it to PATH manually
+		found = shutil.which( "soffice" )
+		if found :
+			return found
+
+		raise RuntimeError(
+				"LibreOffice not found. Expected at "
+				r"'C:\Program Files\LibreOffice\program\soffice.exe'. "
+				"Download from https://www.libreoffice.org/download/" ,
+		)
+
+	# Linux / macOS: check PATH for common executable names
+	for cmd in ("soffice" , "libreoffice") :
+		found = shutil.which( cmd )
+		if found :
+			return found
+
+	raise RuntimeError(
+			"LibreOffice not found on PATH. "
+			"Install with: sudo apt install libreoffice  OR  brew install libreoffice" ,
+	)

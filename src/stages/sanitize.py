@@ -18,7 +18,10 @@ SHA-256 checksums, and organizes artifacts into appropriate directories based on
 status. Processing statistics and timing information are logged for monitoring.
 """
 
+import bz2
+import gzip
 import logging
+import lzma
 import shutil
 import tarfile
 import time
@@ -26,14 +29,15 @@ import zipfile
 from pathlib import Path
 from typing import List , Optional
 
-from tqdm import tqdm
-
+import py7zr
 from config import (
+	ARCHIVE_TYPES ,
 	CORRUPTED_ARTIFACTS_DIR ,
 	DUPLICATE_ARTIFACTS_DIR ,
 	PASSWORD_PROTECTED_ARTIFACTS_DIR ,
 	UNSUPPORTED_ARTIFACTS_DIR ,
 )
+from tqdm import tqdm
 from utilities.checksum import generate_checksum , save_checksum
 from utilities.dependancy_ensurance import ensure_apache_tika , ensure_ffmpeg
 from utilities.sanitization import (
@@ -42,37 +46,12 @@ from utilities.sanitization import (
 	is_supported_type ,
 )
 
-# Compressed file extensions that the pipeline can decompress
-COMPRESSED_EXTENSIONS = {
-	".zip" , ".7z" , ".tar" , ".gz" , ".tgz" , ".bz2" , ".tbz2" , ".xz" , ".txz" ,
-	".tar.gz" , ".tar.bz2" , ".tar.xz" ,
-}
 
-
-def _is_compressed( artifact: Path ) -> bool :
-	"""
-	Determine whether an artifact is a compressed archive based on its extension.
-
-	Handles compound extensions like .tar.gz, .tar.bz2, .tar.xz as well as
-	single extensions like .zip, .7z, .gz, etc.
-
-	Args:
-		artifact: Path to the artifact to check.
-
-	Returns:
-		True if the artifact has a recognized compressed extension.
-	"""
-	name_lower = artifact.name.lower( )
-
-	# Check compound extensions first (e.g. .tar.gz)
-	for ext in (".tar.gz" , ".tar.bz2" , ".tar.xz") :
-		if name_lower.endswith( ext ) :
-			return True
-
-	return artifact.suffix.lower( ) in COMPRESSED_EXTENSIONS
-
-
-def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_dir: Path ) -> List[ Path ] :
+def _decompress_artifact(
+		logger: logging.Logger ,
+		artifact: Path ,
+		dest_dir: Path ,
+) -> List[ Path ] :
 	"""
 	Decompress a compressed artifact into the destination directory.
 
@@ -82,7 +61,7 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 	Args:
 		logger: Logger instance for recording decompression events.
 		artifact: Path to the compressed artifact.
-		destination_dir: Directory to extract contents into.
+		dest_dir: Directory to extract contents into.
 
 	Returns:
 		A list of Path objects for every file extracted.
@@ -90,9 +69,6 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 	Raises:
 		Exception: Propagates any extraction errors after logging them.
 	"""
-	import gzip
-	import bz2
-	import lzma
 
 	extracted_files: List[ Path ] = [ ]
 	name_lower = artifact.name.lower( )
@@ -102,26 +78,18 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 		if name_lower.endswith( ".zip" ) :
 			logger.info( f"Decompressing ZIP archive: {artifact.name}" )
 			with zipfile.ZipFile( artifact , "r" ) as zf :
-				zf.extractall( destination_dir )
+				zf.extractall( dest_dir )
 				for info in zf.infolist( ) :
 					if not info.is_dir( ) :
-						extracted_files.append( destination_dir / info.filename )
+						extracted_files.append( dest_dir / info.filename )
 
 		# --- 7Z (requires py7zr) ---
 		elif name_lower.endswith( ".7z" ) :
-			try :
-				import py7zr
-			except ImportError :
-				logger.error(
-						"py7zr is not installed. Install it with: pip install py7zr" ,
-				)
-				raise ImportError( "py7zr is required to decompress .7z files" )
-
 			logger.info( f"Decompressing 7z archive: {artifact.name}" )
 			with py7zr.SevenZipFile( artifact , mode="r" ) as sz :
-				sz.extractall( path=destination_dir )
+				sz.extractall( path=dest_dir )
 				for entry in sz.getnames( ) :
-					candidate = destination_dir / entry
+					candidate = dest_dir / entry
 					if candidate.is_file( ) :
 						extracted_files.append( candidate )
 
@@ -137,15 +105,15 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 		) :
 			logger.info( f"Decompressing TAR archive: {artifact.name}" )
 			with tarfile.open( artifact , "r:*" ) as tf :
-				tf.extractall( destination_dir , filter="data" )
+				tf.extractall( dest_dir , filter="data" )
 				for member in tf.getmembers( ) :
 					if member.isfile( ) :
-						extracted_files.append( destination_dir / member.name )
+						extracted_files.append( dest_dir / member.name )
 
 		# --- Standalone GZ (not tar.gz) ---
 		elif name_lower.endswith( ".gz" ) :
 			out_name = artifact.stem  # strips .gz
-			out_path = destination_dir / out_name
+			out_path = dest_dir / out_name
 			logger.info( f"Decompressing GZ file: {artifact.name} -> {out_name}" )
 			with gzip.open( artifact , "rb" ) as f_in , open( out_path , "wb" ) as f_out :
 				shutil.copyfileobj( f_in , f_out )
@@ -154,7 +122,7 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 		# --- Standalone BZ2 ---
 		elif name_lower.endswith( ".bz2" ) :
 			out_name = artifact.stem
-			out_path = destination_dir / out_name
+			out_path = dest_dir / out_name
 			logger.info( f"Decompressing BZ2 file: {artifact.name} -> {out_name}" )
 			with bz2.open( artifact , "rb" ) as f_in , open( out_path , "wb" ) as f_out :
 				shutil.copyfileobj( f_in , f_out )
@@ -163,7 +131,7 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 		# --- Standalone XZ ---
 		elif name_lower.endswith( ".xz" ) :
 			out_name = artifact.stem
-			out_path = destination_dir / out_name
+			out_path = dest_dir / out_name
 			logger.info( f"Decompressing XZ file: {artifact.name} -> {out_name}" )
 			with lzma.open( artifact , "rb" ) as f_in , open( out_path , "wb" ) as f_out :
 				shutil.copyfileobj( f_in , f_out )
@@ -175,9 +143,7 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 
 		# Remove the original archive after successful extraction
 		artifact.unlink( )
-		logger.info(
-				f"Extracted {len( extracted_files )} file(s) from {artifact.name}" ,
-		)
+		logger.info( f"Extracted {len( extracted_files )} file(s) from {artifact.name}" )
 
 	except Exception as e :
 		logger.error( f"Failed to decompress {artifact.name}: {e}" )
@@ -186,45 +152,49 @@ def _decompress_artifact( logger: logging.Logger , artifact: Path , destination_
 	return extracted_files
 
 
-def _collect_and_prepare(
+def sanitizing(
 		logger: logging.Logger ,
 		source_dir: Path ,
-		recursive_allowed_dir: Optional[ Path ] = None ,
+		dest_dir: Path ,
+		recursive_search_dir: Optional[ Path ] = None ,
 ) -> None :
 	"""
-	Preliminary step that collects files from the recursive directory and
-	decompresses all compressed artifacts found in both locations.
-
-	Processing order:
-	1. If recursive_allowed_dir is provided, recursively walk it:
-	   a. Decompress any compressed files in-place first.
-	   b. Move all resulting regular files into source_dir.
-	2. Decompress any compressed files already sitting in source_dir.
-	3. Repeat decompression in source_dir until no compressed files remain
-	   (handles nested archives like .tar.gz inside a .zip).
+	Sanitize a directory of artifacts by detecting and moving duplicates, corrupted artifacts,
+	unsupported artifact types, and password-protected artifacts.
 
 	Args:
-		logger: Logger instance.
-		source_dir: The primary working directory for sanitization.
-		recursive_allowed_dir: Optional secondary directory to recursively collect from.
+		logger: Logger instance for recording processing events and statistics.
+		source_dir: Path object pointing to the directory containing artifacts to process.
+		recursive_search_dir:Path to a directory the program is allowed to search recursively.
+
+	Returns:
+		None
 	"""
 
+	ensure_apache_tika( )
+	ensure_ffmpeg( )
+
+	logger.info( f"Starting sanitization process for directory: {source_dir}" )
+
 	# ------------------------------------------------------------------
-	# Step 1 – Collect from recursive_allowed_dir
+	# Preliminary: collect from recursive dir & decompress all archives
 	# ------------------------------------------------------------------
-	if recursive_allowed_dir is not None :
-		if not recursive_allowed_dir.exists( ) :
+	# ------------------------------------------------------------------
+	# Step 1 – Collect from recursive_search_dir
+	# ------------------------------------------------------------------
+	if recursive_search_dir is not None :
+		if not recursive_search_dir.exists( ) :
 			logger.warning(
-					f"recursive_allowed_dir does not exist, skipping: {recursive_allowed_dir}" ,
+					f"recursive_search_dir does not exist, skipping: {recursive_search_dir}" ,
 			)
 		else :
 			logger.info(
-					f"Collecting artifacts recursively from: {recursive_allowed_dir}" ,
+					f"Collecting artifacts recursively from: {recursive_search_dir}" ,
 			)
 
 			# Gather every file recursively (rglob("*") yields all entries)
 			recursive_files: List[ Path ] = [
-				p for p in recursive_allowed_dir.rglob( "*" ) if p.is_file( )
+				p for p in recursive_search_dir.rglob( "*" ) if p.is_file( )
 			]
 			logger.info(
 					f"Found {len( recursive_files )} file(s) in recursive directory" ,
@@ -237,7 +207,7 @@ def _collect_and_prepare(
 			) :
 				try :
 					# Decompress compressed files directly into source_dir
-					if _is_compressed( artifact ) :
+					if artifact.suffix.lower( ).strip( ) in ARCHIVE_TYPES( artifact ) :
 						_decompress_artifact( logger , artifact , source_dir )
 					else :
 						# Resolve naming collisions by appending a counter
@@ -259,7 +229,7 @@ def _collect_and_prepare(
 
 			# Clean up any now-empty subdirectories left behind
 			for dirpath in sorted(
-					recursive_allowed_dir.rglob( "*" ) , reverse=True ,
+					recursive_search_dir.rglob( "*" ) , reverse=True ,
 			) :
 				if dirpath.is_dir( ) and not any( dirpath.iterdir( ) ) :
 					dirpath.rmdir( )
@@ -271,7 +241,10 @@ def _collect_and_prepare(
 	pass_number = 0
 	while True :
 		compressed_in_source: List[ Path ] = [
-			p for p in source_dir.iterdir( ) if p.is_file( ) and _is_compressed( p )
+			p for p in source_dir.iterdir( ) if (
+					p.is_file( )
+					and artifact.suffix.lower( ).strip( ) in ARCHIVE_TYPES( p )
+			)
 		]
 		if not compressed_in_source :
 			break
@@ -320,60 +293,6 @@ def _collect_and_prepare(
 		if dirpath.is_dir( ) and not any( dirpath.iterdir( ) ) :
 			dirpath.rmdir( )
 
-
-def sanitizing(
-		logger: logging.Logger ,
-		source_dir: Path ,
-		recursive_allowed_dir: Optional[ Path ] = None ,
-) -> None :
-	"""
-	Sanitize a directory of artifacts by detecting and moving duplicates, corrupted artifacts,
-	unsupported artifact types, and password-protected artifacts.
-
-	This function processes all artifacts in the source directory, checking each artifact for:
-	1. Duplicate content (via checksum comparison)
-	2. Corruption or empty artifacts
-	3. Unsupported artifact types
-	4. Password protection
-
-	Files that fail any check are moved to appropriate quarantine directories.
-	Processing statistics and timing information are logged.
-
-	Args:
-		logger: Logger instance for recording processing events and statistics.
-		source_dir: Path object pointing to the directory containing artifacts to process.
-		recursive_allowed_dir: Optional Path to a directory the program is allowed to
-			search recursively.  Files found here (including those inside compressed
-			archives) are moved into source_dir before the main sanitization loop.
-
-	Returns:
-		None
-
-	Side Effects:
-		- Decompresses compressed archives (zip, 7z, tar, gz, bz2, xz) in both
-		  recursive_allowed_dir and source_dir before processing
-		- Moves artifacts to quarantine directories (duplicates, corrupted, unsupported,
-		  password-protected)
-		- Saves checksums of processed artifacts to persistent storage
-		- Logs detailed processing information and statistics
-	"""
-
-	ensure_apache_tika( )
-	ensure_ffmpeg( )
-
-	# Log conversion stage header for clear progress tracking
-	# This helps distinguish conversion logs from other pipeline stages
-	logger.info( "=" * 80 )
-	logger.info( "ARTIFACT SET SANITIZATION STAGE" )
-	logger.info( "=" * 80 )
-
-	logger.info( f"Starting sanitization process for directory: {source_dir}" )
-
-	# ------------------------------------------------------------------
-	# Preliminary: collect from recursive dir & decompress all archives
-	# ------------------------------------------------------------------
-	_collect_and_prepare( logger , source_dir , recursive_allowed_dir )
-
 	# Use Path.iterdir() to get all items in directory, filter to only regular artifacts
 	# This excludes subdirectories, symlinks, and other non-artifact items
 	unprocessed_artifacts: List[ Path ] = [
@@ -395,16 +314,6 @@ def sanitizing(
 	logger.info( f"Found {total_artifacts} artifact(s) to process" )
 	logger.info( f"Artifact sorted by size for optimal processing order" )
 
-	# Initialize statistics tracking using simple counters
-	# These track the outcomes of artifact processing for reporting
-	stats = {
-		"processed"          : 0 ,  # Total artifacts successfully processed
-		"duplicates"         : 0 ,  # Files identified as duplicates
-		"corrupted"          : 0 ,  # Files that are corrupted or empty
-		"unsupported"        : 0 ,  # Files with unsupported types
-		"password_protected" : 0 ,  # Files that are password-protected
-	}
-
 	# List to store checksums of successfully processed artifacts
 	# Used to detect duplicates during current processing session
 	processed_checksums: List[ str ] = [ ]
@@ -415,7 +324,7 @@ def sanitizing(
 	# tqdm provides a visual progress bar in the console
 	for artifact in tqdm(
 			unprocessed_artifacts ,
-			desc="Sanitizing artifacts" ,
+			desc="Sanitizing" ,
 			unit="artifacts" ,
 	) :
 		try :
@@ -434,15 +343,14 @@ def sanitizing(
 				logger.info( f"Duplicate detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=DUPLICATE_ARTIFACTS_DIR / artifact.name )
 				logger.debug( f"Moved duplicate artifact to: {DUPLICATE_ARTIFACTS_DIR / artifact.name}" )
-
-				stats[ "duplicates" ] += 1
-				continue  # Skip further processing of duplicate artifacts
+				continue
 
 			# File is not a duplicate, add checksum to processed list
 			processed_checksums.append( artifact_checksum )
 
 			if artifact.suffix.lower( ).strip( ).strip( '.' ) in [ "gcode" ] :
 				logger.info( f"Ignoring {artifact.name}, Apache Tika does not recognise gcode files as of Feb 25th, 2026" )
+				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 				continue
 
 			# Check if artifact type is supported using Apache Tika content detection
@@ -451,16 +359,12 @@ def sanitizing(
 				logger.info( f"Unsupported artifact type detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=UNSUPPORTED_ARTIFACTS_DIR / artifact.name )
 				logger.debug( f"Moved unsupported artifact to: {UNSUPPORTED_ARTIFACTS_DIR / artifact.name}" )
-
-				stats[ "unsupported" ] += 1
 				continue
 
 			if is_corrupted( artifact_location=artifact ) :
 				logger.info( f"Corrupted artifact detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=CORRUPTED_ARTIFACTS_DIR / artifact.name )
 				logger.debug( f"Moved corrupted artifact to: {CORRUPTED_ARTIFACTS_DIR / artifact.name}" )
-
-				stats[ "corrupted" ] += 1
 				continue
 
 			# Check if artifact is password-protected (encrypted)
@@ -469,8 +373,6 @@ def sanitizing(
 				logger.info( f"Password-protected artifact detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=PASSWORD_PROTECTED_ARTIFACTS_DIR / artifact.name )
 				logger.debug( f"Moved password-protected artifact to: {PASSWORD_PROTECTED_ARTIFACTS_DIR / artifact.name}" )
-
-				stats[ "password_protected" ] += 1
 				continue
 
 			# File passed all validation checks - save its checksum for future reference
@@ -478,25 +380,15 @@ def sanitizing(
 			save_checksum( logger=logger , checksum=artifact_checksum )
 			logger.debug( f"File validated successfully: {artifact.name}" )
 
+			shutil.move( src=artifact , dst=dest_dir / artifact.name )
+
 			# Calculate total processing time by subtracting start time from current time
 			elapsed_time = time.time( ) - start_time
 			logger.info( f"Total processing time for {artifact.name}: {elapsed_time:.2f} seconds" )
-
-			stats[ "processed" ] += 1
-
 		except Exception as e :
 			# Catch any unexpected errors during artifact processing
 			# Log the error but continue processing remaining artifacts
 			logger.error( f"Error processing artifact {artifact.name}: {str( e )}" )
 			continue
-
-	# Log comprehensive statistics about the sanitization process
-	logger.info( "Sanitization process completed" )
-
-	logger.info( f"Total Artifacts Processed: {stats[ 'processed' ]}" )
-	logger.info( f"Total Duplicates Removed: {stats[ 'duplicates' ]}" )
-	logger.info( f"Total Corrupted Artifacts Removed: {stats[ 'corrupted' ]}" )
-	logger.info( f"Total Unsupported Artifacts Removed: {stats[ 'unsupported' ]}" )
-	logger.info( f"Total Password-Protected Artifacts Removed: {stats[ 'password_protected' ]}" )
 
 	return None

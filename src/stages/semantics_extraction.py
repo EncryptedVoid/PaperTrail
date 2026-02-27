@@ -75,6 +75,7 @@ from utilities.visual_processor import VisualProcessor , compile_doc_subset
 def extracting_semantics(
 		logger: logging.Logger ,
 		source_dir: Path ,
+		dest_dir: Path ,
 		visual_processor: VisualProcessor ,
 ) -> None :
 	ensure_ollama( )
@@ -204,6 +205,8 @@ def extracting_semantics(
 			semantical_descriptors = extract_fields( logger=logger , content=content )
 
 			metadata_json = json.dumps( semantical_descriptors )
+
+			shutil.move( src=artifact , dst=dest_dir / artifact.name )
 
 			with exiftool.ExifTool( ) as et :
 				et.execute(

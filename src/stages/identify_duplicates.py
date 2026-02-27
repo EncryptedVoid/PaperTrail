@@ -707,7 +707,7 @@ class PreviewPane :
 			self._draw_text( f"Video error: {e}" , FG_DIM )
 
 	def set_logger( self , logger: logging.Logger ) :
-		self._logger = logger
+		self.logger = logger
 
 	def _render_metadata( self ) :
 		logger = getattr( self , "_logger" , None )
@@ -1253,7 +1253,8 @@ class DuplicateReviewer :
 			source_dir: Path | None = None ,
 			logger: logging.Logger | None = None ,
 	) :
-		self._logger = logger or logging.getLogger( "DupReviewer" )
+		self.logger = logger
+		self.source_dir = source_dir
 		self.root = ctk.CTk( )
 		self.root.title( "Duplicate Finder & Reviewer" )
 		self.root.geometry( "1440x900" )
@@ -1280,10 +1281,10 @@ class DuplicateReviewer :
 		self._review = ReviewFrame(
 				self._tabs.tab( "👁  Review" ) ,
 				base_dir=source_dir ,
-				logger=self._logger ,
+				logger=self.logger ,
 		)
 		self._review.pack( fill="both" , expand=True )
-		self._logger.info(
+		self.logger.info(
 				f"App started | source_dir={source_dir} | base_dir={source_dir}" ,
 		)
 
@@ -1293,4 +1294,7 @@ class DuplicateReviewer :
 		self._tabs.set( "👁  Review" )
 
 	def run( self ) :
-		self.root.mainloop( )
+		if any( item.is_file( ) for item in self.source_dir.iterdir( ) ) :
+			self.root.mainloop( )
+		else :
+			self.logger.warning( f"No items found in {self.source_dir}. Not running \"DuplicateReviewer\" application" )

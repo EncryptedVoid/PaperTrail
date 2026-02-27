@@ -7,6 +7,7 @@ and system parameters.
 
 Author: Ashiq Gazi
 """
+
 import os
 from pathlib import Path
 from typing import Dict
@@ -24,13 +25,19 @@ UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PaperTrail-Load
 # Archive storage for fully processed and verified artifacts
 ARCHIVAL_DIR: Path = Path( BASE_DIR / "ARCHIVE" )
 # Persistent JSON/YAML profiles describing each processed artifact
-ARTIFACT_PROFILES_DIR: Path = Path( BASE_DIR / "ARTIFACT_PROFILES" )
-# Running log of all artifact checksums for integrity tracking
-CHECKSUM_HISTORY_FILE: Path = Path( BASE_DIR / "checksum_history.txt" )
+ARTIFACT_PROFILES_DIR: Path = Path( TARGET_DRIVE / "ARTIFACT_PROFILES" )
 # Output directory for application logs
-LOG_DIR: Path = Path( BASE_DIR / "LOGS" )
+LOG_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-LOGS" )
+# Running log of all artifact checksums for integrity tracking
+CHECKSUM_HISTORY_FILE: Path = Path( TARGET_DRIVE / "checksum_history.txt" )
 # Scratch space for intermediate files during processing
 TEMP_DIR: Path = Path( BASE_DIR / "TEMP" )
+
+# ── Stage Directories ─────────────────────────────────────────────────────
+COMPLETED_SANITIZATION_DIR: Path = Path( BASE_DIR / "STAGE_STATE_MACHINE" / "COMPLETED_SANITIZATION" )
+COMPLETED_FORMAT_CONVERSION_DIR: Path = Path( BASE_DIR / "STAGE_STATE_MACHINE" / "COMPLETED_FORMAT_CONVERSION" )
+COMPLETED_METADATA_EXTRACTION_DIR: Path = Path( BASE_DIR / "STAGE_STATE_MACHINE" / "COMPLETED_METADATA_EXTRACTION" )
+COMPLETED_SEMANTICS_EXTRACTION_DIR: Path = Path( BASE_DIR / "STAGE_STATE_MACHINE" / "COMPLETED_SEMANTICS_EXTRACTION" )
 
 # ── Review Directories ─────────────────────────────────────────────────────────
 # Artifacts flagged as corrupted and requiring manual inspection
@@ -136,6 +143,10 @@ SYSTEM_DIRECTORIES: set[ Path ] = {
 	GAMES_ARCHIVE_DIR ,
 	MANUALS_ARCHIVE_DIR ,
 	SOFTWARE_ARCHIVE_DIR ,
+	COMPLETED_SANITIZATION_DIR ,
+	COMPLETED_FORMAT_CONVERSION_DIR ,
+	COMPLETED_METADATA_EXTRACTION_DIR ,
+	COMPLETED_SEMANTICS_EXTRACTION_DIR ,
 }
 
 # Checksum algorithm for duplicate detection and integrity verification
@@ -296,16 +307,9 @@ Note:
 Present observations in formal, official terminology suitable for administrative records.""" ,
 }
 
-SPREADSHEET_TYPES = [ "xlsx" , "csv" ]
-
 EMAIL_TYPES = [
 	"eml" ,
-	"emlx" ,
-	"mbox" ,
-	"mbx" ,  # Generic mbox variant
 	"msg" ,
-	"ost" ,  # Outlook offline storage
-	"pst" ,  # Outlook personal storage
 ]
 
 DOCUMENT_TYPES = [
@@ -455,30 +459,20 @@ TEXT_TYPES = [
 	"yml" ,
 ]
 
-ARCHIVE_TYPES = [
-	"7z" ,
-	"apk" ,  # Android package
-	"bz2" ,
-	"cab" ,  # Windows cabinet
-	"deb" ,  # Debian package
-	"dmg" ,  # macOS disk image
-	"gz" ,
-	"iso" ,  # Optical disc image
-	"lz" ,
-	"lzma" ,
-	"rar" ,
-	"rpm" ,  # Red Hat package
-	"tar" ,
-	"tar.bz2" ,
-	"tar.gz" ,
-	"tar.xz" ,
-	"tgz" ,
-	"tbz2" ,
-	"txz" ,
-	"xz" ,
-	"zip" ,
-	"zst" ,  # Zstandard
-]
+ARCHIVE_TYPES = {
+	".zip" ,
+	".7z" ,
+	".tar" ,
+	".gz" ,
+	".tgz" ,
+	".bz2" ,
+	".tbz2" ,
+	".xz" ,
+	".txz" ,
+	".tar.gz" ,
+	".tar.bz2" ,
+	".tar.xz" ,
+}
 
 CODE_EXTENSIONS = [
 	"asm" ,
@@ -536,12 +530,13 @@ CODE_EXTENSIONS = [
 	"wasm" ,
 	"zig" ,
 	"zsh" ,
+	"sh" ,  # Shell script (executable)
+	"appimage" ,  # Linux portable app
+	"bat" ,  # Windows batch script
 ]
 
 EXECUTABLE_EXTENSIONS = [
 	"app" ,  # macOS application bundle
-	"appimage" ,  # Linux portable app
-	"bat" ,  # Windows batch script
 	"bin" ,  # Generic binary
 	"cmd" ,  # Windows command script
 	"deb" ,  # Debian installer
@@ -551,23 +546,13 @@ EXECUTABLE_EXTENSIONS = [
 	"msi" ,  # Windows installer
 	"rpm" ,  # Red Hat installer
 	"run" ,  # Linux self-executing binary
-	"sh" ,  # Shell script (executable)
 ]
 
 ANKI_EXTENSIONS = [ "apkg" ]
 
-# Comprehensive 3D File Format Mapping
-# Covers: CAD, Mesh, Slicer/Print, Scan, Animation, Game Engine,
-#         Solid Modeling, BIM, Voxel, Point Cloud, Scene, and Exchange formats.
 CAD_FILES = [
-	# ─────────────────────────────────────────────
-	# SLICER / 3D PRINTING
-	# ─────────────────────────────────────────────
 	"gcode" ,
 	"bgcode" ,
-	# ─────────────────────────────────────────────
-	# MESH — POLYGON / TRIANGULATED
-	# ─────────────────────────────────────────────
 	"stl" ,
 ]
 
