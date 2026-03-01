@@ -336,7 +336,9 @@ def is_backup_codes_file( artifact_location: Path ) -> bool :
 
 
 def is_financial_document(
-		artifact_location: Path , visual_processor: VisualProcessor , logger: logging.Logger ,
+		artifact_location: Path ,
+		visual_processor: VisualProcessor ,
+		logger: logging.Logger ,
 ) -> bool :
 	"""
 	Determine if a document contains financial, invoice, or purchase-related data.
@@ -359,6 +361,8 @@ def is_financial_document(
 		# Extract text based on file type
 		# Different file types require different extraction methods
 		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+
+		text = None
 
 		if artifact_ext in [ "txt" , "csv" , "json" , "xml" , "log" ] :
 			logger.debug( f"Reading plain text file: {artifact_ext}" )
@@ -391,7 +395,7 @@ def is_financial_document(
 
 		# Validate extracted text has meaningful content
 		# Minimum 10 characters required for analysis
-		if len( text.strip( ) ) < 10 :
+		if text is None or len( text.strip( ) ) < 10 :
 			logger.warning( f"No meaningful text extracted from {artifact_location.name}" )
 			return False
 

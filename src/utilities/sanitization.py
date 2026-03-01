@@ -23,6 +23,7 @@ import msoffcrypto
 import py7zr
 import pymupdf
 import rarfile
+
 from config import (
 	ANKI_EXTENSIONS ,
 	ARCHIVE_TYPES ,
@@ -168,6 +169,10 @@ def is_corrupted( artifact_location: Path ) -> bool :
 	# Extract MIME type from Tika's stdout and remove whitespace
 	# MIME type format: type/subtype (e.g., "application/pdf")
 	detected_mime_type = result.stdout.strip( )
+
+	if not detected_mime_type in MIME_TO_EXT_MAP :
+		raise RuntimeError( f"Mime extension mapping not found for mime [{detected_mime_type}]" )
+
 	mapped_mime_ext = MIME_TO_EXT_MAP[ detected_mime_type ]
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )

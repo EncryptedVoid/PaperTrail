@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import List , Optional
 
 import py7zr
+from tqdm import tqdm
+
 from config import (
 	ARCHIVE_TYPES ,
 	CORRUPTED_ARTIFACTS_DIR ,
@@ -37,7 +39,6 @@ from config import (
 	PASSWORD_PROTECTED_ARTIFACTS_DIR ,
 	UNSUPPORTED_ARTIFACTS_DIR ,
 )
-from tqdm import tqdm
 from utilities.checksum import generate_checksum , save_checksum
 from utilities.dependancy_ensurance import ensure_apache_tika , ensure_ffmpeg
 from utilities.sanitization import (
@@ -243,7 +244,7 @@ def sanitizing(
 		compressed_in_source: List[ Path ] = [
 			p for p in source_dir.iterdir( ) if (
 					p.is_file( )
-					and artifact.suffix.lower( ).strip( ) in ARCHIVE_TYPES( p )
+					and artifact.suffix.lower( ).strip( ) in ARCHIVE_TYPES
 			)
 		]
 		if not compressed_in_source :

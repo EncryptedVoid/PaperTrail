@@ -848,6 +848,8 @@ MIME_TO_EXT_MAP: dict[ str , str ] = {
 	"application/vnd.apple.pages"                                               : ".pages" ,
 	"application/vnd.apple.numbers"                                             : ".numbers" ,
 	"application/vnd.apple.keynote"                                             : ".key" ,
+	"multipart/appledouble"                                                     : "pdf" ,
+	# This is a special Apple mine type for Apple document exports. For now, it is acceptable for this to map to PDF
 	# ─────────────────────────────────────────────────────────────────────
 	# RICH TEXT / LEGACY WORD PROCESSORS
 	# ─────────────────────────────────────────────────────────────────────
@@ -1106,6 +1108,7 @@ MIME_TO_EXT_MAP: dict[ str , str ] = {
 	"application/x-amf"                                                         : ".amf" ,
 	# Mesh / polygon
 	"model/stl"                                                                 : ".stl" ,
+	"model/x.stl-binary"                                                        : ".stl" ,
 	"application/sla"                                                           : ".stl" ,
 	"model/obj"                                                                 : ".obj" ,
 	"text/x-obj"                                                                : ".obj" ,

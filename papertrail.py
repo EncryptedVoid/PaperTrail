@@ -94,8 +94,6 @@ print( "Root handlers after basicConfig:" , logging.root.handlers )
 logger.info( "WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM" )
 
 visual_processor = VisualProcessor( logger=logger )
-duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
-manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
 
 sanitizing(
 		logger=logger ,
@@ -104,6 +102,7 @@ sanitizing(
 		recursive_search_dir=Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" ) ,
 )
 
+duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
 duplicate_reviewer.run( )
 
 automatically_sorting(
@@ -137,6 +136,7 @@ extracting_semantics(
 		dest_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR ,
 )
 
+manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
 manual_artifact_triage.run( )
 
 # ============================================================================
