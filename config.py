@@ -20,6 +20,7 @@ TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop" )
 BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
 # Source directory for artifacts awaiting ingestion into the pipeline
 UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PaperTrail-Load" )
+RECURSIVE_SORT_DIR = Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" )
 
 # ── Processing Directories ─────────────────────────────────────────────────────
 # Archive storage for fully processed and verified artifacts

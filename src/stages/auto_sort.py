@@ -15,7 +15,8 @@ from typing import List
 from tqdm import tqdm
 
 from config import (AFFINE_DIR , ANKI_DIR , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
-										FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , LINKWARDEN_DIR , MANUALS_ARCHIVE_DIR , MONICA_CRM_DIR ,
+										FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , JELLYFIN_DIR , LINKWARDEN_DIR , MANUALS_ARCHIVE_DIR ,
+										MONICA_CRM_DIR ,
 										ODOO_CRM_DIR ,
 										ODOO_INVENTORY_DIR ,
 										ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
@@ -29,7 +30,7 @@ from utilities.automatic_sorting import (
 	is_code ,
 	is_digital_contact_file ,
 	is_executable ,
-	is_financial_document ,
+	is_financial_document , is_video_course ,
 )
 from utilities.dependancy_ensurance import ensure_apache_tika
 from utilities.sanitization import sanitize_artifact_name
@@ -97,30 +98,32 @@ def automatically_sorting(
 				shutil.move( src=artifact , dst=AFFINE_DIR / f"{sanitized_label}.{artifact_ext}" )
 				logger.info( f"Copied file to: {AFFINE_DIR}" )
 
-			elif "resume" in artifact_label and artifact_ext == "pdf" :
+			elif "resume" in artifact_label :
 				logger.info( f"Moving resume/professional document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
 
 			elif any(
 					(keyword in artifact_label
 					 for keyword in [ "immigration" , "refugee" , "passport" , "work permit" ]) ,
-			) and artifact_ext == "pdf" :
+			) :
 				logger.info( f"Moving immigration/legal document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
 
-			elif any( artifact_ext == extension for extension in [ "qpf" , "qsf" , "vwf" , "vwfvt" ] ) :
-				logger.info( f"Copying lab/simulation artifact to: {GITLAB_DIR}" )
-				shutil.copy2( src=artifact , dst=GITLAB_DIR / f"{sanitized_label}.{artifact_ext}" )
-
+			elif any( artifact_ext == extension for extension in [ "qpf" , "qsf" , "vwf" ] ) :
 				logger.info( f"Moving lab/simulation artifact to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
 
 			elif any(
 					(keyword in artifact_label
 					 for keyword in [ "syllabus" ]) ,
-			) and artifact_ext == "pdf" :
+			) :
 				logger.info( f"Moving academic/educational document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
+
+			elif is_video_course( artifact_location=artifact ) :
+				logger.info( f"Detected bookmark file: {artifact.name}" )
+				shutil.move( src=artifact , dst=JELLYFIN_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moved bookmark file to: {JELLYFIN_DIR}" )
 
 			elif is_bookmark_file( artifact_location=artifact ) :
 				logger.info( f"Detected bookmark file: {artifact.name}" )

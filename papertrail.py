@@ -16,7 +16,7 @@ from datetime import datetime
 
 from config import (
 	CHECKSUM_HISTORY_FILE ,
-	COMPLETED_FORMAT_CONVERSION_DIR , COMPLETED_METADATA_EXTRACTION_DIR , COMPLETED_SANITIZATION_DIR ,
+	COMPLETED_FORMAT_CONVERSION_DIR , COMPLETED_SANITIZATION_DIR ,
 	COMPLETED_SEMANTICS_EXTRACTION_DIR , LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
@@ -26,7 +26,6 @@ from config import (
 )
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
-from stages.metadata_extraction import extracting_metadata
 from stages.sanitize import sanitizing
 from stages.semantics_extraction import extracting_semantics
 # from utilities.applications.archive_review import FolderManagerApp
@@ -93,14 +92,8 @@ print( "Root handlers after basicConfig:" , logging.root.handlers )
 # This marks the beginning of a new processing session in the logs
 logger.info( "WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM" )
 
-visual_processor = VisualProcessor( logger=logger )
-
-# app = FolderManagerApp(
-#     source_dir=Path(r"C:\Users\UserX\Desktop\PaperTrail-Load"),
-#     dest_dir=Path(r"C:\Users\UserX\Desktop\PAPERTRAIL-PROCESSING\ARCHIVE"),
-#     logger=logger,
-# )
-# app.mainloop()
+# app = FolderManagerApp( source_dir=RECURSIVE_SORT_DIR , dest_dir=UNPROCESSED_ARTIFACTS_DIR , logger=logger )
+# app.mainloop( )
 
 sanitizing(
 		logger=logger ,
@@ -111,23 +104,13 @@ sanitizing(
 duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
 duplicate_reviewer.run( )
 
-automatically_sorting(
-		logger=logger ,
-		visual_processor=visual_processor ,
-		source_dir=COMPLETED_SANITIZATION_DIR ,
-)
-
-extracting_metadata(
-		logger=logger ,
-		source_dir=COMPLETED_SANITIZATION_DIR ,
-		dest_dir=COMPLETED_METADATA_EXTRACTION_DIR ,
-)
-
 converting_files(
 		logger=logger ,
-		source_dir=COMPLETED_METADATA_EXTRACTION_DIR ,
+		source_dir=COMPLETED_SANITIZATION_DIR ,
 		dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
+
+visual_processor = VisualProcessor( logger=logger )
 
 automatically_sorting(
 		logger=logger ,

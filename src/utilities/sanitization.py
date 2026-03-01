@@ -138,25 +138,77 @@ def is_password_protected( artifact_location: Path ) -> bool :
 	return False
 
 
+# def is_corrupted( artifact_location: Path ) -> bool :
+# 	"""
+# 	Returns True if the file is detectably corrupted, False if valid or type unknown.
+#
+# 	Args:
+# 		artifact_location: Path to the file to check.
+# 	"""
+#
+# 	# Basic sanity checks
+# 	if not artifact_location.exists( ) :
+# 		return True
+# 	if artifact_location.stat( ).st_size == 0 :
+# 		return True  # zero-byte is always corrupted
+#
+# 	if "._" in artifact_location.stem.lower( ).strip( ) :
+# 		return True
+#
+# 	# Execute Apache Tika as a subprocess using Java
+# 	# subprocess.run() launches an external process and waits for completion
+# 	result = subprocess.run(
+# 			[
+# 				"java" ,  # Java Runtime Environment command
+# 				"-jar" ,  # Run JAR file
+# 				str( TIKA_APP_JAR_PATH ) ,  # Path to Tika JAR
+# 				"--detect" ,  # Tika command to detect MIME type
+# 				str( artifact_location ) ,  # File to analyze
+# 			] ,
+# 			capture_output=True ,  # Capture stdout and stderr
+# 			text=True ,  # Return output as string (not bytes)
+# 			timeout=30 ,  # Timeout after 30 seconds
+# 	)
+#
+# 	# Extract MIME type from Tika's stdout and remove whitespace
+# 	# MIME type format: type/subtype (e.g., "application/pdf")
+# 	detected_mime_type = result.stdout.strip( )
+#
+# 	if not detected_mime_type in MIME_TO_EXT_MAP :
+# 		raise RuntimeError( f"Mime extension mapping not found for mime [{detected_mime_type}]" )
+#
+# 	mapped_mime_ext: Set[ str ] = MIME_TO_EXT_MAP[ detected_mime_type ]
+#
+# 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+# 	if artifact_ext == "jpeg" or artifact_ext == "cr2" or artifact_ext == "arw" or artifact_ext == "nef" :
+# 		artifact_ext = "jpg"
+# 	elif artifact_ext in ANKI_EXTENSIONS :
+# 		artifact_ext = "zip"
+#
+# 	return any(
+# 			((artifact_ext == extension.lower( ).strip( ).strip( '.' ))
+# 			 for extension in mapped_mime_ext) ,
+# 	)
+
 def is_corrupted( artifact_location: Path ) -> bool :
 	"""
 	Returns True if the file is detectably corrupted, False if valid or type unknown.
 
 	Args:
-		artifact_location: Path to the file to check.
+			artifact_location: Path to the file to check.
 	"""
 
 	# Basic sanity checks
 	if not artifact_location.exists( ) :
 		return True
+
 	if artifact_location.stat( ).st_size == 0 :
-		return True  # zero-byte is always corrupted
+		return True
 
 	if "._" in artifact_location.stem.lower( ).strip( ) :
 		return True
 
-	# Execute Apache Tika as a subprocess using Java
-	# subprocess.run() launches an external process and waits for completion
+	# Execute Apache Tika
 	result = subprocess.run(
 			[
 				"java" ,  # Java Runtime Environment command
@@ -170,25 +222,32 @@ def is_corrupted( artifact_location: Path ) -> bool :
 			timeout=30 ,  # Timeout after 30 seconds
 	)
 
-	# Extract MIME type from Tika's stdout and remove whitespace
-	# MIME type format: type/subtype (e.g., "application/pdf")
 	detected_mime_type = result.stdout.strip( )
 
-	if not detected_mime_type in MIME_TO_EXT_MAP :
+	if detected_mime_type not in MIME_TO_EXT_MAP :
 		raise RuntimeError( f"Mime extension mapping not found for mime [{detected_mime_type}]" )
 
 	mapped_mime_ext: Set[ str ] = MIME_TO_EXT_MAP[ detected_mime_type ]
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
-	if artifact_ext == "jpeg" or artifact_ext == "cr2" or artifact_ext == "arw" or artifact_ext == "nef" :
+
+	if artifact_ext in ("jpeg" , "cr2" , "arw" , "nef") :
 		artifact_ext = "jpg"
+	elif artifact_ext in ("vwf" , "qsf" , "qpf" , "ps1") :
+		artifact_ext = "txt"
+	elif artifact_ext == "vdx" :
+		artifact_ext = "xml"
+	elif artifact_ext == "tex" :
+		artifact_ext = "m"
 	elif artifact_ext in ANKI_EXTENSIONS :
 		artifact_ext = "zip"
 
-	return any(
-			((artifact_ext == extension.lower( ).strip( ).strip( '.' ))
-			 for extension in mapped_mime_ext) ,
-	)
+	normalized_mapped = { ext.lower( ).strip( ).strip( '.' ) for ext in mapped_mime_ext }
+
+	if artifact_ext in normalized_mapped :
+		return False
+	else :
+		return True
 
 
 def is_supported_type( artifact_location: Path ) -> bool :

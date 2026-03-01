@@ -361,7 +361,7 @@ def is_financial_document(
 		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
 		artifact_label = artifact_location.stem.lower( )
 
-		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " ] ) :
+		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " , "invoice" ] ) :
 			return True
 
 		text = None

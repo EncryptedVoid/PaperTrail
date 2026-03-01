@@ -14,12 +14,15 @@ This module provides functionality to convert artifacts by:
 
 Author: Ashiq Gazi
 """
-
+import json
 import logging
 import shutil
 import time
+import uuid
 from pathlib import Path
 from typing import List
+
+from tqdm import tqdm
 
 from config import (
 	ARTIFACT_PREFIX ,
@@ -31,14 +34,15 @@ from config import (
 	PROFILE_PREFIX ,
 	VIDEO_TYPES ,
 )
-from tqdm import tqdm
 from utilities.dependancy_ensurance import (
+	ensure_apache_tika ,
 	ensure_ffmpeg ,
 	ensure_imagemagick ,
 	ensure_libpff_python ,
 	ensure_pandoc ,
 	ensure_par2 ,
 )
+from utilities.extract_metadata import extract_metadata
 from utilities.format_converting import (
 	convert_audio_to_mp3 ,
 	convert_document_to_pdf ,
@@ -77,6 +81,7 @@ def converting_files(
 	ensure_pandoc( )
 	ensure_par2( )
 	ensure_libpff_python( )
+	ensure_apache_tika( )
 
 	# ============================================================================
 	# INITIALIZATION AND SETUP
@@ -114,7 +119,7 @@ def converting_files(
 
 	# Process each artifact with progress bar
 	# tqdm provides visual progress feedback to users
-	for artifact in tqdm(
+	for raw_artifact in tqdm(
 			unprocessed_artifacts ,
 			desc="Converting format" ,
 			unit="artifacts" ,
@@ -123,31 +128,22 @@ def converting_files(
 			start_time = time.time( )
 
 			# Log the start of processing for this artifact
-			logger.info( f"Processing artifact: {artifact.name}" )
+			logger.info( f"Processing artifact: {raw_artifact.name}" )
 
-			# ====================================================================
-			# PROFILE LOADING AND VALIDATION
-			# ====================================================================
+			unique_id = uuid.uuid4( )
 
-			# Extract UUID from filename for profile lookup
-			# Expected format: ARTIFACT-{uuid}.ext
-			# We strip the prefix and extension to get just the UUID
-			artifact_id = artifact.stem[ (len( ARTIFACT_PREFIX ) + 1) : ]
+			artifact = raw_artifact.rename( raw_artifact.parent / f"{ARTIFACT_PREFIX}-{unique_id}{raw_artifact.suffix}" )
+			logger.debug( f"Renaming artifact with UUID4 to avoid collisions: {artifact}" )
 
-			# Construct the path to the corresponding profile JSON file
-			# Profile contains metadata about the artifact's processing history
-			artifact_profile_json = (
-					ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
-			)
-
-			# ====================================================================
-			# FILE TYPE DETECTION
-			# ====================================================================
+			artifact_profile_json = (ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{unique_id}.json")
+			logger.debug( f"Output JSON will be saved to: {artifact_profile_json}" )
 
 			# Extract detected artifact type label
 			# Convert to lowercase for consistent comparison with type constants
 			artifact_ext: str = artifact.suffix.lower( ).strip( ).strip( "." )
 			logger.info( f"Detected type for {artifact.name}: {artifact_ext})" )
+
+			metadata = None
 
 			if artifact_ext in [
 				"epub" ,
@@ -165,31 +161,30 @@ def converting_files(
 				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 				continue
 
-			# ====================================================================
-			# CONVERSION ROUTING
-			# ====================================================================
-
-			# Route to appropriate converter based on detected artifact type
-			# Each type has its own specialized conversion function
-			if artifact_ext in DOCUMENT_TYPES :
-				new_artifact = convert_document_to_pdf( src=artifact , logger=logger )
-				shutil.move( src=new_artifact , dst=dest_dir / new_artifact.name )
+			elif artifact_ext in DOCUMENT_TYPES :
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_document_to_pdf( src=artifact , logger=logger )
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in IMAGE_TYPES :
-				new_artifact = convert_image_to_png( src=artifact , logger=logger )
-				shutil.move( src=new_artifact , dst=dest_dir / new_artifact.name )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_image_to_png( src=artifact , logger=logger )
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in VIDEO_TYPES :
-				new_artifact = convert_video_to_mp4( src=artifact , logger=logger )
-				shutil.move( src=new_artifact , dst=dest_dir / new_artifact.name )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_video_to_mp4( src=artifact , logger=logger )
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in AUDIO_TYPES :
-				new_artifact = convert_audio_to_mp3( src=artifact , logger=logger )
-				shutil.move( src=new_artifact , dst=dest_dir / new_artifact.name )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_audio_to_mp3( src=artifact , logger=logger )
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in EMAIL_TYPES :
-				new_artifact = convert_email_to_pdf( src=artifact , logger=logger )
-				shutil.move( src=new_artifact , dst=dest_dir / new_artifact.name )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_email_to_pdf( src=artifact , logger=logger )
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			else :
 				# Log unsupported artifact types
@@ -197,21 +192,25 @@ def converting_files(
 				logger.warning( f"Could not find appropriate conversion protocol of type {artifact_ext} for {artifact.name}" )
 				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 
-			# Get the size of the output JSON artifact for logging
-			logger.info(
-					f"Output JSON artifact size: {artifact_profile_json.stat( ).st_size:,} bytes" ,
-			)
+			# Write the metadata dictionary to a JSON artifact
+			# 'w': Open artifact in write mode
+			# encoding='utf-8': Use UTF-8 encoding to support international characters
+			# indent=2: Pretty-print JSON with 2-space indentation
+			# ensure_ascii=False: Allow non-ASCII characters in output
+			if metadata :
+				logger.info( f"Writing metadata to output artifact: {artifact_profile_json}" )
+				with open( artifact_profile_json , "w" , encoding="utf-8" ) as f :
+					json.dump( metadata , f , indent=2 , ensure_ascii=False )
+				logger.info( f"Output JSON artifact size: {artifact_profile_json.stat( ).st_size:,} bytes" )
 
 			# Calculate total operation duration
 			total_duration = time.time( ) - start_time
-			logger.info(
-					f"Format Conversion Completed Successfully in {total_duration:.2f} seconds" ,
-			)
+			logger.info( f"Format Conversion Completed Successfully in {total_duration:.2f} seconds" )
 
 		except Exception as e :
 			# Log the error with full exception details
 			# exc_info=True includes the full stack trace
-			error_msg: str = f"Error processing {artifact.name}: {e}"
+			error_msg: str = f"Error processing {raw_artifact.name}: {e}"
 			logger.error( error_msg , exc_info=True )
 			continue  # Continue with next artifact
 

@@ -8,6 +8,7 @@ Phase 2  REVIEW – step through every pair, decide what to keep
 Detection
   Images    : perceptual hash (pHash)  ·  Hamming-distance threshold
   Documents : text extraction + difflib SequenceMatcher ratio
+  Names     : sanitized filename match (strips "copy", counters, etc.)
   All files : exact SHA-256 match (always runs, free)
 
 Review keys
@@ -26,6 +27,7 @@ import json
 import logging
 import os
 import queue
+import re
 import shutil
 import subprocess
 import sys
@@ -177,6 +179,19 @@ def _fmt_size( n: int ) -> str :
 	return f"{n:.1f} TB"
 
 
+def sanitize_artifact_name( artifact_name: str ) -> str :
+	"""
+	Normalize a filename stem for duplicate-by-name detection.
+	Strips 'copy' markers, trailing counters like (1), (2), etc.
+	"""
+	stem , *ext_parts = artifact_name.rsplit( "." , 1 )
+
+	pattern = r'\s*[-_]?\s*\(?\bcopy\b\)?\s*(\(\d+\))?|\s+\(\d+\)$'
+	stem = re.sub( pattern , "" , stem , flags=re.IGNORECASE ).strip( )
+
+	return stem.capitalize( )
+
+
 def _tika_meta( path: str , logger: logging.Logger | None = None ) -> str :
 	"""
     Extract metadata via Apache Tika (--json mode).
@@ -326,7 +341,7 @@ def _groups_to_pairs( groups: list ) -> list[ tuple[ str , str ] ] :
 
 class DetectionEngine :
 	def __init__( self , folder , recursive , img_thresh , doc_thresh ,
-								do_images , do_docs , do_exact , min_kb ,
+								do_images , do_docs , do_exact , do_names , do_names_cross_ext , min_kb ,
 								on_progress , on_done , on_error ,
 								) :
 		self.folder = Path( folder )
@@ -336,6 +351,8 @@ class DetectionEngine :
 		self.do_images = do_images
 		self.do_docs = do_docs
 		self.do_exact = do_exact
+		self.do_names = do_names
+		self.do_names_cross_ext = do_names_cross_ext
 		self.min_bytes = int( min_kb ) * 1024
 		self._cancel = False
 		self._progress = on_progress
@@ -358,6 +375,20 @@ class DetectionEngine :
 			if self.do_exact :
 				self._progress( "Finding exact duplicates…" , 0.02 )
 				pairs += self._exact( files )
+				if self._cancel :
+					return
+
+			# ── sanitized filename matching ─────────────────────────────────
+			if self.do_names :
+				self._progress( "Matching sanitized filenames…" , 0.12 )
+				pairs += self._names( files )
+				if self._cancel :
+					return
+
+			# ── cross-extension filename matching ───────────────────────────
+			if self.do_names_cross_ext :
+				self._progress( "Matching filenames across extensions…" , 0.14 )
+				pairs += self._names_cross_ext( files )
 				if self._cancel :
 					return
 
@@ -404,12 +435,51 @@ class DetectionEngine :
 			if self._cancel :
 				return [ ]
 			if i % 30 == 0 :
-				self._progress( f"Checksumming {i}/{n}…" , 0.02 + 0.13 * i / max( n , 1 ) )
+				self._progress( f"Checksumming {i}/{n}…" , 0.02 + 0.08 * i / max( n , 1 ) )
 			try :
 				h = hashlib.sha256( f.read_bytes( ) ).hexdigest( )
 				buckets[ h ].append( str( f ) )
 			except Exception :
 				pass
+		return [ v for v in buckets.values( ) if len( v ) >= 2 ]
+
+	# ── sanitized filename matching ──────────────────────────────────────────
+
+	def _names( self , files: list[ Path ] ) -> list[ list[ str ] ] :
+		"""
+		Group files whose sanitized stem + extension match.
+		e.g.  "Report.pdf", "Report - Copy.pdf", "report (2).pdf"
+		      all sanitize to ("Report", ".pdf") → one group.
+		"""
+		buckets: dict[ tuple[ str , str ] , list[ str ] ] = defaultdict( list )
+		n = len( files )
+		for i , f in enumerate( files ) :
+			if self._cancel :
+				return [ ]
+			if i % 50 == 0 :
+				self._progress( f"Matching filenames {i}/{n}…" , 0.12 + 0.03 * i / max( n , 1 ) )
+			sanitized_stem = sanitize_artifact_name( f.name )
+			ext = f.suffix.lower( )
+			buckets[ (sanitized_stem , ext) ].append( str( f ) )
+		return [ v for v in buckets.values( ) if len( v ) >= 2 ]
+
+	# ── cross-extension sanitized filename matching ─────────────────────────
+
+	def _names_cross_ext( self , files: list[ Path ] ) -> list[ list[ str ] ] :
+		"""
+		Group files whose sanitized stem matches regardless of extension.
+		e.g.  "Report.pdf", "Report.docx", "report - Copy.txt"
+		      all sanitize to "Report" → one group.
+		"""
+		buckets: dict[ str , list[ str ] ] = defaultdict( list )
+		n = len( files )
+		for i , f in enumerate( files ) :
+			if self._cancel :
+				return [ ]
+			if i % 50 == 0 :
+				self._progress( f"Cross-ext filename match {i}/{n}…" , 0.14 + 0.01 * i / max( n , 1 ) )
+			sanitized_stem = sanitize_artifact_name( f.name )
+			buckets[ sanitized_stem ].append( str( f ) )
 		return [ v for v in buckets.values( ) if len( v ) >= 2 ]
 
 	# ── perceptual image hashing ─────────────────────────────────────────────
@@ -810,10 +880,14 @@ class ScanFrame( ctk.CTkFrame ) :
 		self._do_img = tk.BooleanVar( value=True )
 		self._do_doc = tk.BooleanVar( value=True )
 		self._do_exact = tk.BooleanVar( value=True )
+		self._do_names = tk.BooleanVar( value=True )
+		self._do_names_cross_ext = tk.BooleanVar( value=False )
 		for txt , var , tip in [
 			("Images  (pHash)" , self._do_img , "requires imagehash + Pillow") ,
 			("Documents  (text sim)" , self._do_doc , "uses PyMuPDF / Tika") ,
 			("Exact duplicates" , self._do_exact , "SHA-256 — always fast") ,
+			("Filename match" , self._do_names , "sanitized name comparison") ,
+			("Cross-ext filename" , self._do_names_cross_ext , "ignore extension") ,
 		] :
 			ctk.CTkCheckBox( mr , text=txt , variable=var ,
 											 font=FONT , text_color=FG_TEXT ,
@@ -952,6 +1026,8 @@ class ScanFrame( ctk.CTkFrame ) :
 				do_images=self._do_img.get( ) ,
 				do_docs=self._do_doc.get( ) ,
 				do_exact=self._do_exact.get( ) ,
+				do_names=self._do_names.get( ) ,
+				do_names_cross_ext=self._do_names_cross_ext.get( ) ,
 				min_kb=min_kb ,
 				on_progress=lambda m , p : self._q.put( ("progress" , m , p) ) ,
 				on_done=lambda g : self._q.put( ("done" , g) ) ,
@@ -1139,9 +1215,6 @@ class ReviewFrame( ctk.CTkFrame ) :
 
 	def _keep_left( self ) :
 		if not self._lf : return
-		if not messagebox.askyesno( "Confirm" ,
-																f"Archive RIGHT and keep LEFT?\n\n{Path( self._rf ).name}" ,
-																) : return
 		try :
 			kept = self._mv( self._lf , self.base_dir )
 			archived = self._mv( self._rf , ARCHIVAL_DIR )
@@ -1154,9 +1227,6 @@ class ReviewFrame( ctk.CTkFrame ) :
 
 	def _keep_right( self ) :
 		if not self._rf : return
-		if not messagebox.askyesno( "Confirm" ,
-																f"Archive LEFT and keep RIGHT?\n\n{Path( self._lf ).name}" ,
-																) : return
 		try :
 			kept = self._mv( self._rf , self.base_dir )
 			archived = self._mv( self._lf , ARCHIVAL_DIR )
