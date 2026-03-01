@@ -13,7 +13,6 @@ Author: Ashiq Gazi
 
 import logging
 from datetime import datetime
-from pathlib import Path
 
 from config import (
 	CHECKSUM_HISTORY_FILE ,
@@ -27,11 +26,12 @@ from config import (
 )
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
-from stages.identify_duplicates import DuplicateReviewer
-from stages.manual_file_triage import FileTriage
 from stages.metadata_extraction import extracting_metadata
 from stages.sanitize import sanitizing
 from stages.semantics_extraction import extracting_semantics
+# from utilities.applications.archive_review import FolderManagerApp
+from utilities.applications.identify_duplicates import DuplicateReviewer
+from utilities.applications.manual_file_triage import FileTriage
 from utilities.visual_processor import VisualProcessor
 
 # ============================================================================
@@ -95,11 +95,17 @@ logger.info( "WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM" 
 
 visual_processor = VisualProcessor( logger=logger )
 
+# app = FolderManagerApp(
+#     source_dir=Path(r"C:\Users\UserX\Desktop\PaperTrail-Load"),
+#     dest_dir=Path(r"C:\Users\UserX\Desktop\PAPERTRAIL-PROCESSING\ARCHIVE"),
+#     logger=logger,
+# )
+# app.mainloop()
+
 sanitizing(
 		logger=logger ,
 		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
 		dest_dir=COMPLETED_SANITIZATION_DIR ,
-		recursive_search_dir=Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" ) ,
 )
 
 duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )

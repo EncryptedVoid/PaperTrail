@@ -16,13 +16,14 @@ Key Features:
 import email
 import logging
 import re
+import subprocess
 import time
 from pathlib import Path
 
 from config import (
-	CAD_FILES ,
+	ANKI_EXTENSIONS , CAD_FILES ,
 	CODE_EXTENSIONS ,
-	DIGITAL_CONTACT_EXTENSIONS ,
+	DIGITAL_CONTACT_EXTENSIONS , EXECUTABLE_EXTENSIONS ,
 )
 from utilities.visual_processor import VisualProcessor
 
@@ -283,13 +284,7 @@ def is_anki_deck( artifact_location: Path ) -> bool :
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
 	artifact_label = artifact_location.stem.lower( )
 
-	if artifact_ext in [ "html" ] :
-		return False
-
-	if "bookmark" in artifact_label :
-		return True
-
-	if artifact_ext in [ "apkg" ] :
+	if artifact_ext in ANKI_EXTENSIONS :
 		return True
 
 	if "anki" in artifact_label :
@@ -329,7 +324,10 @@ def is_backup_codes_file( artifact_location: Path ) -> bool :
 	filename = artifact_location.stem.lower( ).strip( )
 
 	# any() returns True if at least one keyword is found in filename
-	if any( keyword in filename for keyword in [ "backup" , "recovery" , "2fa" , "mfa" ] ) :
+	if any(
+			(keyword in filename
+			 for keyword in [ "backup" , "recovery" , "2fa" , "mfa" , "dashlane" , "bitwarden" ]) ,
+	) :
 		return True
 
 	return False
@@ -361,6 +359,10 @@ def is_financial_document(
 		# Extract text based on file type
 		# Different file types require different extraction methods
 		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		artifact_label = artifact_location.stem.lower( )
+
+		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " ] ) :
+			return True
 
 		text = None
 
@@ -433,7 +435,7 @@ def is_book( artifact_location: Path ) -> bool :
 	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
 		return True
 
-	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "textbook" , "coursebook" ] ) :
+	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" ] ) :
 		return True
 
 	return False
@@ -450,13 +452,14 @@ def is_code( artifact_location: Path ) -> bool :
 		bool: True if file is code, False otherwise
 	"""
 
-	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-
-	return artifact_ext in CODE_EXTENSIONS
+	return (
+			("manual" in artifact_location.stem.lower( ).strip( ))
+			or (artifact_location.suffix.lower( ).strip( ).strip( "." ) in CODE_EXTENSIONS)
+	)
 
 
 def is_executable( artifact_location: Path ) -> bool :
-	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in [ "exe" ]
+	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in EXECUTABLE_EXTENSIONS
 
 
 def is_3d_file( artifact_location: Path ) -> bool :
@@ -465,3 +468,32 @@ def is_3d_file( artifact_location: Path ) -> bool :
 
 def is_digital_contact_file( artifact_location: Path ) -> bool :
 	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in DIGITAL_CONTACT_EXTENSIONS
+
+
+def is_video_course( artifact_location: Path ) -> bool :
+	artifact_metadata_extraction_cmd = [
+		"ffprobe" ,
+		"-v" ,
+		"quiet" ,
+		"-print_format" ,
+		"json" ,
+		"-show_format" ,
+		"-show_streams" ,
+		str( artifact_location ) ,
+	]
+
+	result = subprocess.run(
+			artifact_metadata_extraction_cmd ,
+			capture_output=True ,
+			text=True ,
+			check=True ,
+	)
+
+	print( f"result: {result}" )
+
+	print( f"DETECTING comments and https://www.youtube in {artifact_location.name}" )
+
+	if "comments" in result and r"https://www.youtube.com" in result :
+		return True
+
+	return False

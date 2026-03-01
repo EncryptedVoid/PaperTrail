@@ -50,12 +50,14 @@ from typing import Callable
 from zipfile import ZipFile
 
 import customtkinter as ctk
+from customtkinter import CTkScrollableFrame
+
 from config import (
 	AFFINE_DIR , ALTERATIONS_REQUIRED_DIR , ANKI_DIR , ARCHIVAL_DIR ,
 	AUDIO_TYPES , BASE_DIR , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR ,
 	DIGITAL_ASSET_MANAGEMENT_DIR , DOCUMENT_TYPES , EMAIL_TYPES ,
 	FIREFLYIII_DIR , GAMES_ARCHIVE_DIR , GITLAB_DIR , IMAGE_TYPES ,
-	IMMICH_DIR , JAVA_PATH , JELLYFIN_DIR , LIBRE_OFFICE_DIR ,
+	IMMICH_DIR , JAVA_PATH , JELLYFIN_DIR ,
 	LINKWARDEN_DIR , MANUALS_ARCHIVE_DIR , MONICA_CRM_DIR ,
 	ODOO_CRM_DIR , ODOO_INVENTORY_DIR , ODOO_MAINTENANCE_DIR ,
 	ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
@@ -63,7 +65,6 @@ from config import (
 	TIKA_APP_JAR_PATH , ULTIMAKER_CURA_DIR ,
 	UNESSENTIAL_DIR , UNSUPPORTED_ARTIFACTS_DIR , VIDEO_TYPES ,
 )
-from customtkinter import CTkScrollableFrame
 from utilities.format_converting import (
 	convert_audio_to_mp3 , convert_document_to_pdf , convert_email_to_pdf ,
 	convert_html_to_pdf , convert_image_to_png , convert_png_to_pdf ,
@@ -176,7 +177,6 @@ def _build_dest_registry( ) -> list[ DestButton ] :
 		DestButton( "GITLAB" , "🦊 GITLAB" , 80 , "g" , [ GITLAB_DIR ] ) ,
 		DestButton( "IMMICH" , "📷 IMMICH" , 90 , "i" , [ IMMICH_DIR ] ) ,
 		DestButton( "INTERNET ARCHIVE" , "🌍 INTERNET ARCHIVE" , 100 , "t" , [ PERSONAL_ARCHIVE_DIR ] ) ,
-		DestButton( "LIBREOFFICE" , "📝 LIBREOFFICE" , 110 , "l" , [ LIBRE_OFFICE_DIR ] ) ,
 		DestButton( "LINKWARDEN" , "🔖 LINKWARDEN" , 120 , "w" , [ JELLYFIN_DIR ] ) ,
 		DestButton( "JELLYFIN" , " JELLYFIN" , 125 , "w" , [ LINKWARDEN_DIR ] ) ,
 		DestButton( "MANUALS ARCHIVE" , "📖 MANUALS ARCHIVE" , 130 , "h" , [ MANUALS_ARCHIVE_DIR ] ) ,

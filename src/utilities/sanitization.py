@@ -14,10 +14,11 @@ Key functionality:
 These utilities are used by the sanitization pipeline to ensure only valid,
 processable files are accepted for further processing.
 """
-
+import re
 import subprocess
 import zipfile
 from pathlib import Path
+from typing import Set
 
 import msoffcrypto
 import py7zr
@@ -151,7 +152,7 @@ def is_corrupted( artifact_location: Path ) -> bool :
 	if artifact_location.stat( ).st_size == 0 :
 		return True  # zero-byte is always corrupted
 
-	if "-_" in artifact_location.stem.lower( ).strip( ) :
+	if "._" in artifact_location.stem.lower( ).strip( ) :
 		return True
 
 	# Execute Apache Tika as a subprocess using Java
@@ -176,18 +177,18 @@ def is_corrupted( artifact_location: Path ) -> bool :
 	if not detected_mime_type in MIME_TO_EXT_MAP :
 		raise RuntimeError( f"Mime extension mapping not found for mime [{detected_mime_type}]" )
 
-	mapped_mime_ext = MIME_TO_EXT_MAP[ detected_mime_type ]
+	mapped_mime_ext: Set[ str ] = MIME_TO_EXT_MAP[ detected_mime_type ]
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
-	if artifact_ext == "jpeg" or artifact_ext == "cr2" or artifact_ext == "arw" :
+	if artifact_ext == "jpeg" or artifact_ext == "cr2" or artifact_ext == "arw" or artifact_ext == "nef" :
 		artifact_ext = "jpg"
-	elif artifact_ext == "apkg" :
+	elif artifact_ext in ANKI_EXTENSIONS :
 		artifact_ext = "zip"
 
-	if mapped_mime_ext.lower( ).strip( ).strip( '.' ) != artifact_ext :
-		return True
-
-	return False
+	return any(
+			((artifact_ext == extension.lower( ).strip( ).strip( '.' ))
+			 for extension in mapped_mime_ext) ,
+	)
 
 
 def is_supported_type( artifact_location: Path ) -> bool :
@@ -205,6 +206,7 @@ def is_supported_type( artifact_location: Path ) -> bool :
 
 	return (
 			artifact_ext in EMAIL_TYPES
+			or artifact_ext in MICROSOFT_FILE_TYPES
 			or artifact_ext in DOCUMENT_TYPES
 			or artifact_ext in IMAGE_TYPES
 			or artifact_ext in VIDEO_TYPES
@@ -217,3 +219,12 @@ def is_supported_type( artifact_location: Path ) -> bool :
 			or artifact_ext in EXECUTABLE_EXTENSIONS
 			or artifact_ext in DIGITAL_CONTACT_EXTENSIONS
 	)
+
+
+def sanitize_artifact_name( artifact_name: str ) -> str :
+	stem , *ext_parts = artifact_name.rsplit( "." , 1 )
+
+	pattern = r'\s*[-_]?\s*\(?\bcopy\b\)?\s*(\(\d+\))?|\s+\(\d+\)$'
+	stem = re.sub( pattern , "" , stem , flags=re.IGNORECASE ).strip( )
+
+	return stem.capitalize( )

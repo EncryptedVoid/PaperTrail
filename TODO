@@ -1,41 +1,54 @@
 TODO:
 [ ] Fix errors with stl and pdf and exe files
+[ ] ERROR: pip install bitsandbytes --prefer-binary
+[ ] ERROR: `torch_dtype` is deprecated! Use `dtype` instead!
 [ ] Give unique logger prefixes for each stage
 [ ] Move Prompts into prompts.py
 [ ] Remove popup in DuplicateReviewer
 [ ] Rename artifact at the end with LLM
 [ ] Unzipping review application - shows unzipped files and asks if it should be kept, zipped, or unzipped
-[ ] ERROR: `torch_dtype` is deprecated! Use `dtype` instead!
-[ ] ERROR: GLib-GIO-WARNING **: 21:33:38.019: Unexpectedly, UWP app `Microsoft.OutlookForWindows_1.2024.1204.300_x64__8wekyb3d8bbwe'
-[ ] ERROR: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html.
 [ ] Fix is_financial_doc detector function
-[ ] Markdown to PDF converter function
 [ ] Fix text extraction in "is_financial_doc" function
 [ ] Store filename during metadata extraction in the metadata
 [ ] Embed metadata to converted file using artifact profile file
-[ ] If "paystub" in file name, then is_financial_doc = True
-[ ] If " T4 " in file name, then is_financial_doc = True MEANING DO NOT STRIP SPACE CHARS
-[ ] If " T4 " in file name, then is_financial_doc = True MEANING DO NOT STRIP SPACE CHARS
+[✅] If "paystub" in file name, then is_financial_doc = True
+[✅] If " T4 " in file name, then is_financial_doc = True MEANING DO NOT STRIP SPACE CHARS
 [ ] Add "is_video_course" function
-[ ] If "immigration" in file name, then is_immigration_doc = True
-[ ] If "refugee" in file name, then is_immigration_doc = True
-[ ] If "passport" in file name, then is_immigration_doc = True
-[ ] If "work permit" in file name, then is_immigration_doc = True
-[ ] Remove windows file-system filename increment tag "(N)"
-[ ] Remove Libre Office as an option
+[✅] If "immigration" in file name, then is_immigration_doc = True
+[✅] If "refugee" in file name, then is_immigration_doc = True
+[✅] If "passport" in file name, then is_immigration_doc = True
+[✅] If "work permit" in file name, then is_immigration_doc = True
+[✅] Remove windows file-system filename increment tag "(N)"
+[✅] Remove Libre Office as an option
 [ ] Move Artifact Profiles dir into the PaperTrail Processing dir
-[ ] Add order prefixes to papertrail processing stage state machine dirs "[N]-" and "copy"
+[✅] Add order prefixes to papertrail processing stage state machine dirs "[N]-" and "copy"
 [ ] Add mimes for NEF, TEX, and RUN files
 [ ] TEX files should go to gitlab dir
 [ ] Store old directory location for unzipped files
 [ ] Name Artifact Profile files using artifact checksums and not UUIDs
-[ ] Add .ps1 files as supported file type
-[ ] Add .onepkg files as supported file type
-[ ] Add .qpf, .qsf, vwf, .vwf.vt files as supported CODE file type
+[✅] Add .ps1 files as supported file type
+[✅] Add .onepkg files as supported file type
+[✅] Add .qpf, .qsf, vwf, .vwf.vt files as supported CODE file type
 [ ] Figure out how the program deals with files with extensions with 1+ periods
-[ ] Move "checksum_history.txt" into papertrail processing
-[ ] Remove Personal Archive dir
+[✅] Move "checksum_history.txt" into papertrail processing
+[✅] Fix .msi corruption detection
 
+[ ] ERROR: (process:29816): GLib-GIO-WARNING **: 06:45:12.738: Unexpectedly,
+UWP app `Microsoft.OutlookForWindows_1.2024.1204.300_x64__8wekyb3d8bbwe'
+(AUMId `Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows') supports 4 extensions but has no verbs
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]
+(process:29816): GLib-GIO-WARNING **: 06:45:13.636: Unexpectedly,
+UWP app `Clipchamp.Clipchamp_4.5.10220.0_x64__yxz26nhyzhsrt' (AUMId `Clipchamp.Clipchamp_yxz26nhyzhsrt!App')
+supports 41 extensions but has no verbs
+(process:29816): GLib-GIO-WARNING **: 06:45:14.057: Unexpectedly,
+UWP app `Microsoft.ScreenSketch_11.2511.47.0_x64__8wekyb3d8bbwe' (AUMId `Microsoft.ScreenSketch_8wekyb3d8bbwe!App')
+supports 29 extensions but has no verb
+
+[ ] ERROR: The image processor of type `Qwen2VLImageProcessor` is now loaded as a fast processor by default,
+even if the model checkpoint was saved with a slow processor.
+This is a breaking change and may produce slightly different outputs.
+To continue using the slow processor, instantiate this class with `use_fast=False`.
+Note that this behavior will be extended to all models in a future release.
 
 V1.4.0 TODO:
 [ ] Standardize format/structure of stage functions
@@ -49,6 +62,7 @@ V1.4.0 TODO:
 [ ] Improve failure logs
 [ ] Use multi-threading to convert artifacts in parallel
 [ ] Use multi-threading to sanitize artifacts in parallel
+[ ] Markdown to PDF converter function
 
 V1.5.0 TODO:
 [ ] Document detection in images
