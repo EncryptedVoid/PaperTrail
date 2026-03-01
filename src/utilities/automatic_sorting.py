@@ -452,7 +452,7 @@ def is_code( artifact_location: Path ) -> bool :
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
 
-	return (artifact_ext in [ "html" ]) and (artifact_ext in CODE_EXTENSIONS)
+	return artifact_ext in CODE_EXTENSIONS
 
 
 def is_executable( artifact_location: Path ) -> bool :

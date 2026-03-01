@@ -151,6 +151,9 @@ def is_corrupted( artifact_location: Path ) -> bool :
 	if artifact_location.stat( ).st_size == 0 :
 		return True  # zero-byte is always corrupted
 
+	if "-_" in artifact_location.stem.lower( ).strip( ) :
+		return True
+
 	# Execute Apache Tika as a subprocess using Java
 	# subprocess.run() launches an external process and waits for completion
 	result = subprocess.run(

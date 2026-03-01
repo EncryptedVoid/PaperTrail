@@ -325,32 +325,13 @@ def sanitizing(
 	Sanitize a directory of artifacts by detecting and moving duplicates, corrupted artifacts,
 	unsupported artifact types, and password-protected artifacts.
 
-	This function processes all artifacts in the source directory, checking each artifact for:
-	1. Duplicate content (via checksum comparison)
-	2. Corruption or empty artifacts
-	3. Unsupported artifact types
-	4. Password protection
-
-	Files that fail any check are moved to appropriate quarantine directories.
-	Processing statistics and timing information are logged.
-
 	Args:
 		logger: Logger instance for recording processing events and statistics.
 		source_dir: Path object pointing to the directory containing artifacts to process.
-		recursive_allowed_dir: Optional Path to a directory the program is allowed to
-			search recursively.  Files found here (including those inside compressed
-			archives) are moved into source_dir before the main sanitization loop.
+		recursive_allowed_dir: Optional Path to a directory the program is allowed to search recursively.
 
 	Returns:
 		None
-
-	Side Effects:
-		- Decompresses compressed archives (zip, 7z, tar, gz, bz2, xz) in both
-		  recursive_allowed_dir and source_dir before processing
-		- Moves artifacts to quarantine directories (duplicates, corrupted, unsupported,
-		  password-protected)
-		- Saves checksums of processed artifacts to persistent storage
-		- Logs detailed processing information and statistics
 	"""
 
 	ensure_apache_tika( )

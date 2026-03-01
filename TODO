@@ -5,6 +5,37 @@ TODO:
 [ ] Remove popup in DuplicateReviewer
 [ ] Rename artifact at the end with LLM
 [ ] Unzipping review application - shows unzipped files and asks if it should be kept, zipped, or unzipped
+[ ] ERROR: `torch_dtype` is deprecated! Use `dtype` instead!
+[ ] ERROR: GLib-GIO-WARNING **: 21:33:38.019: Unexpectedly, UWP app `Microsoft.OutlookForWindows_1.2024.1204.300_x64__8wekyb3d8bbwe'
+[ ] ERROR: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html.
+[ ] Fix is_financial_doc detector function
+[ ] Markdown to PDF converter function
+[ ] Fix text extraction in "is_financial_doc" function
+[ ] Store filename during metadata extraction in the metadata
+[ ] Embed metadata to converted file using artifact profile file
+[ ] If "paystub" in file name, then is_financial_doc = True
+[ ] If " T4 " in file name, then is_financial_doc = True MEANING DO NOT STRIP SPACE CHARS
+[ ] If " T4 " in file name, then is_financial_doc = True MEANING DO NOT STRIP SPACE CHARS
+[ ] Add "is_video_course" function
+[ ] If "immigration" in file name, then is_immigration_doc = True
+[ ] If "refugee" in file name, then is_immigration_doc = True
+[ ] If "passport" in file name, then is_immigration_doc = True
+[ ] If "work permit" in file name, then is_immigration_doc = True
+[ ] Remove windows file-system filename increment tag "(N)"
+[ ] Remove Libre Office as an option
+[ ] Move Artifact Profiles dir into the PaperTrail Processing dir
+[ ] Add order prefixes to papertrail processing stage state machine dirs "[N]-" and "copy"
+[ ] Add mimes for NEF, TEX, and RUN files
+[ ] TEX files should go to gitlab dir
+[ ] Store old directory location for unzipped files
+[ ] Name Artifact Profile files using artifact checksums and not UUIDs
+[ ] Add .ps1 files as supported file type
+[ ] Add .onepkg files as supported file type
+[ ] Add .qpf, .qsf, vwf, .vwf.vt files as supported CODE file type
+[ ] Figure out how the program deals with files with extensions with 1+ periods
+[ ] Move "checksum_history.txt" into papertrail processing
+[ ] Remove Personal Archive dir
+
 
 V1.4.0 TODO:
 [ ] Standardize format/structure of stage functions
@@ -24,7 +55,6 @@ V1.5.0 TODO:
 [ ] Document scanning and enhancing in images and PDFs
 [ ] Improve book/textbook detection
 [ ] Add "is_movie" function
-[ ] Add "is_video_course" function
 [ ] Use multi-threading to extract metadata artifacts in parallel
 [ ] Use multi-threading to automatically sort artifacts in parallel (EXCEPT FOR LLM FINANCES DOC CHECK)
 

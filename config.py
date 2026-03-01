@@ -498,6 +498,7 @@ CODE_EXTENSIONS = [
 	"hcl" ,  # HashiCorp config (Terraform)
 	"html" ,
 	"java" ,
+	"class" ,
 	"jl" ,
 	"js" ,
 	"jsx" ,
@@ -670,6 +671,8 @@ MIME_TO_EXT_MAP: dict[ str , str ] = {
 	# ─────────────────────────────────────────────────────────────────────
 	# CODE — COMPILED / SYSTEMS
 	# ─────────────────────────────────────────────────────────────────────
+	"application/java-vm"                                                       : "class" ,
+	"application/x-sh"                                                          : "sh" ,
 	"text/x-java-source"                                                        : ".java" ,
 	"text/x-csrc"                                                               : ".c" ,
 	"text/x-chdr"                                                               : ".h" ,
@@ -694,6 +697,7 @@ MIME_TO_EXT_MAP: dict[ str , str ] = {
 	"application/x-java-class"                                                  : ".class" ,
 	"application/x-llvm"                                                        : ".bc" ,
 	"application/wasm"                                                          : ".wasm" ,
+	"text/x-web-markdown"                                                       : "md" ,
 	# ─────────────────────────────────────────────────────────────────────
 	# CODE — DATA SCIENCE / STATISTICS / SCIENTIFIC
 	# ─────────────────────────────────────────────────────────────────────
