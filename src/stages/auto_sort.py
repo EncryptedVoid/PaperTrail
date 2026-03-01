@@ -14,17 +14,19 @@ from typing import List
 
 from tqdm import tqdm
 
-from config import (AFFINE_DIR , ANKI_DIR , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
-										FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , JELLYFIN_DIR , LINKWARDEN_DIR , MANUALS_ARCHIVE_DIR ,
+from config import (AFFINE_DIR , ANKI_DIR , AUDIO_TYPES , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR ,
+										DIGITAL_ASSET_MANAGEMENT_DIR ,
+										DOCUMENT_TYPES , FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , JELLYFIN_DIR , LINKWARDEN_DIR ,
+										MANUALS_ARCHIVE_DIR ,
 										MONICA_CRM_DIR ,
 										ODOO_CRM_DIR ,
 										ODOO_INVENTORY_DIR ,
 										ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
-										SOFTWARE_ARCHIVE_DIR , ULTIMAKER_CURA_DIR)
+										SOFTWARE_ARCHIVE_DIR , ULTIMAKER_CURA_DIR , VIDEO_TYPES)
 from utilities.automatic_sorting import (
 	is_3d_file ,
 	is_anki_deck ,
-	is_backup_codes_file ,
+	is_bitwarden_related ,
 	is_book ,
 	is_bookmark_file ,
 	is_code ,
@@ -55,6 +57,7 @@ def automatically_sorting(
 	"""
 
 	logger.info( f"Starting automatic sorting process for directory: {source_dir}" )
+	ensure_apache_tika( )
 
 	# Discover all artifact files in the source directory
 	# Using list() on iterdir() materializes the generator into a list for processing
@@ -76,8 +79,6 @@ def automatically_sorting(
 			unit="artifacts" ,
 	) :
 		try :
-			ensure_apache_tika( )
-
 			artifact_ext = artifact.suffix.lower( ).strip( ).strip( '.' )
 			artifact_label = artifact.stem.lower( )
 			sanitized_label = sanitize_artifact_name( artifact_label )
@@ -98,32 +99,35 @@ def automatically_sorting(
 				shutil.move( src=artifact , dst=AFFINE_DIR / f"{sanitized_label}.{artifact_ext}" )
 				logger.info( f"Copied file to: {AFFINE_DIR}" )
 
-			elif "resume" in artifact_label :
+			elif "resume" in artifact_label and artifact_ext in DOCUMENT_TYPES :
 				logger.info( f"Moving resume/professional document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
 
-			elif any(
+			elif (any(
 					(keyword in artifact_label
 					 for keyword in [ "immigration" , "refugee" , "passport" , "work permit" ]) ,
-			) :
+			) and artifact_ext not in AUDIO_TYPES and artifact_ext not in VIDEO_TYPES) :
 				logger.info( f"Moving immigration/legal document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
 
-			elif any( artifact_ext == extension for extension in [ "qpf" , "qsf" , "vwf" ] ) :
+			elif any(
+					(artifact_ext == extension
+					 for extension in [ "qpf" , "qsf" , "vwf" ]) ,
+			) :
 				logger.info( f"Moving lab/simulation artifact to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
 
 			elif any(
 					(keyword in artifact_label
 					 for keyword in [ "syllabus" ]) ,
-			) :
+			) and artifact_ext in DOCUMENT_TYPES :
 				logger.info( f"Moving academic/educational document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
 
 			elif is_video_course( artifact_location=artifact ) :
-				logger.info( f"Detected bookmark file: {artifact.name}" )
+				logger.info( f"Detected video course file: {artifact.name}" )
 				shutil.move( src=artifact , dst=JELLYFIN_DIR / f"{sanitized_label}.{artifact_ext}" )
-				logger.info( f"Moved bookmark file to: {JELLYFIN_DIR}" )
+				logger.info( f"Moved video course file to: {JELLYFIN_DIR}" )
 
 			elif is_bookmark_file( artifact_location=artifact ) :
 				logger.info( f"Detected bookmark file: {artifact.name}" )
@@ -161,7 +165,7 @@ def automatically_sorting(
 				shutil.move( src=artifact , dst=ODOO_CRM_DIR / f"{sanitized_label}.{artifact_ext}" )
 
 			# Check if file contains 2FA backup/recovery codes
-			elif is_backup_codes_file( artifact_location=artifact ) :
+			elif is_bitwarden_related( artifact_location=artifact ) :
 				logger.info( f"Detected backup codes file: {artifact.name}" )
 				shutil.move( src=artifact , dst=BITWARDEN_DIR / f"{sanitized_label}.{artifact_ext}" )
 				logger.info( f"Moved backup codes to: {BITWARDEN_DIR}" )

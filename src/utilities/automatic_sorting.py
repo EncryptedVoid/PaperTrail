@@ -14,16 +14,25 @@ Key Features:
 """
 
 import email
+import json
 import logging
 import re
-import subprocess
 import time
 from pathlib import Path
 
 from config import (
-	ANKI_EXTENSIONS , CAD_FILES ,
+	ANKI_EXTENSIONS ,
+	ARTIFACT_PREFIX ,
+	ARTIFACT_PROFILES_DIR ,
+	CAD_FILES ,
 	CODE_EXTENSIONS ,
-	DIGITAL_CONTACT_EXTENSIONS , EXECUTABLE_EXTENSIONS ,
+	DIGITAL_CONTACT_EXTENSIONS ,
+	DOCUMENT_TYPES ,
+	EMAIL_TYPES ,
+	EXECUTABLE_EXTENSIONS ,
+	PROFILE_PREFIX ,
+	TEXT_TYPES ,
+	VIDEO_TYPES ,
 )
 from utilities.visual_processor import VisualProcessor
 
@@ -266,6 +275,18 @@ def is_bookmark_file( artifact_location: Path ) -> bool :
 	# # Boolean AND operation ensures strict matching
 	# return has_netscape_doctype and has_dl_structure and has_dt_anchors and has_add_date
 
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	with open( profile_path , "r" , encoding="utf-8" ) as f :
+		profile_data = json.load( f )  # returns a plain Python dict
+
+	artifact_label = profile_data[ "original_name" ]
+
+	if artifact_ext != ".html" :
+		return False
+
 	return "bookmark" in artifact_location.stem.lower( ).strip( )
 
 
@@ -282,7 +303,13 @@ def is_anki_deck( artifact_location: Path ) -> bool :
 	"""
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	artifact_label = artifact_location.stem.lower( )
+	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	with open( profile_path , "r" , encoding="utf-8" ) as f :
+		profile_data = json.load( f )  # returns a plain Python dict
+
+	artifact_label = profile_data[ "original_name" ]
 
 	if artifact_ext in ANKI_EXTENSIONS :
 		return True
@@ -290,25 +317,26 @@ def is_anki_deck( artifact_location: Path ) -> bool :
 	if "anki" in artifact_label :
 		return True
 
-	with open( artifact_location , "r" , encoding="utf-8" , errors="replace" ) as f :
-		first_line = f.readline( ).lower( )
+	if artifact_ext in TEXT_TYPES :
+		with open( artifact_location , "r" , encoding="utf-8" , errors="replace" ) as f :
+			first_line = f.readline( ).lower( )
 
-	if ((first_line.find( "question" ) != -1)
-			and (first_line.find( "answer" ) != -1)
-			and (first_line.find( "question" ) < first_line.find( "answer" ))
-	) :
-		return True
+		if ((first_line.find( "question" ) != -1)
+				and (first_line.find( "answer" ) != -1)
+				and (first_line.find( "question" ) < first_line.find( "answer" ))
+		) :
+			return True
 
-	if ((first_line.find( "front" ) != -1)
-			and (first_line.find( "back" ) != -1)
-			and (first_line.find( "front" ) < first_line.find( "back" ))
-	) :
-		return True
+		if ((first_line.find( "front" ) != -1)
+				and (first_line.find( "back" ) != -1)
+				and (first_line.find( "front" ) < first_line.find( "back" ))
+		) :
+			return True
 
 	return False
 
 
-def is_backup_codes_file( artifact_location: Path ) -> bool :
+def is_bitwarden_related( artifact_location: Path ) -> bool :
 	"""
 	Detect if a file contains 2FA backup/recovery codes.
 
@@ -319,13 +347,24 @@ def is_backup_codes_file( artifact_location: Path ) -> bool :
 		bool: True if backup codes detected, False otherwise
 	"""
 
-	# Quick check: filename contains backup code keywords
-	# os.path.basename() extracts filename from full path
-	filename = artifact_location.stem.lower( ).strip( )
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	with open( profile_path , "r" , encoding="utf-8" ) as f :
+		profile_data = json.load( f )  # returns a plain Python dict
+
+	artifact_label = profile_data[ "original_name" ]
+
+	if (artifact_ext not in TEXT_TYPES
+			or artifact_ext not in DOCUMENT_TYPES
+			or artifact_ext not in EMAIL_TYPES
+	) :
+		return False
 
 	# any() returns True if at least one keyword is found in filename
 	if any(
-			(keyword in filename
+			(keyword in artifact_label
 			 for keyword in [ "backup" , "recovery" , "2fa" , "mfa" , "dashlane" , "bitwarden" ]) ,
 	) :
 		return True
@@ -359,7 +398,20 @@ def is_financial_document(
 		# Extract text based on file type
 		# Different file types require different extraction methods
 		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
-		artifact_label = artifact_location.stem.lower( )
+
+		artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+		with open( profile_path , "r" , encoding="utf-8" ) as f :
+			profile_data = json.load( f )  # returns a plain Python dict
+
+		artifact_label = profile_data[ "original_name" ]
+
+		if (artifact_ext not in DOCUMENT_TYPES
+				or artifact_ext not in EMAIL_TYPES
+				or artifact_ext not in TEXT_TYPES
+		) :
+			return False
 
 		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " , "invoice" ] ) :
 			return True
@@ -430,7 +482,13 @@ def is_book( artifact_location: Path ) -> bool :
 	"""
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	artifact_label = artifact_location.stem.lower( )
+	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	with open( profile_path , "r" , encoding="utf-8" ) as f :
+		profile_data = json.load( f )  # returns a plain Python dict
+
+	artifact_label = profile_data[ "original_name" ]
 
 	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
 		return True
@@ -453,7 +511,7 @@ def is_code( artifact_location: Path ) -> bool :
 	"""
 
 	return (
-			("manual" in artifact_location.stem.lower( ).strip( ))
+			("README" in artifact_location.stem.lower( ).strip( ))
 			or (artifact_location.suffix.lower( ).strip( ).strip( "." ) in CODE_EXTENSIONS)
 	)
 
@@ -471,29 +529,18 @@ def is_digital_contact_file( artifact_location: Path ) -> bool :
 
 
 def is_video_course( artifact_location: Path ) -> bool :
-	artifact_metadata_extraction_cmd = [
-		"ffprobe" ,
-		"-v" ,
-		"quiet" ,
-		"-print_format" ,
-		"json" ,
-		"-show_format" ,
-		"-show_streams" ,
-		str( artifact_location ) ,
-	]
+	if artifact_location.suffix.lower( ).strip( ).strip( "." ) not in VIDEO_TYPES :
+		return False
 
-	result = subprocess.run(
-			artifact_metadata_extraction_cmd ,
-			capture_output=True ,
-			text=True ,
-			check=True ,
-	)
+	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	print( f"result: {result}" )
+	with open( profile_path , "r" , encoding="utf-8" ) as f :
+		profile_data = json.load( f )  # returns a plain Python dict
 
-	print( f"DETECTING comments and https://www.youtube in {artifact_location.name}" )
+	print( f"profile_data: {profile_data}" )
 
-	if "comments" in result and r"https://www.youtube.com" in result :
+	if "youtube.com" in profile_data[ "metadata" ][ "format" ][ "PURL" ].lower( ) :
 		return True
 
 	return False

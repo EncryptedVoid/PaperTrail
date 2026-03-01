@@ -21,7 +21,7 @@ from typing import Any , Dict , Optional , TypedDict
 
 import ollama
 
-from config import FIELD_PROMPTS , SYSTEM_PROMPT
+from config import FIELD_PROMPTS , PREFERRED_LANGUAGE_MODEL , SYSTEM_PROMPT
 
 
 class LanguageExtractionReport( TypedDict ) :

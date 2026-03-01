@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 from email.header import decode_header , make_header
 from pathlib import Path
@@ -29,11 +30,12 @@ from typing import Optional
 
 import rawpy
 from PIL import Image , ImageOps
-from config import EMAIL_TYPES
 from pillow_heif import register_heif_opener
 from reportlab.pdfgen import canvas
-from utilities.dependancy_ensurance import find_libreoffice
 from weasyprint import CSS , HTML
+
+from config import ARCHIVAL_DIR , EMAIL_TYPES
+from utilities.dependancy_ensurance import find_libreoffice
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -58,6 +60,8 @@ def _decode_header_value( raw: str | None ) -> str :
 
 def convert_image_to_png( src: Path , logger: logging.Logger ) -> Optional[ Path ] :
 	"""Convert any supported image (NEF, HEIC, JPEG, BMP, TIFF, WebP, GIF, etc.) to PNG in-place."""
+	shutil.move( src=src , dst=ARCHIVAL_DIR / src.name )
+
 	src = src.resolve( )
 	dst = src.with_suffix( ".png" )
 	suffix = src.suffix.lower( )
@@ -126,6 +130,8 @@ def convert_image_to_png( src: Path , logger: logging.Logger ) -> Optional[ Path
 
 def convert_png_to_pdf( src: Path , logger: logging.Logger ) -> Optional[ Path ] :
 	"""Convert a PNG image to a single-page PDF sized to the image dimensions."""
+	shutil.move( src=src , dst=ARCHIVAL_DIR / src.name )
+
 	src = src.resolve( )
 	dst = src.with_suffix( ".pdf" )
 	logger.info( "Converting PNG → PDF: '%s'" , src.name )
@@ -161,35 +167,73 @@ def convert_png_to_pdf( src: Path , logger: logging.Logger ) -> Optional[ Path ]
 
 
 def convert_video_to_mp4( src: Path , logger: logging.Logger ) -> Optional[ Path ] :
-	"""Convert a video file to MP4 (H.264 + AAC) via FFmpeg."""
+	"""Convert a video file to MP4 (H.264 + AAC) via FFmpeg, using NVIDIA GPU if available."""
+	shutil.move( src=src , dst=ARCHIVAL_DIR / src.name )
+
 	src = src.resolve( )
 	dst = src.with_suffix( ".mp4" )
 	logger.info( "Converting video → MP4: '%s'" , src.name )
 
-	try :
-		subprocess.run(
-				[
-					"ffmpeg" , "-y" , "-i" , str( src ) ,
-					"-c:v" , "libx264" , "-crf" , "18" , "-preset" , "slow" ,
-					"-c:a" , "aac" , "-b:a" , "192k" ,
-					"-movflags" , "+faststart" ,
-					str( dst ) ,
-				] ,
-				capture_output=True , text=True , timeout=3600 , check=True ,
-		)
+	# NVENC hardware encoding (RTX 3060) with software fallback
+	strategies = [
+		{
+			"label" : "NVENC (GPU)" ,
+			"args"  : [
+				"-hwaccel" , "cuda" ,
+				"-hwaccel_output_format" , "cuda" ,
+				"-i" , str( src ) ,
+				"-c:v" , "h264_nvenc" ,
+				"-preset" , "p4" ,  # balanced speed/quality (p1=fastest, p7=slowest)
+				"-cq" , "23" ,  # constant quality mode, visually transparent
+				"-c:a" , "aac" ,
+				"-b:a" , "128k" ,
+				"-movflags" , "+faststart" ,
+			] ,
+		} ,
+		{
+			"label" : "libx264 (CPU fallback)" ,
+			"args"  : [
+				"-i" , str( src ) ,
+				"-c:v" , "libx264" ,
+				"-crf" , "23" ,
+				"-preset" , "fast" ,
+				"-c:a" , "aac" ,
+				"-b:a" , "128k" ,
+				"-movflags" , "+faststart" ,
+			] ,
+		} ,
+	]
 
-		if not dst.exists( ) :
-			raise RuntimeError( f"FFmpeg produced no output for '{src.name}'" )
+	for strategy in strategies :
+		try :
+			logger.info( "Trying %s for '%s'" , strategy[ "label" ] , src.name )
 
-		logger.info( "MP4 created: '%s' (%.1f MB)" , dst.name , dst.stat( ).st_size / (1024 * 1024) )
-		src.unlink( )
-		return dst
+			subprocess.run(
+					[ "ffmpeg" , "-y" , *strategy[ "args" ] , str( dst ) ] ,
+					capture_output=True ,
+					text=True ,
+					timeout=60 * 60 ,
+					check=True ,
+			)
 
-	except Exception as exc :
-		logger.error( "Video → MP4 failed for '%s': %s" , src.name , exc )
-		if dst.exists( ) and dst != src :
-			dst.unlink( )
-		return None
+			if not dst.exists( ) :
+				raise RuntimeError( f"FFmpeg produced no output for '{src.name}'" )
+
+			logger.info(
+					"MP4 created via %s: '%s' (%.1f MB)" ,
+					strategy[ "label" ] , dst.name , dst.stat( ).st_size / (1024 * 1024) ,
+			)
+			src.unlink( )
+			return dst
+
+		except Exception as exc :
+			logger.warning( "%s failed for '%s': %s" , strategy[ "label" ] , src.name , exc )
+			if dst.exists( ) and dst != src :
+				dst.unlink( )
+			continue
+
+	logger.error( "All conversion strategies failed for '%s'" , src.name )
+	return None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -199,6 +243,8 @@ def convert_video_to_mp4( src: Path , logger: logging.Logger ) -> Optional[ Path
 
 def convert_audio_to_mp3( src: Path , logger: logging.Logger , bitrate: str = "320k" ) -> Optional[ Path ] :
 	"""Convert an audio file to MP3 via FFmpeg. Stream-copies if already MP3."""
+	shutil.move( src=src , dst=ARCHIVAL_DIR / src.name )
+
 	src = src.resolve( )
 	dst = src.with_suffix( ".mp3" )
 	logger.info( "Converting audio → MP3: '%s' (bitrate=%s)" , src.name , bitrate )
@@ -236,6 +282,8 @@ def convert_audio_to_mp3( src: Path , logger: logging.Logger , bitrate: str = "3
 
 def convert_html_to_pdf( src: Path , logger: logging.Logger ) -> Optional[ Path ] :
 	"""Convert an HTML file to PDF via WeasyPrint."""
+	shutil.move( src=src , dst=ARCHIVAL_DIR / src.name )
+
 	src = src.resolve( )
 	dst = src.with_suffix( ".pdf" )
 	logger.info( "Converting HTML → PDF: '%s'" , src.name )
@@ -267,6 +315,8 @@ def convert_html_to_pdf( src: Path , logger: logging.Logger ) -> Optional[ Path 
 
 def convert_document_to_pdf( src: Path , logger: logging.Logger ) -> Optional[ Path ] :
 	"""Convert a document (DOCX, XLSX, PPTX, ODT, RTF, etc.) to PDF via LibreOffice headless."""
+	shutil.move( src=src , dst=ARCHIVAL_DIR / src.name )
+
 	src = src.resolve( )
 	dst = src.with_suffix( ".pdf" )
 	logger.info( "Converting document → PDF via LibreOffice: '%s'" , src.name )
@@ -329,6 +379,8 @@ def convert_email_to_pdf( src: Path , logger: logging.Logger ) -> Path :
 		ValueError:        Unsupported file extension.
 		RuntimeError:      Conversion process failure or timeout.
 	"""
+	shutil.move( src=src , dst=ARCHIVAL_DIR / src.name )
+
 	src = src.resolve( )
 
 	if not src.exists( ) :

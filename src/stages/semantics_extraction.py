@@ -53,7 +53,6 @@ import exiftool
 from tqdm import tqdm
 
 from config import (
-	ARTIFACT_PROFILES_DIR ,
 	CODE_EXTENSIONS ,
 	IMAGE_TYPES ,
 	JAVA_PATH ,
@@ -89,12 +88,6 @@ def extracting_semantics(
 	logger.info( "=" * 80 )
 
 	logger.info( f"Starting semantical data extraction process for directory: {source_dir}" )
-
-	# Ensure output directory exists, create if necessary
-	# exist_ok=True prevents error if directory already exists
-	# parents=True creates parent directories if needed
-	ARTIFACT_PROFILES_DIR.mkdir( parents=True , exist_ok=True )
-	logger.info( f"Artifact Profile directory validated and ready" )
 
 	# Use Path.iterdir() to get all items in directory, filter to only regular artifacts
 	# This excludes subdirectories, symlinks, and other non-artifact items

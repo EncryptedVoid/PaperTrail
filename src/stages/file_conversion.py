@@ -25,14 +25,11 @@ from typing import List
 from tqdm import tqdm
 
 from config import (
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	AUDIO_TYPES ,
-	DOCUMENT_TYPES ,
+	ANKI_EXTENSIONS , ARTIFACT_PREFIX , ARTIFACT_PROFILES_DIR , AUDIO_TYPES ,
+	CAD_FILES , CODE_EXTENSIONS , DIGITAL_CONTACT_EXTENSIONS , DOCUMENT_TYPES ,
 	EMAIL_TYPES ,
-	IMAGE_TYPES ,
-	PROFILE_PREFIX ,
-	VIDEO_TYPES ,
+	EXECUTABLE_EXTENSIONS , IMAGE_TYPES ,
+	PROFILE_PREFIX , VIDEO_TYPES ,
 )
 from utilities.dependancy_ensurance import (
 	ensure_apache_tika ,
@@ -130,7 +127,38 @@ def converting_files(
 			# Log the start of processing for this artifact
 			logger.info( f"Processing artifact: {raw_artifact.name}" )
 
+			# Extract detected artifact type label
+			# Convert to lowercase for consistent comparison with type constants
+			artifact_ext: str = raw_artifact.suffix.lower( ).strip( ).strip( "." )
+			logger.info( f"Detected type for {raw_artifact.name}: {artifact_ext})" )
+
+			metadata = None
+
+			if (artifact_ext in
+					[ "epub" , "cbr" , "djvu" , "html" , "txt" , "csv" , "arw" , "cr2" , "nef" , "heic" , "onepkg" , ]
+					or artifact_ext in ANKI_EXTENSIONS
+					or artifact_ext in CAD_FILES
+					or artifact_ext in DIGITAL_CONTACT_EXTENSIONS
+					or artifact_ext in EXECUTABLE_EXTENSIONS
+					or artifact_ext in CODE_EXTENSIONS
+			) :
+				logger.info( f"This Artifact will be ignored and tended to during manual triage. " )
+				shutil.move( src=raw_artifact , dst=dest_dir / raw_artifact.name )
+				continue
+
+			elif artifact_ext in [
+				"pdf" ,
+				"mp4" ,
+				"mp3" ,
+				"png" ,
+			] :
+				logger.info( f"This Artifact is already in the target format. Conversion not needed. " )
+				shutil.move( src=raw_artifact , dst=dest_dir / raw_artifact.name )
+				continue
+
 			unique_id = uuid.uuid4( )
+
+			original_name = raw_artifact.stem
 
 			artifact = raw_artifact.rename( raw_artifact.parent / f"{ARTIFACT_PREFIX}-{unique_id}{raw_artifact.suffix}" )
 			logger.debug( f"Renaming artifact with UUID4 to avoid collisions: {artifact}" )
@@ -138,30 +166,7 @@ def converting_files(
 			artifact_profile_json = (ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{unique_id}.json")
 			logger.debug( f"Output JSON will be saved to: {artifact_profile_json}" )
 
-			# Extract detected artifact type label
-			# Convert to lowercase for consistent comparison with type constants
-			artifact_ext: str = artifact.suffix.lower( ).strip( ).strip( "." )
-			logger.info( f"Detected type for {artifact.name}: {artifact_ext})" )
-
-			metadata = None
-
-			if artifact_ext in [
-				"epub" ,
-				"cbr" ,
-				"djvu" ,
-				"html" ,
-				"txt" ,
-				"csv" ,
-				"arw" ,
-				"cr2" ,
-				"heic" ,
-				"apkg" ,
-			] :
-				logger.info( f"This Artifact will be ignored and tended to during manual triage. " )
-				shutil.move( src=artifact , dst=dest_dir / artifact.name )
-				continue
-
-			elif artifact_ext in DOCUMENT_TYPES :
+			if artifact_ext in DOCUMENT_TYPES :
 				metadata = extract_metadata( artifact_location=artifact , logger=logger )
 				formatted_artifact = convert_document_to_pdf( src=artifact , logger=logger )
 				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
@@ -198,9 +203,16 @@ def converting_files(
 			# indent=2: Pretty-print JSON with 2-space indentation
 			# ensure_ascii=False: Allow non-ASCII characters in output
 			if metadata :
+				profile = {
+					"original_name" : original_name ,
+					"uuid"          : str( unique_id ) ,
+					"extension"     : artifact_ext ,
+					"metadata"      : metadata ,
+				}
+
 				logger.info( f"Writing metadata to output artifact: {artifact_profile_json}" )
 				with open( artifact_profile_json , "w" , encoding="utf-8" ) as f :
-					json.dump( metadata , f , indent=2 , ensure_ascii=False )
+					json.dump( profile , f , indent=2 , ensure_ascii=False )
 				logger.info( f"Output JSON artifact size: {artifact_profile_json.stat( ).st_size:,} bytes" )
 
 			# Calculate total operation duration

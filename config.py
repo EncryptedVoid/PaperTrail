@@ -15,22 +15,22 @@ from typing import Dict , List
 # ── Root Directories ──────────────────────────────────────────────────────────
 # Primary drive where all PaperTrail data is loaded from
 # TARGET_DRIVE: Path = Path("E:")
-TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop" )
+TARGET_DRIVE: Path = Path( "E:\\" )
 # Root directory for all processing operations and derived outputs
 BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
 # Source directory for artifacts awaiting ingestion into the pipeline
-UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PaperTrail-Load" )
+UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
 RECURSIVE_SORT_DIR = Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" )
 
 # ── Processing Directories ─────────────────────────────────────────────────────
 # Archive storage for fully processed and verified artifacts
 ARCHIVAL_DIR: Path = Path( BASE_DIR / "ARCHIVE" )
 # Persistent JSON/YAML profiles describing each processed artifact
-ARTIFACT_PROFILES_DIR: Path = Path( TARGET_DRIVE / "ARTIFACT_PROFILES" )
+ARTIFACT_PROFILES_DIR: Path = Path( BASE_DIR / "ARTIFACT_PROFILES" )
 # Output directory for application logs
-LOG_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-LOGS" )
+LOG_DIR: Path = Path( BASE_DIR / "PAPERTRAIL-LOGS" )
 # Running log of all artifact checksums for integrity tracking
-CHECKSUM_HISTORY_FILE: Path = Path( LOG_DIR / "checksum_history.txt" )
+CHECKSUM_HISTORY_FILE: Path = Path( BASE_DIR / "checksum_history.txt" )
 # Scratch space for intermediate files during processing
 TEMP_DIR: Path = Path( BASE_DIR / "TEMP" )
 
@@ -159,7 +159,7 @@ HUGGING_FACE_TOKEN = os.getenv( "HUGGING_FACE_TOKEN" )
 
 ARTIFACT_PREFIX: str = "ARTIFACT"
 PROFILE_PREFIX: str = "PROFILE"
-LOG_LEVEL: str = "INFO"
+LOG_LEVEL: str = "DEBUG"
 LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 SESSION_LOG_FILE_PREFIX: str = "PAPERTRAIL-SESSION"
 
@@ -216,6 +216,7 @@ QWEN_VL_MODEL_TIERS = [
 	} ,
 ]
 QWEN_VL_CPU_FALLBACK = "Qwen/Qwen2.5-VL-3B-Instruct"
+PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
 
 SYSTEM_PROMPT: str = """You are a document extraction tool. Extract ONLY the requested information.
 

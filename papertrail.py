@@ -16,8 +16,9 @@ from datetime import datetime
 
 from config import (
 	CHECKSUM_HISTORY_FILE ,
-	COMPLETED_FORMAT_CONVERSION_DIR , COMPLETED_SANITIZATION_DIR ,
-	COMPLETED_SEMANTICS_EXTRACTION_DIR , LOG_DIR ,
+	COMPLETED_FORMAT_CONVERSION_DIR ,
+	COMPLETED_SANITIZATION_DIR ,
+	LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
 	SESSION_LOG_FILE_PREFIX ,
@@ -27,10 +28,9 @@ from config import (
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
 from stages.sanitize import sanitizing
-from stages.semantics_extraction import extracting_semantics
-# from utilities.applications.archive_review import FolderManagerApp
+# from stages.semantics_extraction import extracting_semantics
 from utilities.applications.identify_duplicates import DuplicateReviewer
-from utilities.applications.manual_file_triage import FileTriage
+# from utilities.applications.manual_file_triage import FileTriage
 from utilities.visual_processor import VisualProcessor
 
 # ============================================================================
@@ -118,15 +118,15 @@ automatically_sorting(
 		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
 
-extracting_semantics(
-		logger=logger ,
-		visual_processor=visual_processor ,
-		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
-		dest_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR ,
-)
-
-manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
-manual_artifact_triage.run( )
+# extracting_semantics(
+# 		logger=logger ,
+# 		visual_processor=visual_processor ,
+# 		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
+# 		dest_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR ,
+# )
+#
+# manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
+# manual_artifact_triage.run( )
 
 # ============================================================================
 # PIPELINE COMPLETION
