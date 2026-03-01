@@ -281,9 +281,18 @@ def is_supported_type( artifact_location: Path ) -> bool :
 
 
 def sanitize_artifact_name( artifact_name: str ) -> str :
+	"""Remove common duplicate suffixes like (1), [2], {3}, -copy, - Copy, _copy, etc."""
+	# Matches bracketed numbers: (1), [1], {1}
+	bracketed_increment_regex = re.compile( r'\s*[(\[{]\d+[)\]}]\s*' )
+
+	# Matches "copy" with optional leading separator: " - Copy", "_copy", "-copy"
+	copy_string_increment_regex = re.compile( r'\s*[-_]?\s*copy' , re.IGNORECASE )
+
 	stem , *ext_parts = artifact_name.rsplit( "." , 1 )
+	# Order matters: strip bracketed number first, then "copy", then any remaining brackets
+	# Handles stacked patterns like "file - Copy (2)" or "file [3]"
+	stem = bracketed_increment_regex.sub( "" , stem )
+	stem = copy_string_increment_regex.sub( "" , stem )
+	stem = bracketed_increment_regex.sub( "" , stem )  # catch any brackets that were after "copy"
 
-	pattern = r'\s*[-_]?\s*\(?\bcopy\b\)?\s*(\(\d+\))?|\s+\(\d+\)$'
-	stem = re.sub( pattern , "" , stem , flags=re.IGNORECASE ).strip( )
-
-	return stem.capitalize( )
+	return stem

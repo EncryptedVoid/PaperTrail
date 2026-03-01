@@ -32,7 +32,7 @@ from config import (
 	PASSWORD_PROTECTED_ARTIFACTS_DIR ,
 	UNSUPPORTED_ARTIFACTS_DIR ,
 )
-from utilities.checksum import generate_checksum , save_checksum
+from utilities.checksum import generate_checksum , load_checksum_history , save_checksum
 from utilities.dependancy_ensurance import ensure_apache_tika , ensure_ffmpeg
 from utilities.sanitization import (
 	is_corrupted ,
@@ -93,6 +93,7 @@ def sanitizing(
 	# List to store checksums of successfully processed artifacts
 	# Used to detect duplicates during current processing session
 	processed_checksums: List[ str ] = [ ]
+	past_processed_checksums = load_checksum_history( logger=logger )
 
 	logger.info( "Beginning artifact-by-artifact sanitization process" )
 
@@ -106,19 +107,19 @@ def sanitizing(
 		try :
 			start_time = time.time( )
 
-			logger.debug( f"Processing artifact: {artifact.name}" )
+			logger.info( f"Processing artifact: {artifact.name}" )
 
 			# Generate SHA-256 checksum for the artifact to detect duplicates
 			# Checksum is a unique fingerprint based on artifact content
 			artifact_checksum: str = generate_checksum( logger=logger , artifact_path=artifact )
-			logger.debug( f"Generated checksum for {artifact.name}: {artifact_checksum[ :16 ]}..." )
+			logger.info( f"Generated checksum for {artifact.name}: {artifact_checksum[ :16 ]}..." )
 
 			# Check if this checksum has been seen before (duplicate detection)
 			# Duplicates are artifacts with identical content regardless of artifact name
-			if artifact_checksum in processed_checksums :
+			if artifact_checksum in processed_checksums or artifact_checksum in past_processed_checksums :
 				logger.info( f"Duplicate detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=DUPLICATE_ARTIFACTS_DIR / artifact.name )
-				logger.debug( f"Moved duplicate artifact to: {DUPLICATE_ARTIFACTS_DIR / artifact.name}" )
+				logger.info( f"Moved duplicate artifact to: {DUPLICATE_ARTIFACTS_DIR / artifact.name}" )
 				continue
 
 			logger.info( f"Artifact \"{artifact.name}\" is not a duplicate" )
@@ -134,7 +135,7 @@ def sanitizing(
 			if not is_supported_type( artifact_location=artifact ) :
 				logger.info( f"Unsupported artifact type detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=UNSUPPORTED_ARTIFACTS_DIR / artifact.name )
-				logger.debug( f"Moved unsupported artifact to: {UNSUPPORTED_ARTIFACTS_DIR / artifact.name}" )
+				logger.info( f"Moved unsupported artifact to: {UNSUPPORTED_ARTIFACTS_DIR / artifact.name}" )
 				continue
 
 			logger.info( f"Artifact \"{artifact.name}\" is supported by PaperTrail as of Mar 1st, 2026" )
@@ -142,7 +143,7 @@ def sanitizing(
 			if is_corrupted( artifact_location=artifact ) :
 				logger.info( f"Corrupted artifact detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=CORRUPTED_ARTIFACTS_DIR / artifact.name )
-				logger.debug( f"Moved corrupted artifact to: {CORRUPTED_ARTIFACTS_DIR / artifact.name}" )
+				logger.info( f"Moved corrupted artifact to: {CORRUPTED_ARTIFACTS_DIR / artifact.name}" )
 				continue
 
 			logger.info( f"Artifact \"{artifact.name}\" is not corrupted" )
@@ -152,7 +153,7 @@ def sanitizing(
 			if is_password_protected( artifact_location=artifact ) :
 				logger.info( f"Password-protected artifact detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=PASSWORD_PROTECTED_ARTIFACTS_DIR / artifact.name )
-				logger.debug( f"Moved password-protected artifact to: {PASSWORD_PROTECTED_ARTIFACTS_DIR / artifact.name}" )
+				logger.info( f"Moved password-protected artifact to: {PASSWORD_PROTECTED_ARTIFACTS_DIR / artifact.name}" )
 				continue
 
 			logger.info( f"Artifact \"{artifact.name}\" is not password protected" )
@@ -160,8 +161,8 @@ def sanitizing(
 			# File passed all validation checks - save its checksum for future reference
 			# Persistent checksum storage prevents reprocessing the same artifacts
 			save_checksum( logger=logger , checksum=artifact_checksum )
-			logger.debug( f"File validated successfully: {artifact.name}" )
-			shutil.move( src=artifact , dst=(dest_dir / str( artifact )) )
+			logger.info( f"File validated successfully: {artifact.name}" )
+			shutil.move( src=artifact , dst=(dest_dir / artifact.name) )
 
 			# Calculate total processing time by subtracting start time from current time
 			elapsed_time = time.time( ) - start_time
