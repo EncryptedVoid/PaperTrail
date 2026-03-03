@@ -15,26 +15,23 @@ import logging
 from datetime import datetime
 
 from applications.identify_duplicates import DuplicateReviewer
+from applications.manual_file_triage import FileTriage
 from config import (
-	CHECKSUM_HISTORY_FILE ,
-	COMPLETED_FORMAT_CONVERSION_DIR ,
+	APPLICATION_FOLDERS , COMPLETED_FORMAT_CONVERSION_DIR ,
 	COMPLETED_SANITIZATION_DIR ,
-	LOG_DIR ,
+	COMPLETED_SEMANTICS_EXTRACTION_DIR , LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
 	RECURSIVE_SORT_DIR ,
 	SESSION_LOG_FILE_PREFIX ,
 	SYSTEM_DIRECTORIES ,
-	UNPROCESSED_ARTIFACTS_DIR ,
+	SYSTEM_PROGRAM_TRACKING_FILES , UNPROCESSED_ARTIFACTS_DIR ,
 )
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
 from stages.folder_decompression import decompressing_artifacts
 from stages.sanitize import sanitizing
 from utilities.visual_processor import VisualProcessor
-
-# from stages.semantics_extraction import extracting_semantics
-# from utilities.applications.manual_file_triage import FileTriage
 
 # ============================================================================
 # SYSTEM INITIALIZATION
@@ -46,8 +43,9 @@ from utilities.visual_processor import VisualProcessor
 for directory in SYSTEM_DIRECTORIES :
 	directory.mkdir( parents=True , exist_ok=True )
 
-CHECKSUM_HISTORY_FILE.parent.mkdir( parents=True , exist_ok=True )
-CHECKSUM_HISTORY_FILE.touch( exist_ok=True )
+for file in SYSTEM_PROGRAM_TRACKING_FILES :
+	file.parent.mkdir( parents=True , exist_ok=True )
+	file.touch( exist_ok=True )
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -127,15 +125,16 @@ automatically_sorting(
 		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
 
-# extracting_semantics(
-# 		logger=logger ,
-# 		visual_processor=visual_processor ,
-# 		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
-# 		dest_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR ,
-# )
-#
-# manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
-# manual_artifact_triage.run( )
+manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
+manual_artifact_triage.run( )
+
+for directory in APPLICATION_FOLDERS :
+	logger.info( f"Performing final conversions in target application. Processing {directory}." )
+	converting_files(
+			logger=logger ,
+			source_dir=directory ,
+			dest_dir=directory ,
+	)
 
 # ============================================================================
 # PIPELINE COMPLETION

@@ -7,12 +7,7 @@ from typing import List , Set
 
 from tqdm import tqdm
 
-from applications.manual_file_triage import DELETE_DIR
-from config import (
-	ARCHIVE_TYPES ,
-	DUPLICATE_ARTIFACTS_DIR ,
-	OUCH_DECOMPRESSOR_PATH
-)
+from config import ARCHIVE_TYPES , DELETE_DIR , DUPLICATE_ARTIFACTS_DIR , OUCH_DECOMPRESSOR_PATH
 from utilities.checksum import generate_checksum , load_checksum_history , save_checksum
 
 

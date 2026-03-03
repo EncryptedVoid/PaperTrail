@@ -10,18 +10,14 @@ Author: Ashiq Gazi
 
 import os
 from pathlib import Path
-from typing import Dict , List , Set
+from typing import List , Set
 
 # ── Root Directories ──────────────────────────────────────────────────────────
-# Primary drive where all PaperTrail data is loaded from
-# TARGET_DRIVE: Path = Path("E:")
-TARGET_DRIVE: Path = Path( "E:\\" )
-# Root directory for all processing operations and derived outputs
+TARGET_DRIVE: Path = Path( "E:" )
 BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
-# Source directory for artifacts awaiting ingestion into the pipeline
 UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
 RECURSIVE_SORT_DIR = Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" )
-PROJECT_ASSETS_DIR = Path( r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets" )
+PROGRAM_ASSETS_DIR = Path( r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets" )
 
 # ── Processing Directories ─────────────────────────────────────────────────────
 # Archive storage for fully processed and verified artifacts
@@ -34,11 +30,15 @@ LOG_DIR: Path = Path( BASE_DIR / "PAPERTRAIL-LOGS" )
 CHECKSUM_HISTORY_FILE: Path = Path( BASE_DIR / "checksum_history.txt" )
 # Scratch space for intermediate files during processing
 TEMP_DIR: Path = Path( BASE_DIR / "TEMP" )
+DELETE_DIR: Path = Path( BASE_DIR / "TO_BE_DELETED" )
 
 # ── Stage Directories ─────────────────────────────────────────────────────
-COMPLETED_SANITIZATION_DIR: Path = Path( BASE_DIR / "STAGE_STATE_MACHINE" / "[1]COMPLETED_SANITIZATION" )
-COMPLETED_FORMAT_CONVERSION_DIR: Path = Path( BASE_DIR / "STAGE_STATE_MACHINE" / "[2]COMPLETED_FORMAT_CONVERSION" )
-COMPLETED_METADATA_EXTRACTION_DIR: Path = Path( BASE_DIR / "STAGE_STATE_MACHINE" / "[3]COMPLETED_METADATA_EXTRACTION" )
+COMPLETED_SANITIZATION_DIR: Path = Path(
+		BASE_DIR / "STAGE_STATE_MACHINE" / "[1]COMPLETED_SANITIZATION" )
+COMPLETED_FORMAT_CONVERSION_DIR: Path = Path(
+		BASE_DIR / "STAGE_STATE_MACHINE" / "[2]COMPLETED_FORMAT_CONVERSION" )
+COMPLETED_METADATA_EXTRACTION_DIR: Path = Path(
+		BASE_DIR / "STAGE_STATE_MACHINE" / "[3]COMPLETED_METADATA_EXTRACTION" )
 COMPLETED_SEMANTICS_EXTRACTION_DIR: Path = Path(
 		BASE_DIR / "STAGE_STATE_MACHINE" / "[4]COMPLETED_SEMANTICS_EXTRACTION" )
 
@@ -48,63 +48,68 @@ CORRUPTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/CORRUPTED_ARTIFACTS" )
 # Artifacts identified as duplicates of already-processed items
 DUPLICATE_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/DUPLICATE_ARTIFACTS" )
 # Artifacts that could not be processed due to password protection
-PASSWORD_PROTECTED_ARTIFACTS_DIR: Path = Path(
-		BASE_DIR / "REVIEW/PASSWORD_PROTECTED_ARTIFACTS" ,
-)
+PASSWORD_PROTECTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/PASSWORD_PROTECTED_ARTIFACTS" )
 # Artifacts with file types not supported by the current pipeline
 UNSUPPORTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/UNSUPPORTED_ARTIFACTS" )
 # Artifacts that require alterations to be done manually
 ALTERATIONS_REQUIRED_DIR: Path = Path( BASE_DIR / "REVIEW/ALTERATIONS_REQUIRED" )
 SCANNING_REQUIRED_DIR: Path = Path( ALTERATIONS_REQUIRED_DIR / "DOCUMENT_SCANNING_REQUIRED" )
 UNESSENTIAL_DIR: Path = Path( BASE_DIR / "UNESSENTIAL_ITEMS" )
+ALTERATIONS_CSV: Path = ALTERATIONS_REQUIRED_DIR / "alterations_log.csv"
 
 # ── Application Data Directories ──────────────────────────────────────────────
-# AFFiNE knowledge base and workspace data
 AFFINE_DIR: Path = Path(
-		TARGET_DRIVE / "AFFINE" ,
-)  # https://docs.affine.pro/self-host-affine/install/docker-compose-recommend
-# Anki flashcard decks and media
-ANKI_DIR: Path = Path( TARGET_DRIVE / "ANKI" )  # https://apps.ankiweb.net/
-# Bitwarden vault exports and configuration
-BITWARDEN_DIR: Path = Path( TARGET_DRIVE / "BITWARDEN" )  # https://bitwarden.com/
-# Calibre e-book library and metadata
-CALIBRE_LIBRARY_DIR: Path = Path( TARGET_DRIVE / "CALIBRE_LIBRARY" )  # https://github.com/janeczku/calibre-web
-# Seafile digital asset management storage
+		TARGET_DRIVE / "AFFINE" )  # https://affine.pro/
+ANKI_DIR: Path = Path(
+		TARGET_DRIVE / "ANKI" )  # https://apps.ankiweb.net/
+BITWARDEN_DIR: Path = Path(
+		TARGET_DRIVE / "BITWARDEN" )  # https://bitwarden.com/
+CALIBRE_LIBRARY_DIR: Path = Path(
+		TARGET_DRIVE / "CALIBRE_LIBRARY" )  # https://github.com/janeczku/calibre-web
 DIGITAL_ASSET_MANAGEMENT_DIR: Path = Path(
-		TARGET_DRIVE / "SEAFILE" ,
-)  # https://manual.seafile.com/11.0/docker/deploy_seafile_with_docker/
-# Firefly III personal finance data and exports
+		TARGET_DRIVE / "SEAFILE" )  # https://www.pydio.com/
 FIREFLYIII_DIR: Path = Path(
-		TARGET_DRIVE / "FIREFLY-III" ,
-)  # https://docs.firefly-iii.org/how-to/firefly-iii/installation/docker/
-JELLYFIN_DIR: Path = Path( TARGET_DRIVE / "JELLYFIN" )  # https://jellyfin.org/
-# GitLab repository mirrors and CI artifacts
-GITLAB_DIR: Path = Path( TARGET_DRIVE / "GITLAB" )  # https://about.gitlab.com/
-# Immich photo and video library
-IMMICH_DIR: Path = Path( TARGET_DRIVE / "IMMICH" )  # https://docs.immich.app/overview/quick-start/
-# Linkwarden bookmarks and archived web content
+		TARGET_DRIVE / "FIREFLY-III" )  # https://www.firefly-iii.org/
+JELLYFIN_DIR: Path = Path(
+		TARGET_DRIVE / "JELLYFIN" )  # https://jellyfin.org/
+GITLAB_DIR: Path = Path(
+		TARGET_DRIVE / "GITLAB" )  # https://about.gitlab.com/
+IMMICH_DIR: Path = Path(
+		TARGET_DRIVE / "IMMICH" )  # https://immich.app/
 LINKWARDEN_DIR: Path = Path(
-		TARGET_DRIVE / "LINKWARDEN" ,
-)  # https://docs.linkwarden.app/self-hosting/installation#docker-
-# Monica CRM contacts and relationship data
-MONICA_CRM_DIR: Path = Path( TARGET_DRIVE / "MONICA_CRM" )  # https://www.monicahq.com/
-# Odoo business tools
-ODOO_CRM_DIR: Path = Path( TARGET_DRIVE / "ODOO_CRM" )  # https://www.odoo.com/app/crm
-ODOO_MAINTENANCE_DIR: Path = Path( TARGET_DRIVE / "ODOO_MAINTENANCE" )  # https://www.odoo.com/app/maintenance
-ODOO_PLM_DIR: Path = Path( TARGET_DRIVE / "ODOO_PLM" )  # https://www.odoo.com/app/plm
-ODOO_PURCHASE_DIR: Path = Path( TARGET_DRIVE / "ODOO_PURCHASE" )  # https://www.odoo.com/app/purchase
-ODOO_INVENTORY_DIR: Path = Path( TARGET_DRIVE / "ODOO_INVENTORY" )  # https://www.odoo.com/app/inventory
-# Performance portfolio documents and media
-PERFORMANCE_PORTFOLIO_DIR: Path = Path( TARGET_DRIVE / "PERFORMANCE_PORTFOLIO" )
-# Ultimaker Cura slicing profiles and print configurations
-ULTIMAKER_CURA_DIR: Path = Path( TARGET_DRIVE / "ULTIMAKER_CURA" )
-GAMES_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "GAMES_ARCHIVE" )
-PERSONAL_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "PERSONAL_ARCHIVE" )
-MANUALS_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "MANUALS_ARCHIVE" )
-SOFTWARE_ARCHIVE_DIR: Path = Path( TARGET_DRIVE / "SOFTWARE_ARCHIVE" )
+		TARGET_DRIVE / "LINKWARDEN" )  # https://linkwarden.app/
+MONICA_CRM_DIR: Path = Path(
+		TARGET_DRIVE / "MONICA_CRM" )  # https://www.monicahq.com/
+ODOO_CRM_DIR: Path = Path(
+		TARGET_DRIVE / "ODOO_CRM" )  # https://www.odoo.com/app/crm
+ODOO_MAINTENANCE_DIR: Path = Path(
+		TARGET_DRIVE / "ODOO_MAINTENANCE" )  # https://www.odoo.com/app/maintenance
+ODOO_PLM_DIR: Path = Path(
+		TARGET_DRIVE / "ODOO_PLM" )  # https://www.odoo.com/app/plm
+ODOO_PURCHASE_DIR: Path = Path(
+		TARGET_DRIVE / "ODOO_PURCHASE" )  # https://www.odoo.com/app/purchase
+ODOO_INVENTORY_DIR: Path = Path(
+		TARGET_DRIVE / "ODOO_INVENTORY" )  # https://www.odoo.com/app/inventory
+PERFORMANCE_PORTFOLIO_DIR: Path = Path(
+		TARGET_DRIVE / "PORTFOLIO_PERFORMANCE" )  # https://www.portfolio-performance.info/en/
+ULTIMAKER_CURA_DIR: Path = Path(
+		TARGET_DRIVE / "ULTIMAKER_CURA" )
+GAMES_ARCHIVE_DIR: Path = Path(
+		TARGET_DRIVE / "GAMES_ARCHIVE" )
+PERSONAL_ARCHIVE_DIR: Path = Path(
+		TARGET_DRIVE / "PERSONAL_ARCHIVE" )
+MANUALS_ARCHIVE_DIR: Path = Path(
+		TARGET_DRIVE / "MANUALS_ARCHIVE" )
+SOFTWARE_ARCHIVE_DIR: Path = Path(
+		TARGET_DRIVE / "SOFTWARE_ARCHIVE" )
 
 #  ── System Directory Index ─────────────────────────────────────────────────────
 # Complete set of all managed directories, excluding loose files
+SYSTEM_PROGRAM_TRACKING_FILES: set[ Path ] = {
+	CHECKSUM_HISTORY_FILE ,
+	ALTERATIONS_CSV ,
+}
+
 SYSTEM_DIRECTORIES: set[ Path ] = {
 	TARGET_DRIVE ,
 	BASE_DIR ,
@@ -146,12 +151,39 @@ SYSTEM_DIRECTORIES: set[ Path ] = {
 	COMPLETED_FORMAT_CONVERSION_DIR ,
 	COMPLETED_METADATA_EXTRACTION_DIR ,
 	COMPLETED_SEMANTICS_EXTRACTION_DIR ,
+	DELETE_DIR ,
 }
+
+APPLICATION_FOLDERS = [
+	AFFINE_DIR ,
+	ANKI_DIR ,
+	BITWARDEN_DIR ,
+	CALIBRE_LIBRARY_DIR ,
+	DIGITAL_ASSET_MANAGEMENT_DIR ,
+	FIREFLYIII_DIR ,
+	JELLYFIN_DIR ,
+	GITLAB_DIR ,
+	IMMICH_DIR ,
+	LINKWARDEN_DIR ,
+	MONICA_CRM_DIR ,
+	ODOO_CRM_DIR ,
+	ODOO_MAINTENANCE_DIR ,
+	ODOO_PLM_DIR ,
+	ODOO_PURCHASE_DIR ,
+	ODOO_INVENTORY_DIR ,
+	PERFORMANCE_PORTFOLIO_DIR ,
+	ULTIMAKER_CURA_DIR ,
+	PERSONAL_ARCHIVE_DIR ,
+	GAMES_ARCHIVE_DIR ,
+	MANUALS_ARCHIVE_DIR ,
+	SOFTWARE_ARCHIVE_DIR ,
+]
 
 # Checksum algorithm for duplicate detection and integrity verification
 CHECKSUM_ALGORITHM = "sha3_512"
 CHECKSUM_CHUNK_SIZE_BYTES: int = 8192
-
+FILE_TRIAGE_BATCH_SIZE = 20  # flush pending operations every N confirms
+FILE_TRIAGE_MAX_PDF_PG = 10  # max pages to render in preview
 MIN_FILE_TYPE_CONF_SCORE: float = 75.0
 MAX_PDF_SIZE_BEFORE_SUBSETTING = 10
 METADATA_EXTRACTION_TIMEOUT = 60
@@ -163,149 +195,6 @@ PROFILE_PREFIX: str = "PROFILE"
 LOG_LEVEL: str = "DEBUG"
 LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 SESSION_LOG_FILE_PREFIX: str = "PAPERTRAIL-SESSION"
-
-# Tiers ordered largest→smallest.
-# "quantization" can be None, "int8", or "nf4" (4-bit NormalFloat via bitsandbytes).
-# VRAM estimates include headroom for activations and KV cache:
-#   bf16  raw weight size  ≈ params × 2 bytes
-#   int8  raw weight size  ≈ params × 1 byte   (+~15% overhead)
-#   nf4   raw weight size  ≈ params × 0.5 byte  (+~20% overhead)
-# Adjust thresholds if you observe OOM in practice.
-QWEN_VL_MODEL_TIERS = [
-	# ── Full precision tiers ──────────────────────────────────────────────
-	{
-		"model_id"     : "Qwen/Qwen2.5-VL-72B-Instruct" ,
-		"min_vram_gb"  : 80 ,
-		"quantization" : None ,
-	} ,
-	{
-		"model_id"     : "Qwen/Qwen2.5-VL-32B-Instruct" ,
-		"min_vram_gb"  : 40 ,
-		"quantization" : None ,
-	} ,
-	{
-		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
-		"min_vram_gb"  : 18 ,
-		"quantization" : None ,
-	} ,
-	# ── Quantized 7B tiers (fills the 10 / 12 / 16 GB gaps) ─────────────
-	# 16 GB: 7B bf16 is ~14 GB weights; fits with care but no headroom for
-	#         anything above the base prompt. Use int8 for a safer margin.
-	{
-		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
-		"min_vram_gb"  : 16 ,
-		"quantization" : "int8" ,
-	} ,
-	# 12 GB: int8 weights ~8 GB + activations fits comfortably.
-	{
-		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
-		"min_vram_gb"  : 12 ,
-		"quantization" : "int8" ,
-	} ,
-	# 10 GB: int8 is marginal; drop to nf4 (4-bit) for safe headroom.
-	{
-		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
-		"min_vram_gb"  : 10 ,
-		"quantization" : "nf4" ,
-	} ,
-	# ── 3B fallback tiers ────────────────────────────────────────────────
-	{ "model_id" : "Qwen/Qwen2.5-VL-3B-Instruct" , "min_vram_gb" : 8 , "quantization" : None } ,
-	{
-		"model_id"     : "Qwen/Qwen2.5-VL-3B-Instruct" ,
-		"min_vram_gb"  : 4 ,
-		"quantization" : "int8" ,
-	} ,
-]
-QWEN_VL_CPU_FALLBACK = "Qwen/Qwen2.5-VL-3B-Instruct"
-PREFERRED_LANGUAGE_MODEL: str = "mistral:7b"
-
-SYSTEM_PROMPT: str = """You are a document extraction tool. Extract ONLY the requested information.
-
-CRITICAL RULES:
-- Return ONLY the answer, nothing else
-- NO explanations, NO reasoning, NO "based on", NO "therefore"
-- NO sentences, just the raw information
-- If not found, return exactly: UNKNOWN
-
-Examples:
-GOOD: "Immigration and Refugee Board of Canada"
-BAD: "The document appears to be issued by the Immigration and Refugee Board of Canada"
-
-GOOD: "UNKNOWN"
-BAD: "document does not appear to have any official authority validating, certifying, witnessing, or authorizing it. 
-Therefore, the answer is: UNKNOWN"
-
-Extract the information. Nothing else.
-
-Return ONLY the requested information. Any additional text, explanation, or reasoning will be considered an error and 
-rejected causing immediate shutdown
-"""
-
-FIELD_PROMPTS: Dict[ str , str ] = {
-	"title"             : """Create a descriptive title that captures the document's purpose and content.
-
-    If the document has an official title, use it. If not, synthesize a descriptive title based on:
-    - Document type and purpose
-    - Issuing organization
-    - Main subject matter
-
-    Examples:
-    - "Immigration and Refugee Board Virtual Hearing Notice"
-    - "Refugee Protection Division Hearing Preparation Guide"
-    - "IRB Document Submission Requirements and Procedures"
-
-    Return ONLY the title. No quotes, no explanations.""" ,
-	"language"          : """Analyze the document text and identify the PREDOMINANT language present.
-    Document contains sections in multiple languages. List the PREDOMINANT/MAIN language found.
-    Examples:
-    - If English only: "English"
-    - If French only: "French"
-    - If both: "English, French", provide the language with more text
-    Return ONLY language names.""" ,
-	"issuing_body"      : """Identify any official authority that validated, certified, witnessed, or authorized this 
-	document.
-    Look for:
-    - Notary public names and seals
-    - Certifying agency names
-    - Official witnesses or authorizing bodies
-    - Government officials who signed or stamped
-    - Licensing boards or regulatory authorities
-    Return ONLY the name of the official authority. If no official validation exists, return "UNKNOWN".""" ,
-	"version_notes"     : """Analyze document versioning, revision history, and administrative metadata.
-
-Look for:
-- Version numbers, revision dates, edition information
-- Document control numbers, form numbers
-- "Supersedes" notices, amendment references
-- Administrative tracking information
-
-Provide a professional assessment of document currency and version status.
-If no versioning found, state: "No explicit version control information identified."
-
-Use formal, administrative language.""" ,
-	"utility_notes"     : """Provide a professional analysis of this document's administrative function and legal 
-	purpose.
-
-Analyze:
-- Regulatory or statutory requirements this document fulfills
-- Administrative processes it initiates or supports
-- Legal obligations or rights it establishes
-- Institutional workflows it facilitates
-- Compliance requirements it addresses
-
-Write in formal, bureaucratic language appropriate for government documentation.""" ,
-	"executive_summary" : """Summarize significant administrative, security, or procedural characteristics not covered 
-	elsewhere.
-
-Note:
-- Security classifications, handling restrictions
-- Authentication elements, official markings
-- Distribution methods, transmission records
-- Document quality, preservation concerns
-- Cross-references to related administrative instruments
-
-Present observations in formal, official terminology suitable for administrative records.""" ,
-}
 
 EMAIL_TYPES = [
 	"eml" ,
@@ -644,11 +533,11 @@ FILETYPE_TRUSTED_EXTENSIONS.update( EXECUTABLE_EXTENSIONS )
 FILETYPE_TRUSTED_EXTENSIONS.update( ext.lstrip( "." ) for ext in ARCHIVE_TYPES )
 
 TIKA_SERVER_PORT: int = 9998
-JAVA_PATH: Path = Path( PROJECT_ASSETS_DIR / r"jdk-25.0.2+10-jre\bin\java.exe" )
-TIKA_APP_JAR_PATH: Path = Path( PROJECT_ASSETS_DIR / r"tika-app-3.2.3.jar" )
-TIKA_SERVER_JAR_PATH = Path( PROJECT_ASSETS_DIR / r"tika-server-standard-3.2.3.jar" )
-PDF_ARRANGER_EXE_PATH: Path = Path( PROJECT_ASSETS_DIR / r"pdfarranger.exe" )
-OUCH_DECOMPRESSOR_PATH: Path = Path( PROJECT_ASSETS_DIR / r"ouch-x86_64-pc-windows-msvc\ouch.exe" )
+JAVA_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"jdk-25.0.2+10-jre\bin\java.exe" )
+TIKA_APP_JAR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"tika-app-3.2.3.jar" )
+TIKA_SERVER_JAR_PATH = Path( PROGRAM_ASSETS_DIR / r"tika-server-standard-3.2.3.jar" )
+PDF_ARRANGER_EXE_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"pdfarranger.exe" )
+OUCH_DECOMPRESSOR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"ouch-x86_64-pc-windows-msvc\ouch.exe" )
 
 # Apache Tika MIME Type → File Extension Mapping
 # Covers: Documents, Spreadsheets, Presentations, Images, Audio, Video,
@@ -1288,3 +1177,109 @@ MIME_TO_EXT_MAP: dict[ str , List[ str ] ] = {
 	"application/x-pcapng"                                                      : [ ".pcapng" ] ,
 	"application/x-torrent"                                                     : [ ".torrent" ] ,
 }
+
+# Tiers ordered largest→smallest.
+# "quantization" can be None, "int8", or "nf4" (4-bit NormalFloat via bitsandbytes).
+# VRAM estimates include headroom for activations and KV cache:
+#   bf16  raw weight size  ≈ params × 2 bytes
+#   int8  raw weight size  ≈ params × 1 byte   (+~15% overhead)
+#   nf4   raw weight size  ≈ params × 0.5 byte  (+~20% overhead)
+# Adjust thresholds if you observe OOM in practice.
+
+QWEN_VL_CPU_FALLBACK = "Qwen/Qwen2.5-VL-3B-Instruct"
+TEXT_MODEL: str = "qwen2.5:7b"
+VISION_MODEL: str = "minicpm-v:8b"
+
+QWEN_VL_MODEL_TIERS = [
+	# ── Full precision tiers ──────────────────────────────────────────────
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-72B-Instruct" ,
+		"min_vram_gb"  : 80 ,
+		"quantization" : None ,
+	} ,
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-32B-Instruct" ,
+		"min_vram_gb"  : 40 ,
+		"quantization" : None ,
+	} ,
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 18 ,
+		"quantization" : None ,
+	} ,
+	# ── Quantized 7B tiers (fills the 10 / 12 / 16 GB gaps) ─────────────
+	# 16 GB: 7B bf16 is ~14 GB weights; fits with care but no headroom for
+	#         anything above the base prompt. Use int8 for a safer margin.
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 16 ,
+		"quantization" : "int8" ,
+	} ,
+	# 12 GB: int8 weights ~8 GB + activations fits comfortably.
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 12 ,
+		"quantization" : "int8" ,
+	} ,
+	# 10 GB: int8 is marginal; drop to nf4 (4-bit) for safe headroom.
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-7B-Instruct" ,
+		"min_vram_gb"  : 10 ,
+		"quantization" : "nf4" ,
+	} ,
+	# ── 3B fallback tiers ────────────────────────────────────────────────
+	{ "model_id" : "Qwen/Qwen2.5-VL-3B-Instruct" , "min_vram_gb" : 8 , "quantization" : None } ,
+	{
+		"model_id"     : "Qwen/Qwen2.5-VL-3B-Instruct" ,
+		"min_vram_gb"  : 4 ,
+		"quantization" : "int8" ,
+	} ,
+]
+
+FILENAME_SYSTEM_PROMPT = (
+	"You are a file-naming tool. You receive document content and return a single "
+	"descriptive filename (no extension). Use lowercase words separated by underscores. "
+	"Max 8 words. No explanations, no quotes, no extra text — just the filename."
+)
+
+VISUAL_DESC_SYSTEM_PROMPT = (
+	"You are a visual analysis tool. Describe what you see in the image clearly and "
+	"concisely. Focus on: document type, visible text/headings, logos, layout, key visual "
+	"elements, colors, and any identifiable information. Two to four sentences max. "
+	"No preamble, no 'This image shows...' — just the description."
+)
+
+TAGS_SYSTEM_PROMPT = (
+	"You are a document classification tool. You receive document content and return "
+	"comma-separated tags that categorize and describe the document. Return 5-10 tags. "
+	"Tags should cover: document type, subject domain, entities involved, purpose, and "
+	"any notable attributes. Lowercase only. No explanations — just the tags."
+)
+
+SCAN_SYSTEM_PROMPT = (
+	"You are an OCR correction and text extraction tool. You receive a document image "
+	"and return ALL readable text exactly as it appears. Preserve structure: headings, "
+	"paragraphs, lists, tables. Fix obvious OCR artifacts but do not infer or add content. "
+	"No commentary — just the extracted text."
+)
+
+FILENAME_PROMPT_TEMPLATE = """Content:
+{content}
+
+Return ONLY a descriptive filename (no extension). Examples:
+- immigration_board_hearing_notice_2024
+- rental_lease_agreement_toronto
+- passport_renewal_application_form
+- landscape_mountain_sunset_photo"""
+
+VISUAL_DESC_PROMPT = "Describe this image. Be specific about visible text, layout, and content type."
+
+ORGANISATIONAL_TAGS_PROMPT_TEMPLATE = """Content:
+{content}
+
+Return ONLY comma-separated tags. Examples:
+- legal, immigration, hearing notice, government, irb, refugee claim, official correspondence
+- receipt, financial, purchase, retail, electronics, warranty
+- medical, lab report, blood work, diagnostic, hospital, patient record"""
+
+ARTIFACT_SCANNING_PROMPT = "Extract ALL readable text from this document image. Preserve the original structure and formatting."

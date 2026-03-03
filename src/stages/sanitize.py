@@ -34,6 +34,7 @@ from config import (
 )
 from utilities.checksum import generate_checksum , load_checksum_history , save_checksum
 from utilities.dependancy_ensurance import ensure_apache_tika , ensure_apache_tika_server , ensure_ffmpeg
+from utilities.detect_filetype import stop_apache_tika_server
 from utilities.sanitization import is_corrupted , is_password_protected , is_supported_type
 
 
@@ -125,7 +126,7 @@ def sanitizing(
 
 			logger.info( f"Artifact \"{artifact.name}\" is supported by PaperTrail as of Mar 1st, 2026" )
 
-			if is_corrupted( artifact_location=artifact , tika_server_process=tika_server_process ) :
+			if is_corrupted( logger=logger , artifact_location=artifact , tika_server_process=tika_server_process ) :
 				logger.info( f"Corrupted artifact detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=CORRUPTED_ARTIFACTS_DIR / artifact.name )
 				logger.info( f"Moved corrupted artifact to: {CORRUPTED_ARTIFACTS_DIR / artifact.name}" )
@@ -158,4 +159,5 @@ def sanitizing(
 			logger.error( f"Error processing artifact {artifact.name}: {str( e )}" )
 			continue
 
+	stop_apache_tika_server( )
 	return None

@@ -28,7 +28,7 @@ from pillow_heif import register_heif_opener
 from reportlab.pdfgen import canvas
 from weasyprint import CSS , HTML
 
-from config import ARCHIVAL_DIR
+from config import ARCHIVAL_DIR , EMAIL_TYPES
 from utilities.dependancy_ensurance import find_libreoffice
 
 
@@ -446,46 +446,44 @@ def _find_on_path( name: str ) -> Path | None :
 
 
 def convert_email_to_pdf( src: Path , logger: logging.Logger ) -> Path :
-	pass
+	_archive( src )
+	src = src.resolve( )
 
-# _archive( src )
-# src = src.resolve( )
-#
-# if not src.exists( ) :
-# 	raise FileNotFoundError( f"Source file not found: {src}" )
-# if src.suffix.lower( ) not in EMAIL_TYPES :
-# 	raise ValueError( f"Unsupported file type '{src.suffix}'. Expected one of: {', '.join( EMAIL_TYPES )}" )
-# if not _find_on_path( "java" ) and not _find_on_path( "java.exe" ) :
-# 	raise FileNotFoundError( "Java runtime not found on PATH. Install a JRE (8+)." )
-#
-# jar_path = _find_on_path( "emailconverter.jar" )
-# if jar_path is None :
-# 	jar_path = Path( __file__ ).parent / "emailconverter.jar"
-# jar_path = jar_path.resolve( )
-#
-# if not jar_path.exists( ) :
-# 	raise FileNotFoundError(
-# 			f"emailconverter.jar not found (checked PATH and {jar_path}). "
-# 			f"Download from https://github.com/nickrussler/email-to-pdf-converter/releases" ,
-# 	)
-#
-# dst = src.with_suffix( ".pdf" )
-# cmd = [ "java" , "-jar" , str( jar_path ) , str( src ) , "-o" , str( dst ) , "-a" ]
-#
-# logger.info( "Converting email → PDF: '%s'" , src.name )
-# try :
-# 	result = subprocess.run( cmd , capture_output=True , text=True , timeout=120 )
-# except subprocess.TimeoutExpired :
-# 	raise RuntimeError( f"Conversion timed out after 120s for: {src.name}" )
-#
-# if result.returncode != 0 :
-# 	raise RuntimeError(
-# 			f"emailconverter exited with code {result.returncode} "
-# 			f"for '{src.name}': {result.stderr.strip( )}" ,
-# 	)
-#
-# if not dst.exists( ) :
-# 	raise RuntimeError( f"Conversion succeeded but output not found: {dst}" )
-#
-# logger.info( "PDF created: '%s'" , dst.name )
-# return dst
+	if not src.exists( ) :
+		raise FileNotFoundError( f"Source file not found: {src}" )
+	if src.suffix.lower( ) not in EMAIL_TYPES :
+		raise ValueError( f"Unsupported file type '{src.suffix}'. Expected one of: {', '.join( EMAIL_TYPES )}" )
+	if not _find_on_path( "java" ) and not _find_on_path( "java.exe" ) :
+		raise FileNotFoundError( "Java runtime not found on PATH. Install a JRE (8+)." )
+
+	jar_path = _find_on_path( "emailconverter.jar" )
+	if jar_path is None :
+		jar_path = Path( __file__ ).parent / "emailconverter.jar"
+	jar_path = jar_path.resolve( )
+
+	if not jar_path.exists( ) :
+		raise FileNotFoundError(
+				f"emailconverter.jar not found (checked PATH and {jar_path}). "
+				f"Download from https://github.com/nickrussler/email-to-pdf-converter/releases" ,
+		)
+
+	dst = src.with_suffix( ".pdf" )
+	cmd = [ "java" , "-jar" , str( jar_path ) , str( src ) , "-o" , str( dst ) , "-a" ]
+
+	logger.info( "Converting email → PDF: '%s'" , src.name )
+	try :
+		result = subprocess.run( cmd , capture_output=True , text=True , timeout=120 )
+	except subprocess.TimeoutExpired :
+		raise RuntimeError( f"Conversion timed out after 120s for: {src.name}" )
+
+	if result.returncode != 0 :
+		raise RuntimeError(
+				f"emailconverter exited with code {result.returncode} "
+				f"for '{src.name}': {result.stderr.strip( )}" ,
+		)
+
+	if not dst.exists( ) :
+		raise RuntimeError( f"Conversion succeeded but output not found: {dst}" )
+
+	logger.info( "PDF created: '%s'" , dst.name )
+	return dst
