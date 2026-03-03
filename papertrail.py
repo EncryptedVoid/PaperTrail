@@ -17,7 +17,8 @@ from datetime import datetime
 from applications.identify_duplicates import DuplicateReviewer
 from applications.manual_file_triage import FileTriage
 from config import (
-	APPLICATION_FOLDERS , COMPLETED_FORMAT_CONVERSION_DIR ,
+	APPLICATION_FOLDERS ,
+	COMPLETED_FORMAT_CONVERSION_DIR ,
 	COMPLETED_SANITIZATION_DIR ,
 	LOG_DIR ,
 	LOG_FORMAT ,
@@ -25,7 +26,8 @@ from config import (
 	RECURSIVE_SORT_DIR ,
 	SESSION_LOG_FILE_PREFIX ,
 	SYSTEM_DIRECTORIES ,
-	SYSTEM_PROGRAM_TRACKING_FILES , UNPROCESSED_ARTIFACTS_DIR ,
+	SYSTEM_PROGRAM_TRACKING_FILES ,
+	UNPROCESSED_ARTIFACTS_DIR ,
 )
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
