@@ -41,7 +41,7 @@ from config import (
 	TEXT_TYPES ,
 	VIDEO_TYPES
 )
-from utilities.detect_filetype import detect_filetype
+from utilities.document_data_extraction import detect_filetype
 
 
 def is_password_protected( artifact_location: Path ) -> bool :

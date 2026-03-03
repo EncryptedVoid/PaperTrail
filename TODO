@@ -21,10 +21,10 @@ V1.3.0 TODO:
 [✅] Fix .msi corruption detection
 
 TODO:
-[ ] Fix PNG to PDF converter function
+[✅] Fix PNG to PDF converter function
 [ ] Fix scanning functions
 [ ] Complete ai processing functions
-[ ] Add function for getting metadata with new Apache Tika Server
+[✅] Add function for getting metadata with new Apache Tika Server
 [ ] Markdown to PDF converter function
 [ ] Name Artifact Profile files using artifact checksums and not UUIDs
 [ ] Embed metadata to converted file using artifact profile file

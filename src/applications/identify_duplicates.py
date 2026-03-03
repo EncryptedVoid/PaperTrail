@@ -34,13 +34,21 @@ import subprocess
 import sys
 import threading
 import time
-import tkinter as tk
+import customtkinter as ctk
 import uuid
 from collections import Counter , defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from tkinter import filedialog , messagebox
+ctk.set_appearance_mode( "Dark" )
+ctk.set_default_color_theme( "blue" )
 
+from PIL import Image , ImageTk
+
+import fitz
+
+import imagehash
+
+import cv2
 from config import (ARCHIVAL_DIR , DOCUMENT_TYPES , IMAGE_TYPES , JAVA_PATH ,
 										TEMP_DIR , TIKA_APP_JAR_PATH)
 
@@ -82,43 +90,6 @@ def _ensure( pip_name: str , min_ver: str | None = None , label: str | None = No
 		return True
 	print( f"✗ {tag} failed — some features will be limited" )
 	return False
-
-
-try :
-	import customtkinter as ctk
-
-	ctk.set_appearance_mode( "Dark" )
-	ctk.set_default_color_theme( "blue" )
-except ImportError :
-	import tkinter as ctk  # type: ignore
-
-try :
-	from PIL import Image , ImageTk
-
-	PIL_AVAILABLE = True
-except ImportError :
-	PIL_AVAILABLE = False
-
-try :
-	import fitz
-
-	FITZ_AVAILABLE = True
-except ImportError :
-	FITZ_AVAILABLE = False
-
-try :
-	import imagehash
-
-	IMAGEHASH_AVAILABLE = True
-except ImportError :
-	IMAGEHASH_AVAILABLE = False
-
-try :
-	import cv2
-
-	CV2_AVAILABLE = True
-except ImportError :
-	CV2_AVAILABLE = False
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PALETTE & CONSTANTS

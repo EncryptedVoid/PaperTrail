@@ -1,0 +1,7 @@
+.DS_Store
+*~
+nogit/*
+*.pyc
+week*
+output.pdf
+page*png

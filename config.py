@@ -13,10 +13,10 @@ from pathlib import Path
 from typing import List , Set
 
 # ── Root Directories ──────────────────────────────────────────────────────────
-# TARGET_DRIVE: Path = Path( "E:" )
-TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop\\" )
-# UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
-UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PAPERTRAIL-PROCESSING" )
+TARGET_DRIVE: Path = Path( "E:" )
+# TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop\\" )
+UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
+# UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PAPERTRAIL-PROCESSING" )
 
 BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
 RECURSIVE_SORT_DIR = Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" )
@@ -53,10 +53,10 @@ ANKI_DIR: Path = Path(
 		TARGET_DRIVE / "ANKI" )  # https://apps.ankiweb.net/
 BITWARDEN_DIR: Path = Path(
 		TARGET_DRIVE / "BITWARDEN" )  # https://bitwarden.com/
-CALIBRE_LIBRARY_DIR: Path = Path(
-		TARGET_DRIVE / "CALIBRE_LIBRARY" )  # https://github.com/janeczku/calibre-web
+PERSONAL_LIBRARY_DIR: Path = Path(
+		TARGET_DRIVE / "PERSONAL_LIBRARY" )  # https://github.com/booklore-app/booklore
 DIGITAL_ASSET_MANAGEMENT_DIR: Path = Path(
-		TARGET_DRIVE / "SEAFILE" )  # https://www.pydio.com/
+		TARGET_DRIVE / "DIGITAL_ASSET_MANAGEMENT" )  # https://www.pydio.com/
 FIREFLYIII_DIR: Path = Path(
 		TARGET_DRIVE / "FIREFLY-III" )  # https://www.firefly-iii.org/
 JELLYFIN_DIR: Path = Path(
@@ -117,7 +117,7 @@ SYSTEM_DIRECTORIES: set[ Path ] = {
 	AFFINE_DIR ,
 	ANKI_DIR ,
 	BITWARDEN_DIR ,
-	CALIBRE_LIBRARY_DIR ,
+	PERSONAL_LIBRARY_DIR ,
 	DIGITAL_ASSET_MANAGEMENT_DIR ,
 	FIREFLYIII_DIR ,
 	JELLYFIN_DIR ,
@@ -145,7 +145,7 @@ APPLICATION_FOLDERS = [
 	AFFINE_DIR ,
 	ANKI_DIR ,
 	BITWARDEN_DIR ,
-	CALIBRE_LIBRARY_DIR ,
+	PERSONAL_LIBRARY_DIR ,
 	DIGITAL_ASSET_MANAGEMENT_DIR ,
 	FIREFLYIII_DIR ,
 	JELLYFIN_DIR ,
@@ -526,6 +526,7 @@ TIKA_APP_JAR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"tika-app-3.2.3.jar" )
 TIKA_SERVER_JAR_PATH = Path( PROGRAM_ASSETS_DIR / r"tika-server-standard-3.2.3.jar" )
 PDF_ARRANGER_EXE_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"pdfarranger.exe" )
 OUCH_DECOMPRESSOR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"ouch-x86_64-pc-windows-msvc\ouch.exe" )
+NOTESHRINK_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"noteshrink\noteshrink.py" )
 
 # Apache Tika MIME Type → File Extension Mapping
 # Covers: Documents, Spreadsheets, Presentations, Images, Audio, Video,

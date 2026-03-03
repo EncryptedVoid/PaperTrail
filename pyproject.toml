@@ -30,6 +30,7 @@ dependencies = [
     # 👉 icalendar AUTO-INSTALLS:
     #    - python-dateutil ✓ (already from pandas!)
     #    - pytz ✓ (already from pandas!)
+    "filetype",
 
     "weasyprint>=60.0", # Email → PDF conversion (modern HTML renderer)
     # 👉 weasyprint AUTO-INSTALLS:
@@ -38,16 +39,6 @@ dependencies = [
 
     "chardet>=5.0.0", # Character encoding detection for emails
     # 👉 chardet AUTO-INSTALLS: (standalone library)
-
-    # === Google OAuth2 (for Gmail) ===
-    "google-auth>=2.27.0", # Google OAuth2 authentication
-    # 👉 google-auth AUTO-INSTALLS:
-    #    - cachetools, pyasn1, pyasn1-modules, rsa
-
-    "google-auth-oauthlib>=1.2.0", # Google OAuth2 flow handler
-    # 👉 google-auth-oauthlib AUTO-INSTALLS:
-    #    - google-auth ✓ (already listed)
-    #    - requests-oauthlib
 
     "google-auth-httplib2>=0.2.0", # Google API HTTP client
     # 👉 google-auth-httplib2 AUTO-INSTALLS:

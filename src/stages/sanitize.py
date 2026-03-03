@@ -34,7 +34,7 @@ from config import (
 )
 from utilities.checksum import generate_checksum , load_checksum_history , save_checksum
 from utilities.dependancy_ensurance import ensure_apache_tika , ensure_apache_tika_server , ensure_ffmpeg
-from utilities.detect_filetype import stop_apache_tika_server
+from utilities.document_data_extraction import stop_apache_tika_server
 from utilities.sanitization import is_corrupted , is_password_protected , is_supported_type
 
 

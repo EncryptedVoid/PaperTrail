@@ -1,7 +1,7 @@
 import shutil
 import subprocess
 from pathlib import Path
-
+from config import NOTESHRINK_PATH
 
 def process_handwritten_notes( input_files , output_pdf ) :
 	# Build command

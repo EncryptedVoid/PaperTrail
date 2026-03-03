@@ -14,7 +14,7 @@ Author: Ashiq Gazi
 import logging
 from datetime import datetime
 
-from applications.identify_duplicates import DuplicateReviewer
+# from applications.identify_duplicates import DuplicateReviewer
 from applications.manual_file_triage import FileTriage
 from config import (
 	APPLICATION_FOLDERS ,
@@ -110,8 +110,8 @@ sanitizing(
 		dest_dir=COMPLETED_SANITIZATION_DIR ,
 )
 
-duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
-duplicate_reviewer.run( )
+# duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
+# duplicate_reviewer.run( )
 
 converting_files(
 		logger=logger ,

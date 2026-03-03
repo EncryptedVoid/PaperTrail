@@ -113,6 +113,47 @@ def detect_filetype(
 	return dot_ext
 
 
+def get_metadata(
+		logger: logging.Logger,
+		artifact: Path,
+		tika_server_process: subprocess.Popen | None,
+) -> dict | None:
+	"""
+	Extract metadata from a file via the Tika server.
+
+	Args:
+			logger:               Logger instance.
+			artifact:             Path to the file.
+			tika_server_process:  Running Tika server process.
+
+	Returns:
+			Dictionary of metadata key-value pairs, or None on failure.
+	"""
+	if tika_server_process is None or tika_server_process.poll() is not None:
+		logger.error(f"Tika server not running; cannot extract metadata for {artifact.name}")
+		return {}
+
+	safe_name = quote(artifact.name, safe="")
+	try:
+		with open(artifact, "rb") as f:
+			resp = requests.put(
+				f"http://localhost:{TIKA_SERVER_PORT}/meta",
+				data=f,
+				headers={
+						"Content-Disposition": f"attachment; filename={safe_name}",
+						"Accept": "application/json",
+				},
+				timeout=60,
+			)
+		resp.raise_for_status()
+		return resp.json()
+	except requests.Timeout:
+		logger.error(f"Tika metadata request timed out for {artifact.name}")
+		return None
+	except Exception as e:
+		logger.error(f"Tika metadata extraction failed for {artifact.name}: {e}")
+		return None
+
 def stop_apache_tika_server(
 		logger: logging.Logger ,
 		tika_server_process: subprocess.Popen | None ,

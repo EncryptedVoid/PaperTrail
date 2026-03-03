@@ -2,12 +2,12 @@
 Format Converting Module (Optimized)
 
 Key optimizations:
-  - Video: Full GPU pipeline (cuvid decode → CUDA frames → NVENC encode). No CPU round-trip.
-  - Video: Preset p1 (fastest), 2-pass disabled, lookahead off, B-frames off.
-  - Video: Parallel audio encode via -threads.
-  - Image: Multithreaded Pillow, lazy loading, avoid unnecessary mode conversions.
-  - Audio: VBR instead of CBR for speed, reduced complexity.
-  - All:   Concurrent I/O where possible.
+	- Video: Full GPU pipeline (cuvid decode → CUDA frames → NVENC encode). No CPU round-trip.
+	- Video: Preset p1 (fastest), 2-pass disabled, lookahead off, B-frames off.
+	- Video: Parallel audio encode via -threads.
+	- Image: Multithreaded Pillow, lazy loading, avoid unnecessary mode conversions.
+	- Audio: VBR instead of CBR for speed, reduced complexity.
+	- All:   Concurrent I/O where possible.
 
 Author: Ashiq Gazi (optimized)
 """
@@ -28,6 +28,9 @@ from pillow_heif import register_heif_opener
 from reportlab.pdfgen import canvas
 from weasyprint import CSS , HTML
 
+
+import img2pdf
+from PIL import Image
 from config import ARCHIVAL_DIR , EMAIL_TYPES
 from utilities.dependancy_ensurance import find_libreoffice
 
@@ -140,34 +143,60 @@ def convert_image_to_png( src: Path , logger: logging.Logger ) -> Optional[ Path
 # PNG → PDF  (unchanged — already fast)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _strip_alpha(src: Path) -> bytes:
+	"""Return PNG bytes with alpha removed (white background)."""
+	from io import BytesIO
+	with Image.open(src) as img:
+		if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
+			bg = Image.new("RGB", img.size, (255, 255, 255))
+			bg.paste(img, mask=img.convert("RGBA").split()[3])
+			buf = BytesIO()
+			bg.save(buf, format="PNG")
+			return buf.getvalue()
+		buf = BytesIO()
+		img.convert("RGB").save(buf, format="PNG")
+		return buf.getvalue()
 
-def convert_png_to_pdf( src: Path , logger: logging.Logger ) -> Optional[ Path ] :
-	_archive( src )
-	src = src.resolve( )
-	dst = src.with_suffix( ".pdf" )
-	logger.info( "Converting PNG → PDF: '%s'" , src.name )
 
-	try :
-		with Image.open( src ) as img :
-			w_px , h_px = img.size
-			dpi = img.info.get( "dpi" , (72 , 72) )
-			w_pt = (w_px / max( dpi[ 0 ] , 1 )) * 72
-			h_pt = (h_px / max( dpi[ 1 ] , 1 )) * 72
+def _convert_with_img2pdf(src: Path, dst: Path, logger: logging.Logger) -> Path:
+	png_bytes = _strip_alpha(src)
+	pdf_bytes = img2pdf.convert(png_bytes)
+	dst.write_bytes(pdf_bytes)
+	logger.info("PDF created (img2pdf): '%s' (%.1f KB)", dst.name, dst.stat().st_size / 1024)
+	src.unlink()
+	return dst
 
-		c = canvas.Canvas( str( dst ) , pagesize=(w_pt , h_pt) )
-		c.drawImage( str( src ) , 0 , 0 , width=w_pt , height=h_pt )
-		c.save( )
 
-		logger.info( "PDF created: '%s' (%.1f KB)" , dst.name , dst.stat( ).st_size / 1024 )
-		src.unlink( )
-		return dst
+def _convert_with_pillow(src: Path, dst: Path, logger: logging.Logger) -> Path:
+	with Image.open(src) as img:
+		if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
+			bg = Image.new("RGB", img.size, (255, 255, 255))
+			bg.paste(img, mask=img.convert("RGBA").split()[3])
+			bg.save(str(dst), "PDF", resolution=img.info.get("dpi", (72, 72))[0])
+		else:
+			img.convert("RGB").save(str(dst), "PDF", resolution=img.info.get("dpi", (72, 72))[0])
+	logger.info("PDF created (Pillow): '%s' (%.1f KB)", dst.name, dst.stat().st_size / 1024)
+	src.unlink()
+	return dst
 
-	except Exception as exc :
-		logger.error( "PNG → PDF failed for '%s': %s" , src.name , exc )
-		if dst.exists( ) and dst != src :
-			dst.unlink( )
+def convert_png_to_pdf(src: Path, logger: logging.Logger) -> Optional[Path]:
+	_archive(src)
+	src = src.resolve()
+	dst = src.with_suffix(".pdf")
+	logger.info("Converting PNG → PDF: '%s'", src.name)
+
+	try:
+		return _convert_with_img2pdf(src, dst, logger)
+	except Exception as exc:
+		logger.warning("img2pdf failed for '%s': %s — trying Pillow fallback", src.name, exc)
+
+	try:
+		return _convert_with_pillow(src, dst, logger)
+	except Exception as exc:
+		logger.error("PNG → PDF failed entirely for '%s': %s", src.name, exc)
+		if dst.exists() and dst != src:
+			dst.unlink()
 		return None
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VIDEO → MP4  (heavily optimized — full GPU pipeline)

@@ -14,15 +14,15 @@ from typing import List
 
 from tqdm import tqdm
 
-from config import (AFFINE_DIR , ANKI_DIR , AUDIO_TYPES , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR ,
-										DIGITAL_ASSET_MANAGEMENT_DIR ,
-										DOCUMENT_TYPES , FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , JELLYFIN_DIR , LINKWARDEN_DIR ,
-										MANUALS_ARCHIVE_DIR ,
-										MONICA_CRM_DIR ,
-										ODOO_CRM_DIR ,
-										ODOO_INVENTORY_DIR ,
-										ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
-										SOFTWARE_ARCHIVE_DIR , ULTIMAKER_CURA_DIR , VIDEO_TYPES)
+from config import (AFFINE_DIR , ANKI_DIR , AUDIO_TYPES , BITWARDEN_DIR , PERSONAL_LIBRARY_DIR ,
+                    DIGITAL_ASSET_MANAGEMENT_DIR ,
+                    DOCUMENT_TYPES , FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , JELLYFIN_DIR , LINKWARDEN_DIR ,
+                    MANUALS_ARCHIVE_DIR ,
+                    MONICA_CRM_DIR ,
+                    ODOO_CRM_DIR ,
+                    ODOO_INVENTORY_DIR ,
+                    ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
+                    SOFTWARE_ARCHIVE_DIR , ULTIMAKER_CURA_DIR , VIDEO_TYPES)
 from utilities.automatic_sorting import (
 	is_3d_file ,
 	is_anki_deck ,
@@ -175,8 +175,8 @@ def automatically_sorting(
 
 			elif is_book( artifact_location=artifact ) :
 				logger.info( f"Detected book: {artifact.name}" )
-				shutil.move( src=artifact , dst=CALIBRE_LIBRARY_DIR / f"{sanitized_label}.{artifact_ext}" )
-				logger.info( f"Moved book to: {CALIBRE_LIBRARY_DIR}" )
+				shutil.move( src=artifact , dst=PERSONAL_LIBRARY_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moved book to: {PERSONAL_LIBRARY_DIR}" )
 
 			elif is_financial_document(
 					artifact_location=artifact ,

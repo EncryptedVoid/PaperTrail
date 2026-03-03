@@ -28,7 +28,7 @@ from tkinterweb import HtmlFrame
 
 from config import (
 	AFFINE_DIR , ALTERATIONS_CSV , ALTERATIONS_REQUIRED_DIR , ANKI_DIR ,
-	ARCHIVAL_DIR , AUDIO_TYPES , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR ,
+	ARCHIVAL_DIR , AUDIO_TYPES , BITWARDEN_DIR , PERSONAL_LIBRARY_DIR ,
 	DELETE_DIR , DIGITAL_ASSET_MANAGEMENT_DIR , DOCUMENT_TYPES , EMAIL_TYPES ,
 	FILE_TRIAGE_BATCH_SIZE , FILE_TRIAGE_MAX_PDF_PG , FIREFLYIII_DIR , GAMES_ARCHIVE_DIR , GITLAB_DIR , IMAGE_TYPES ,
 	IMMICH_DIR ,
@@ -125,7 +125,7 @@ def _build_dest_registry( ) -> list[ DestButton ] :
 		DestButton( "ANKI" , "🃏 ANKI" , 20 , "n" , [ ANKI_DIR ] ) ,
 		DestButton( "ARCHIVE" , "📦 ARCHIVE" , 30 , "r" , [ ARCHIVAL_DIR ] ) ,
 		DestButton( "BITWARDEN" , "🔐 BITWARDEN" , 40 , "b" , [ BITWARDEN_DIR ] ) ,
-		DestButton( "CALIBRE WEB" , "📚 CALIBRE WEB" , 50 , "c" , [ CALIBRE_LIBRARY_DIR ] ) ,
+		DestButton( "CALIBRE WEB" , "📚 CALIBRE WEB" , 50 , "c" , [ PERSONAL_LIBRARY_DIR ] ) ,
 		DestButton( "CRM" , "👥 CRM" , 60 , "m" , [ MONICA_CRM_DIR , ODOO_CRM_DIR ] ) ,
 		DestButton( "FIREFLY" , "💰 FIREFLY" , 70 , "f" , [ FIREFLYIII_DIR ] ) ,
 		DestButton( "GAMES ARCHIVE" , "🎮 GAMES ARCHIVE" , 75 , "j" , [ GAMES_ARCHIVE_DIR ] ) ,
