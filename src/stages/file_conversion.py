@@ -32,7 +32,6 @@ from config import (
 	PROFILE_PREFIX , VIDEO_TYPES ,
 )
 from utilities.dependancy_ensurance import (
-	ensure_apache_tika ,
 	ensure_ffmpeg ,
 	ensure_imagemagick ,
 	ensure_libpff_python ,
@@ -78,7 +77,6 @@ def converting_files(
 	ensure_pandoc( )
 	ensure_par2( )
 	ensure_libpff_python( )
-	ensure_apache_tika( )
 
 	# ============================================================================
 	# INITIALIZATION AND SETUP

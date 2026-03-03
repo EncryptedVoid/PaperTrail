@@ -14,11 +14,11 @@ Key functionality:
 These utilities are used by the sanitization pipeline to ensure only valid,
 processable files are accepted for further processing.
 """
+import logging
 import re
 import subprocess
 import zipfile
 from pathlib import Path
-from typing import Set
 
 import msoffcrypto
 import py7zr
@@ -35,13 +35,13 @@ from config import (
 	DOCUMENT_TYPES ,
 	EMAIL_TYPES ,
 	EXECUTABLE_EXTENSIONS ,
+	EXTENSION_ALIASES ,
 	IMAGE_TYPES ,
 	MICROSOFT_FILE_TYPES ,
-	MIME_TO_EXT_MAP ,
 	TEXT_TYPES ,
-	TIKA_APP_JAR_PATH ,
 	VIDEO_TYPES
 )
+from utilities.detect_filetype import detect_filetype
 
 
 def is_password_protected( artifact_location: Path ) -> bool :
@@ -138,116 +138,63 @@ def is_password_protected( artifact_location: Path ) -> bool :
 	return False
 
 
-# def is_corrupted( artifact_location: Path ) -> bool :
-# 	"""
-# 	Returns True if the file is detectably corrupted, False if valid or type unknown.
-#
-# 	Args:
-# 		artifact_location: Path to the file to check.
-# 	"""
-#
-# 	# Basic sanity checks
-# 	if not artifact_location.exists( ) :
-# 		return True
-# 	if artifact_location.stat( ).st_size == 0 :
-# 		return True  # zero-byte is always corrupted
-#
-# 	if "._" in artifact_location.stem.lower( ).strip( ) :
-# 		return True
-#
-# 	# Execute Apache Tika as a subprocess using Java
-# 	# subprocess.run() launches an external process and waits for completion
-# 	result = subprocess.run(
-# 			[
-# 				"java" ,  # Java Runtime Environment command
-# 				"-jar" ,  # Run JAR file
-# 				str( TIKA_APP_JAR_PATH ) ,  # Path to Tika JAR
-# 				"--detect" ,  # Tika command to detect MIME type
-# 				str( artifact_location ) ,  # File to analyze
-# 			] ,
-# 			capture_output=True ,  # Capture stdout and stderr
-# 			text=True ,  # Return output as string (not bytes)
-# 			timeout=30 ,  # Timeout after 30 seconds
-# 	)
-#
-# 	# Extract MIME type from Tika's stdout and remove whitespace
-# 	# MIME type format: type/subtype (e.g., "application/pdf")
-# 	detected_mime_type = result.stdout.strip( )
-#
-# 	if not detected_mime_type in MIME_TO_EXT_MAP :
-# 		raise RuntimeError( f"Mime extension mapping not found for mime [{detected_mime_type}]" )
-#
-# 	mapped_mime_ext: Set[ str ] = MIME_TO_EXT_MAP[ detected_mime_type ]
-#
-# 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
-# 	if artifact_ext == "jpeg" or artifact_ext == "cr2" or artifact_ext == "arw" or artifact_ext == "nef" :
-# 		artifact_ext = "jpg"
-# 	elif artifact_ext in ANKI_EXTENSIONS :
-# 		artifact_ext = "zip"
-#
-# 	return any(
-# 			((artifact_ext == extension.lower( ).strip( ).strip( '.' ))
-# 			 for extension in mapped_mime_ext) ,
-# 	)
-
-def is_corrupted( artifact_location: Path ) -> bool :
+def is_corrupted(
+		logger: logging.Logger ,
+		artifact_location: Path ,
+		tika_server_process: subprocess.Popen | None ,
+) -> bool :
 	"""
 	Returns True if the file is detectably corrupted, False if valid or type unknown.
 
+	Uses detect_filetype (magic bytes + Tika server fallback) to determine the
+	file's actual content type, then compares against the file extension.
+
 	Args:
-			artifact_location: Path to the file to check.
+		logger: Logger instance.
+		artifact_location: Path to the file to check.
+		tika_server_process: Running Tika server process for fallback detection.
 	"""
 
-	# Basic sanity checks
 	if not artifact_location.exists( ) :
 		return True
 
 	if artifact_location.stat( ).st_size == 0 :
 		return True
 
-	if "._" in artifact_location.stem.lower( ).strip( ) :
+	if (
+			artifact_location.stem.lower( ).strip( ).startswith( "." )
+			or artifact_location.stem.lower( ).strip( ).startswith( "_" )
+	) :
 		return True
 
-	# Execute Apache Tika
-	result = subprocess.run(
-			[
-				"java" ,  # Java Runtime Environment command
-				"-jar" ,  # Run JAR file
-				str( TIKA_APP_JAR_PATH ) ,  # Path to Tika JAR
-				"--detect" ,  # Tika command to detect MIME type
-				str( artifact_location ) ,  # File to analyze
-			] ,
-			capture_output=True ,  # Capture stdout and stderr
-			text=True ,  # Return output as string (not bytes)
-			timeout=30 ,  # Timeout after 30 seconds
-	)
+	# Detect actual content type via magic bytes / Tika server
+	detected_ext = detect_filetype( logger , artifact_location , tika_server_process )
 
-	detected_mime_type = result.stdout.strip( )
+	if not detected_ext :
+		logger.warning( f"Could not detect content type for {artifact_location.name}" )
+		return True
 
-	if detected_mime_type not in MIME_TO_EXT_MAP :
-		raise RuntimeError( f"Mime extension mapping not found for mime [{detected_mime_type}]" )
+	# Normalize the file's extension for comparison
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
 
-	mapped_mime_ext: Set[ str ] = MIME_TO_EXT_MAP[ detected_mime_type ]
+	# Anki extensions are ZIP-based
+	for anki_ext in ANKI_EXTENSIONS :
+		EXTENSION_ALIASES[ anki_ext ] = "zip"
 
-	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+	artifact_ext = EXTENSION_ALIASES.get( artifact_ext , artifact_ext )
 
-	if artifact_ext in ("jpeg" , "cr2" , "arw" , "nef") :
-		artifact_ext = "jpg"
-	elif artifact_ext in ("vwf" , "qsf" , "qpf" , "ps1") :
-		artifact_ext = "txt"
-	elif artifact_ext == "vdx" :
-		artifact_ext = "xml"
-	elif artifact_ext == "tex" :
-		artifact_ext = "m"
-	elif artifact_ext in ANKI_EXTENSIONS :
-		artifact_ext = "zip"
+	# Normalize the detected extension the same way
+	detected_bare = detected_ext.lower( ).strip( ).strip( "." )
+	detected_bare = EXTENSION_ALIASES.get( detected_bare , detected_bare )
 
-	normalized_mapped = { ext.lower( ).strip( ).strip( '.' ) for ext in mapped_mime_ext }
-
-	if artifact_ext in normalized_mapped :
+	if artifact_ext == detected_bare :
 		return False
-	else :
-		return True
+
+	logger.info(
+			f"Corruption detected for {artifact_location.name}: "
+			f"extension says .{artifact_ext} but content is .{detected_bare}" ,
+	)
+	return True
 
 
 def is_supported_type( artifact_location: Path ) -> bool :

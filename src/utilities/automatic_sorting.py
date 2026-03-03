@@ -16,7 +16,6 @@ Key Features:
 import email
 import json
 import logging
-import re
 import time
 from pathlib import Path
 
@@ -95,137 +94,6 @@ def _extract_from_email( artifact_location: Path , logger: logging.Logger ) -> s
 	except Exception as e :
 		logger.error( f"Failed to parse email: {e}" )
 		return ""
-
-
-def _contains_financial_content( text: str , logger: logging.Logger ) -> bool :
-	"""
-	Analyze text to determine if it contains financial/invoice/purchase content.
-
-	Args:
-		text: Text content to analyze
-		logger: Logger instance for tracking analysis
-
-	Returns:
-		bool: True if financial content detected based on scoring thresholds
-	"""
-	# Convert to lowercase for case-insensitive matching
-	text_lower = text.lower( )
-
-	# Financial keywords grouped by category for granular scoring
-	# Invoice keywords are strongest indicators
-	invoice_keywords = [ "invoice" , "receipt" , "bill" , "statement" , "quote" , "quotation" ]
-
-	# Payment keywords indicate financial transactions
-	payment_keywords = [
-		"payment" ,
-		"paid" ,
-		"due" ,
-		"owing" ,
-		"balance" ,
-		"transaction" ,
-		"purchase" ,
-		"order" ,
-		"sale" ,
-		"refund" ,
-	]
-
-	# Financial terms commonly appear in monetary documents
-	financial_terms = [
-		"total" ,
-		"subtotal" ,
-		"amount" ,
-		"price" ,
-		"cost" ,
-		"fee" ,
-		"charge" ,
-		"tax" ,
-		"vat" ,
-		"gst" ,
-		"discount" ,
-		"credit" ,
-		"debit" ,
-	]
-
-	# Business terms provide commercial context
-	business_terms = [
-		"customer" ,
-		"vendor" ,
-		"supplier" ,
-		"billing" ,
-		"account number" ,
-		"reference number" ,
-		"po number" ,
-		"order number" ,
-	]
-
-	# Count keyword matches using sum with generator expression
-	invoice_score = sum( 1 for kw in invoice_keywords if kw in text_lower )
-	payment_score = sum( 1 for kw in payment_keywords if kw in text_lower )
-	financial_score = sum( 1 for kw in financial_terms if kw in text_lower )
-	business_score = sum( 1 for kw in business_terms if kw in text_lower )
-
-	# Calculate total keyword score across all categories
-	total_keyword_score = (
-			invoice_score + payment_score + financial_score + business_score
-	)
-
-	logger.debug(
-			f"Keyword scores - Invoice: {invoice_score}, Payment: {payment_score}, "
-			f"Financial: {financial_score}, Business: {business_score}" ,
-	)
-
-	# Pattern detection for common financial formats
-	pattern_score = 0
-
-	# Currency symbols with amounts (e.g., $123.45, €50.00, £99)
-	# \s* allows optional whitespace, \d+ matches one or more digits
-	# (?:,\d{3})* matches optional thousands separators
-	# (?:\.\d{2})? matches optional decimal part
-	currency_pattern = r"[$€£¥]\s*\d+(?:,\d{3})*(?:\.\d{2})?"
-	if re.search( currency_pattern , text ) :
-		pattern_score += 2
-		logger.debug( "Currency pattern detected" )
-
-	# Amount patterns (e.g., "Total: 123.45", "Amount: $50")
-	# (?:...) creates non-capturing group
-	amount_pattern = r"(?:total|amount|price|cost|subtotal|balance)[\s:]+\$?\s*\d+(?:,\d{3})*(?:\.\d{2})?"
-	if re.search( amount_pattern , text_lower ) :
-		pattern_score += 2
-		logger.debug( "Amount pattern detected" )
-
-	# Date patterns common in invoices (MM/DD/YYYY or YYYY-MM-DD)
-	date_pattern = r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{2}[/-]\d{2}"
-	if re.search( date_pattern , text ) :
-		pattern_score += 1
-		logger.debug( "Date pattern detected" )
-
-	# Invoice number patterns (e.g., "INV-12345", "Invoice #123")
-	# \w+ matches alphanumeric characters, \d+ ensures numeric component
-	invoice_number_pattern = r"(?:invoice|receipt|bill|ref(?:erence)?)[#\s:-]*\w+\d+"
-	if re.search( invoice_number_pattern , text_lower ) :
-		pattern_score += 2
-		logger.debug( "Invoice number pattern detected" )
-
-	# Calculate total score combining keywords and patterns
-	total_score = total_keyword_score + pattern_score
-
-	logger.info(
-			f"Financial analysis - Keyword score: {total_keyword_score}, "
-			f"Pattern score: {pattern_score}, Total: {total_score}" ,
-	)
-
-	# Decision threshold: need strong evidence across multiple dimensions
-	# At least 1 invoice keyword + 4 total score indicates financial doc
-	if invoice_score >= 1 and total_score >= 4 :
-		return True
-	# Or 3+ keywords + 2+ patterns (strong combined evidence)
-	elif total_keyword_score >= 3 and pattern_score >= 2 :
-		return True
-	# Or 5+ keywords regardless of patterns (keyword density)
-	elif total_keyword_score >= 5 :
-		return True
-
-	return False
 
 
 def is_bookmark_file( artifact_location: Path ) -> bool :
@@ -413,55 +281,10 @@ def is_financial_document(
 		) :
 			return False
 
-		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " , "invoice" ] ) :
+		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " , "invoice" , "cheque" ] ) :
 			return True
 
-		text = None
-
-		if artifact_ext in [ "txt" , "csv" , "json" , "xml" , "log" ] :
-			logger.debug( f"Reading plain text file: {artifact_ext}" )
-			try :
-				# errors='ignore' handles invalid UTF-8 sequences gracefully
-				with open( artifact_location , "r" , encoding="utf-8" , errors="ignore" ) as f :
-					text = f.read( )
-				logger.debug( f"Extracted {len( text )} characters from plain text file" )
-			except Exception as e :
-				logger.error( f"Failed to read text file: {e}" )
-				text = ""
-
-		# Email files - parse email format
-		# .eml files use RFC 822 message format
-		elif artifact_ext == ".eml" :
-			logger.debug( "Parsing email file" )
-			text = _extract_from_email( artifact_location , logger )
-
-		# Images and PDFs - use VisualProcessor
-		# VisualProcessor performs OCR (Optical Character Recognition)
-		elif artifact_ext in [ ".pdf" , ".jpg" , ".jpeg" , ".png" , ".bmp" , ".tiff" , ".webp" ] :
-			logger.debug( f"Using VisualProcessor for {artifact_ext} file" )
-			try :
-				# VisualProcessor.extract_text() performs OCR on images/PDFs
-				text = visual_processor.extract_text( artifact_location )
-				logger.debug( f"Extracted {len( text )} characters via OCR" )
-			except Exception as e :
-				logger.error( f"VisualProcessor extraction failed: {e}" )
-				return False
-
-		# Validate extracted text has meaningful content
-		# Minimum 10 characters required for analysis
-		if text is None or len( text.strip( ) ) < 10 :
-			logger.warning( f"No meaningful text extracted from {artifact_location.name}" )
-			return False
-
-		# Analyze for financial content using keyword and pattern matching
-		is_financial = _contains_financial_content( text , logger )
-
-		# Calculate processing time
-		elapsed_time = time.time( ) - start_time
-		logger.info( f"Financial content detected: {is_financial}" )
-		logger.info( f"Analysis completed in {elapsed_time:.2f} seconds" )
-
-		return is_financial
+		return False
 
 	except Exception as e :
 		# Log error with full exception details using exc_info
@@ -491,6 +314,9 @@ def is_book( artifact_location: Path ) -> bool :
 	artifact_label = profile_data[ "original_name" ]
 
 	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
+		return True
+
+	if "solutions" in artifact_label and "manual" in artifact_label :
 		return True
 
 	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" ] ) :

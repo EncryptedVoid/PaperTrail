@@ -1,10 +1,17 @@
+import logging
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Tuple
+
+import requests
+
+from config import JAVA_PATH , LOG_DIR , TIKA_SERVER_JAR_PATH
 
 
 def check_command_exists( command: str ) -> bool :
@@ -3076,3 +3083,70 @@ def find_libreoffice( ) -> str :
 			"LibreOffice not found on PATH. "
 			"Install with: sudo apt install libreoffice  OR  brew install libreoffice" ,
 	)
+
+
+def is_apache_tika_server_alive( ) -> bool :
+	try :
+		requests.get( f"http://localhost:9998/tika" , timeout=2 )
+		return True
+	except requests.ConnectionError :
+		return False
+
+
+def ensure_apache_tika_server(
+		logger: logging.Logger ,
+		tika_server_process: subprocess.Popen | None ,
+) -> subprocess.Popen :
+	"""
+	Ensure the Apache Tika server is running.
+
+	Args:
+			:param logger: Logger instance.
+			:param tika_server_process:
+	"""
+
+	# Already running?
+	if tika_server_process is not None and tika_server_process.poll( ) is None :
+		if is_apache_tika_server_alive( ) :
+			logger.debug( "Tika server already running" )
+			return tika_server_process
+
+	log_path = LOG_DIR / f"APACHE-TIKA-SERVER-{datetime.now( ).strftime( '%Y-%m-%d_%H-%M-%S' )}.log"
+	log_file = open( log_path , "w" )
+
+	cmd = [
+		str( JAVA_PATH ) ,
+		"-jar" ,
+		str( TIKA_SERVER_JAR_PATH ) ,
+		"-p" ,
+		"9998" ,
+	]
+
+	logger.info( f"Java path: {JAVA_PATH}" )
+	logger.info( f"Java path exists: {Path( JAVA_PATH ).exists( )}" )
+	logger.info( f"Tika JAR path: {TIKA_SERVER_JAR_PATH}" )
+	logger.info( f"Tika JAR exists: {Path( TIKA_SERVER_JAR_PATH ).exists( )}" )
+	logger.info( f"Tika server command: {cmd}" )
+	logger.info( f"Tika server log: {log_path}" )
+
+	kwargs: dict = dict( stdout=log_file , stderr=subprocess.STDOUT )
+	if sys.platform == "win32" :
+		kwargs[ "creationflags" ] = subprocess.CREATE_NO_WINDOW
+
+	proc = subprocess.Popen( cmd , **kwargs )
+
+	for i in range( 90 ) :
+		if proc.poll( ) is not None :
+			log_file.close( )
+			snippet = log_path.read_text( )[ -2000 : ]
+			raise RuntimeError(
+					f"Tika server exited with code {proc.returncode}:\n{snippet}" ,
+			)
+		if is_apache_tika_server_alive( ) :
+			logger.info( f"Apache Tika server ready on port 9998 (took {i + 1}s)" )
+			return proc
+		time.sleep( 1 )
+
+	log_file.close( )
+	proc.kill( )
+	raise RuntimeError( f"Tika server did not respond within 90s. Check log: {log_path}" )

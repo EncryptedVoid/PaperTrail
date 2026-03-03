@@ -1,0 +1,31 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH ouch-compress 1  "ouch-compress " 
+.SH NAME
+ouch\-compress \- Compress one or more files into one output file
+.SH SYNOPSIS
+\fBouch\-compress\fR [\fB\-l\fR|\fB\-\-level\fR] [\fB\-\-fast\fR] [\fB\-\-slow\fR] [\fB\-S\fR|\fB\-\-follow\-symlinks\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> <\fIOUTPUT\fR> 
+.SH DESCRIPTION
+Compress one or more files into one output file
+.SH OPTIONS
+.TP
+\fB\-l\fR, \fB\-\-level\fR=\fILEVEL\fR
+Compression level, applied to all formats
+.TP
+\fB\-\-fast\fR
+Fastest compression level possible, conflicts with \-\-level and \-\-slow
+.TP
+\fB\-\-slow\fR
+Slowest (and best) compression level possible, conflicts with \-\-level and \-\-fast
+.TP
+\fB\-S\fR, \fB\-\-follow\-symlinks\fR
+Archive target files instead of storing symlinks (supported by `tar` and `zip`)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFILES\fR>
+Files to be compressed
+.TP
+<\fIOUTPUT\fR>
+The resulting file. Its extensions can be used to specify the compression formats

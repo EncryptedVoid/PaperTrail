@@ -14,6 +14,7 @@ Author: Ashiq Gazi
 import logging
 from datetime import datetime
 
+from applications.identify_duplicates import DuplicateReviewer
 from config import (
 	CHECKSUM_HISTORY_FILE ,
 	COMPLETED_FORMAT_CONVERSION_DIR ,
@@ -21,17 +22,19 @@ from config import (
 	LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
+	RECURSIVE_SORT_DIR ,
 	SESSION_LOG_FILE_PREFIX ,
 	SYSTEM_DIRECTORIES ,
 	UNPROCESSED_ARTIFACTS_DIR ,
 )
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
+from stages.folder_decompression import decompressing_artifacts
 from stages.sanitize import sanitizing
-# from stages.semantics_extraction import extracting_semantics
-from utilities.applications.identify_duplicates import DuplicateReviewer
-# from utilities.applications.manual_file_triage import FileTriage
 from utilities.visual_processor import VisualProcessor
+
+# from stages.semantics_extraction import extracting_semantics
+# from utilities.applications.manual_file_triage import FileTriage
 
 # ============================================================================
 # SYSTEM INITIALIZATION
@@ -94,6 +97,12 @@ logger.info( "WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM" 
 
 # app = FolderManagerApp( source_dir=RECURSIVE_SORT_DIR , dest_dir=UNPROCESSED_ARTIFACTS_DIR , logger=logger )
 # app.mainloop( )
+
+decompressing_artifacts(
+		logger=logger ,
+		source_dir=RECURSIVE_SORT_DIR ,
+		dest_dir=UNPROCESSED_ARTIFACTS_DIR ,
+)
 
 sanitizing(
 		logger=logger ,

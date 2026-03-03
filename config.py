@@ -10,7 +10,7 @@ Author: Ashiq Gazi
 
 import os
 from pathlib import Path
-from typing import Dict , List
+from typing import Dict , List , Set
 
 # ── Root Directories ──────────────────────────────────────────────────────────
 # Primary drive where all PaperTrail data is loaded from
@@ -21,6 +21,7 @@ BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
 # Source directory for artifacts awaiting ingestion into the pipeline
 UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
 RECURSIVE_SORT_DIR = Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" )
+PROJECT_ASSETS_DIR = Path( r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets" )
 
 # ── Processing Directories ─────────────────────────────────────────────────────
 # Archive storage for fully processed and verified artifacts
@@ -619,16 +620,35 @@ TARGET_FORMATS = {
 	"document" : ".pdf" ,
 }
 
-JAVA_PATH: str = "java"
-MIN_JAVA_VERSION: int = 11
+# Alias groups: extensions that should be treated as equivalent
+EXTENSION_ALIASES: dict[ str , str ] = {
+	"jpeg" : "jpg" ,
+	"cr2"  : "jpg" ,
+	"arw"  : "jpg" ,
+	"nef"  : "jpg" ,
+	"vwf"  : "txt" ,
+	"qsf"  : "txt" ,
+	"qpf"  : "txt" ,
+	"ps1"  : "txt" ,
+	"vdx"  : "xml" ,
+	"tex"  : "m" ,
+}
 
-TIKA_APP_JAR_PATH: Path = Path(
-		r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\tika-app-3.2.3.jar" ,
-)
+FILETYPE_TRUSTED_EXTENSIONS: Set[ str ] = set( )
+FILETYPE_TRUSTED_EXTENSIONS.update( IMAGE_TYPES )
+FILETYPE_TRUSTED_EXTENSIONS.update( VIDEO_TYPES )
+FILETYPE_TRUSTED_EXTENSIONS.update( AUDIO_TYPES )
+FILETYPE_TRUSTED_EXTENSIONS.update( DOCUMENT_TYPES )
+FILETYPE_TRUSTED_EXTENSIONS.update( EMAIL_TYPES )
+FILETYPE_TRUSTED_EXTENSIONS.update( EXECUTABLE_EXTENSIONS )
+FILETYPE_TRUSTED_EXTENSIONS.update( ext.lstrip( "." ) for ext in ARCHIVE_TYPES )
 
-PDF_ARRANGER_EXE_PATH: Path = Path(
-		r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\pdfarranger.exe" ,
-)
+TIKA_SERVER_PORT: int = 9998
+JAVA_PATH: Path = Path( PROJECT_ASSETS_DIR / r"jdk-25.0.2+10-jre\bin\java.exe" )
+TIKA_APP_JAR_PATH: Path = Path( PROJECT_ASSETS_DIR / r"tika-app-3.2.3.jar" )
+TIKA_SERVER_JAR_PATH = Path( PROJECT_ASSETS_DIR / r"tika-server-standard-3.2.3.jar" )
+PDF_ARRANGER_EXE_PATH: Path = Path( PROJECT_ASSETS_DIR / r"pdfarranger.exe" )
+OUCH_DECOMPRESSOR_PATH: Path = Path( PROJECT_ASSETS_DIR / r"ouch-x86_64-pc-windows-msvc\ouch.exe" )
 
 # Apache Tika MIME Type → File Extension Mapping
 # Covers: Documents, Spreadsheets, Presentations, Images, Audio, Video,

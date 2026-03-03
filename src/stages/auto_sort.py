@@ -83,7 +83,10 @@ def automatically_sorting(
 			artifact_label = artifact.stem.lower( )
 			sanitized_label = sanitize_artifact_name( artifact_label )
 
-			if "manual" in artifact.stem.lower( ).strip( ) and artifact_ext == "pdf" :
+			if ("solutions" not in artifact_label
+					and "manual" in artifact.stem.lower( ).strip( )
+					and artifact_ext == "pdf"
+			) :
 				shutil.move( src=artifact , dst=MANUALS_ARCHIVE_DIR / f"{sanitized_label}.{artifact_ext}" )
 				logger.info( f"Moved file to: {MANUALS_ARCHIVE_DIR}" )
 

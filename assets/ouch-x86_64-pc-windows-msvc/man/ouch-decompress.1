@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH ouch-decompress 1  "ouch-decompress " 
+.SH NAME
+ouch\-decompress \- Decompresses one or more files, optionally into another folder
+.SH SYNOPSIS
+\fBouch\-decompress\fR [\fB\-d\fR|\fB\-\-dir\fR] [\fB\-r\fR|\fB\-\-remove\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+.SH DESCRIPTION
+Decompresses one or more files, optionally into another folder
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-dir\fR=\fIOUTPUT_DIR\fR
+Place results in a directory other than the current one
+.TP
+\fB\-r\fR, \fB\-\-remove\fR
+Remove the source file after successful decompression
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFILES\fR>
+Files to be decompressed, or "\-" for stdin

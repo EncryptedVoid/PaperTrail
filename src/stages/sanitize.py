@@ -22,7 +22,7 @@ import logging
 import shutil
 import time
 from pathlib import Path
-from typing import List
+from typing import List , Set
 
 from tqdm import tqdm
 
@@ -30,14 +30,11 @@ from config import (
 	CORRUPTED_ARTIFACTS_DIR ,
 	DUPLICATE_ARTIFACTS_DIR ,
 	PASSWORD_PROTECTED_ARTIFACTS_DIR ,
-	UNSUPPORTED_ARTIFACTS_DIR ,
+	UNSUPPORTED_ARTIFACTS_DIR
 )
 from utilities.checksum import generate_checksum , load_checksum_history , save_checksum
-from utilities.dependancy_ensurance import ensure_apache_tika , ensure_ffmpeg
-from utilities.sanitization import (
-	is_corrupted ,
-	is_password_protected ,
-	is_supported_type , )
+from utilities.dependancy_ensurance import ensure_apache_tika , ensure_apache_tika_server , ensure_ffmpeg
+from utilities.sanitization import is_corrupted , is_password_protected , is_supported_type
 
 
 def sanitizing(
@@ -45,21 +42,9 @@ def sanitizing(
 		source_dir: Path ,
 		dest_dir: Path ,
 ) -> None :
-	"""
-	Sanitize a directory of artifacts by detecting and moving duplicates, corrupted artifacts,
-	unsupported artifact types, and password-protected artifacts.
-
-	Args:
-		logger: Logger instance for recording processing events and statistics.
-		source_dir: Path object pointing to the directory containing artifacts to process.
-		recursive_allowed_dir: Optional Path to a directory the program is allowed to search recursively.
-
-	Returns:
-		None
-	"""
-
 	ensure_apache_tika( )
 	ensure_ffmpeg( )
+	tika_server_process = ensure_apache_tika_server( logger=logger , tika_server_process=None )
 
 	# Log conversion stage header for clear progress tracking
 	# This helps distinguish conversion logs from other pipeline stages
@@ -68,6 +53,11 @@ def sanitizing(
 	logger.info( "=" * 80 )
 
 	logger.info( f"Starting sanitization process for directory: {source_dir}" )
+
+	# List to store checksums of successfully processed artifacts
+	# Used to detect duplicates during current processing session
+	processed_checksums: List[ str ] = [ ]
+	past_processed_checksums: Set[ str ] = load_checksum_history( logger=logger )
 
 	# Use Path.iterdir() to get all items in directory, filter to only regular artifacts
 	# This excludes subdirectories, symlinks, and other non-artifact items
@@ -89,11 +79,6 @@ def sanitizing(
 	total_artifacts = len( unprocessed_artifacts )
 	logger.info( f"Found {total_artifacts} artifact(s) to process" )
 	logger.info( f"Artifact sorted by size for optimal processing order" )
-
-	# List to store checksums of successfully processed artifacts
-	# Used to detect duplicates during current processing session
-	processed_checksums: List[ str ] = [ ]
-	past_processed_checksums = load_checksum_history( logger=logger )
 
 	logger.info( "Beginning artifact-by-artifact sanitization process" )
 
@@ -140,7 +125,7 @@ def sanitizing(
 
 			logger.info( f"Artifact \"{artifact.name}\" is supported by PaperTrail as of Mar 1st, 2026" )
 
-			if is_corrupted( artifact_location=artifact ) :
+			if is_corrupted( artifact_location=artifact , tika_server_process=tika_server_process ) :
 				logger.info( f"Corrupted artifact detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=CORRUPTED_ARTIFACTS_DIR / artifact.name )
 				logger.info( f"Moved corrupted artifact to: {CORRUPTED_ARTIFACTS_DIR / artifact.name}" )
