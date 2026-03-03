@@ -14,281 +14,26 @@ Key Features:
 """
 
 import email
+import json
 import logging
-import os
-import re
 import time
 from pathlib import Path
 
 from config import (
+	ANKI_EXTENSIONS ,
+	ARTIFACT_PREFIX ,
+	ARTIFACT_PROFILES_DIR ,
 	CAD_FILES ,
 	CODE_EXTENSIONS ,
 	DIGITAL_CONTACT_EXTENSIONS ,
+	DOCUMENT_TYPES ,
+	EMAIL_TYPES ,
+	EXECUTABLE_EXTENSIONS ,
+	PROFILE_PREFIX ,
+	TEXT_TYPES ,
+	VIDEO_TYPES ,
 )
 from utilities.visual_processor import VisualProcessor
-
-
-def is_bookmark_file( artifact_location: Path ) -> bool :
-	"""
-	Detect if an HTML file is a browser bookmark export with high accuracy.
-
-	Analyzes HTML structure for Netscape bookmark file format markers including
-	DOCTYPE declaration, definition list structure, anchor tags, and timestamp
-	attributes. All conditions must be met for positive detection.
-
-	Args:
-									artifact_location: Path object pointing to the HTML file to analyze
-
-	Returns:
-									bool: True if file matches bookmark export format, False otherwise
-
-	Detection Criteria:
-									- Netscape bookmark DOCTYPE declaration
-									- Definition list (DL) structure
-									- DT entries with anchor (A) tags containing HREF attributes
-									- ADD_DATE attributes (unique to bookmark exports)
-
-	Note:
-									All four conditions must be met to ensure high detection accuracy
-									and avoid false positives from regular HTML files.
-	"""
-
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
-
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
-
-	try :
-		# Read the HTML file content with UTF-8 encoding
-		# Using 'r' mode for text files, errors='ignore' handles encoding issues
-		with open( artifact_location , "r" , encoding="utf-8" , errors="ignore" ) as f :
-			html_content = f.read( )
-	except Exception as e :
-		# Return False if file cannot be read (permissions, encoding errors, etc.)
-		return False
-
-	# Check for required Netscape bookmark DOCTYPE declaration
-	# re.IGNORECASE flag makes the search case-insensitive
-	has_netscape_doctype = bool(
-			re.search( r"<!DOCTYPE\s+NETSCAPE-Bookmark-file-1>" , html_content , re.IGNORECASE ) ,
-	)
-
-	# Check for definition list (DL) structure used in bookmark hierarchy
-	# DL tags contain bookmark folders and items
-	has_dl_structure = bool( re.search( r"<DL\s*>" , html_content , re.IGNORECASE ) )
-
-	# Check for DT (definition term) entries with anchor tags
-	# DT tags mark individual bookmarks, A tags contain the actual links
-	has_dt_anchors = bool(
-			re.search( r"<DT>\s*<A\s+[^>]*HREF\s*=" , html_content , re.IGNORECASE ) ,
-	)
-
-	# Check for ADD_DATE attribute specific to bookmark exports
-	# ADD_DATE contains Unix timestamp when bookmark was created
-	has_add_date = bool(
-			re.search( r'ADD_DATE\s*=\s*["\']?\d+["\']?' , html_content , re.IGNORECASE ) ,
-	)
-
-	# All conditions must be met for absolute certainty
-	# Boolean AND operation ensures strict matching
-	return has_netscape_doctype and has_dl_structure and has_dt_anchors and has_add_date
-
-
-def is_anki_deck( artifact_location: Path ) -> bool :
-	"""
-	Detect if a file is an Anki flashcard deck with high accuracy.
-
-	Supports multiple Anki formats including packaged decks (.apkg, .colpkg),
-	database files (.anki2, .anki21), and formatted text/CSV files that match
-	Anki's import format.
-
-	Args:
-									artifact_location: Path object pointing to the file to analyze
-
-	Returns:
-									bool: True if file is detected as Anki deck, False otherwise
-
-	Supported Formats:
-									- .apkg: Anki deck package (ZIP-based)
-									- .colpkg: Anki collection package (ZIP-based)
-									- .anki2: Anki 2.0 SQLite database
-									- .anki21: Anki 2.1 SQLite database
-									- .csv/.txt/.tsv: Text files with Anki card format
-									- Extension-less files: Content-based detection
-
-	Detection Methods:
-									- ZIP package validation for .apkg/.colpkg
-									- SQLite database structure validation for .anki2/.anki21
-									- Pattern matching for text-based card formats
-	"""
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
-
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
-
-	with open( artifact_location , "r" , encoding="utf-8" , errors="replace" ) as f :
-		first_line = f.readline( ).lower( )
-
-	q_idx = first_line.find( "question" )
-	a_idx = first_line.find( "answer" )
-
-	if q_idx != -1 and a_idx != -1 and q_idx < a_idx :
-		return True
-
-	if "anki" in str( artifact_location ) :
-		return True
-
-	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in [ "apkg" ]
-
-
-def is_backup_codes_file( artifact_location: Path ) -> bool :
-	"""
-	Detect if a file contains 2FA backup/recovery codes.
-
-	Analyzes file content for patterns matching common 2FA backup code formats
-	used by Google, Discord, Twitter, GitHub, and other services. Uses keyword
-	matching, pattern recognition, and code density analysis.
-
-	Args:
-									artifact_location: Path object pointing to the file to analyze
-
-	Returns:
-									bool: True if backup codes detected, False otherwise
-
-	Common Formats:
-									- Google: 8 digits (e.g., 12345678)
-									- Discord: 8 digits
-									- Twitter: 12 alphanumeric characters (e.g., a1b2c3d4e5f6)
-									- GitHub: 8-16 alphanumeric characters
-
-	Detection Strategy:
-									1. Quick filename keyword check
-									2. File size validation (must be under 50KB)
-									3. Pattern matching for code formats
-									4. Code density analysis (percentage of lines containing codes)
-									5. Keyword presence for additional confidence
-	"""
-
-	# Quick check: filename contains backup code keywords
-	# os.path.basename() extracts filename from full path
-	filename = artifact_location.stem.lower( ).strip( )
-	filename_keywords = [ "backup" , "recovery" , "2fa" , "codes" , "twofactor" , "mfa" ]
-
-	# any() returns True if at least one keyword is found in filename
-	if any( keyword in filename for keyword in filename_keywords ) :
-		return True
-
-	return False
-
-
-def is_financial_document(
-		artifact_location: Path , visual_processor: VisualProcessor , logger: logging.Logger ,
-) -> bool :
-	"""
-	Determine if a document contains financial, invoice, or purchase-related data.
-
-	Analyzes document content using text extraction and pattern matching to identify
-	financial documents such as invoices, receipts, statements, and purchase orders.
-	Handles multiple file formats including text, images, PDFs, and emails.
-
-	Args:
-									artifact_location: Path object pointing to the document to analyze
-									visual_processor: VisualProcessor instance for OCR/text extraction
-									logger: Logger instance for tracking analysis progress
-
-	Returns:
-									bool: True if document contains financial data, False otherwise
-
-	Supported Formats:
-									- Plain text: .txt, .csv, .json, .xml, .log
-									- Email: .eml
-									- Images: .jpg, .jpeg, .png, .bmp, .tiff, .webp
-									- PDF: .pdf (uses visual processing for text extraction)
-
-	Detection Method:
-									1. Extract text based on file type
-									2. Analyze for financial keywords and patterns
-									3. Score based on keyword categories and pattern matches
-									4. Apply threshold for positive classification
-	"""
-
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
-
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
-
-	# Record start time for performance tracking
-	start_time = time.time( )
-	logger.info( f"Analyzing document for financial content: {artifact_location.name}" )
-
-	# Verify file exists before processing
-	if not artifact_location.exists( ) :
-		logger.error( f"File not found: {artifact_location}" )
-		return False
-
-	try :
-		# Extract text based on file type
-		# Different file types require different extraction methods
-		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
-
-		if artifact_ext in [ "txt" , "csv" , "json" , "xml" , "log" ] :
-			logger.debug( f"Reading plain text file: {artifact_ext}" )
-			try :
-				# errors='ignore' handles invalid UTF-8 sequences gracefully
-				with open( artifact_location , "r" , encoding="utf-8" , errors="ignore" ) as f :
-					text = f.read( )
-				logger.debug( f"Extracted {len( text )} characters from plain text file" )
-			except Exception as e :
-				logger.error( f"Failed to read text file: {e}" )
-				text = ""
-
-		# Email files - parse email format
-		# .eml files use RFC 822 message format
-		elif artifact_ext == ".eml" :
-			logger.debug( "Parsing email file" )
-			text = _extract_from_email( artifact_location , logger )
-
-		# Images and PDFs - use VisualProcessor
-		# VisualProcessor performs OCR (Optical Character Recognition)
-		elif artifact_ext in [ ".pdf" , ".jpg" , ".jpeg" , ".png" , ".bmp" , ".tiff" , ".webp" ] :
-			logger.debug( f"Using VisualProcessor for {artifact_ext} file" )
-			try :
-				# VisualProcessor.extract_text() performs OCR on images/PDFs
-				text = visual_processor.extract_text( artifact_location )
-				logger.debug( f"Extracted {len( text )} characters via OCR" )
-			except Exception as e :
-				logger.error( f"VisualProcessor extraction failed: {e}" )
-				text = ""
-
-		# Validate extracted text has meaningful content
-		# Minimum 10 characters required for analysis
-		if len( text.strip( ) ) < 10 :
-			logger.warning( f"No meaningful text extracted from {artifact_location.name}" )
-			return False
-
-		# Analyze for financial content using keyword and pattern matching
-		is_financial = _contains_financial_content( text , logger )
-
-		# Calculate processing time
-		elapsed_time = time.time( ) - start_time
-		logger.info( f"Financial content detected: {is_financial}" )
-		logger.info( f"Analysis completed in {elapsed_time:.2f} seconds" )
-
-		return is_financial
-
-	except Exception as e :
-		# Log error with full exception details using exc_info
-		logger.error( f"Error analyzing {artifact_location.name}: {e}" , exc_info=True )
-		return False
 
 
 def _extract_from_email( artifact_location: Path , logger: logging.Logger ) -> str :
@@ -351,152 +96,207 @@ def _extract_from_email( artifact_location: Path , logger: logging.Logger ) -> s
 		return ""
 
 
-def _contains_financial_content( text: str , logger: logging.Logger ) -> bool :
+def is_bookmark_file( artifact_location: Path ) -> bool :
 	"""
-	Analyze text to determine if it contains financial/invoice/purchase content.
-
-	Uses multi-level scoring system combining keyword matching and pattern detection.
-	Keywords are grouped into categories (invoice, payment, financial, business) and
-	scored separately. Pattern matching identifies currency symbols, amounts, dates,
-	and invoice numbers.
+	Detect if an HTML file is a browser bookmark export .
 
 	Args:
-									text: Text content to analyze
-									logger: Logger instance for tracking analysis
+		artifact_location: Path object pointing to the HTML file to analyze
 
 	Returns:
-									bool: True if financial content detected based on scoring thresholds
+		bool: True if file matches bookmark export format, False otherwise
 
-	Scoring System:
-									- Invoice keywords: High value indicators (invoice, receipt, bill)
-									- Payment keywords: Transaction indicators (payment, paid, purchase)
-									- Financial terms: Money-related words (total, amount, price)
-									- Business terms: Commercial context (customer, vendor, billing)
-									- Pattern matches: Currency symbols, amounts, dates, invoice numbers
-
-	Thresholds:
-									- Minimum 3 keywords + 2 patterns, OR
-									- Minimum 5 keywords, OR
-									- 1+ invoice keyword + 4+ total score
 	"""
-	# Convert to lowercase for case-insensitive matching
-	text_lower = text.lower( )
 
-	# Financial keywords grouped by category for granular scoring
-	# Invoice keywords are strongest indicators
-	invoice_keywords = [ "invoice" , "receipt" , "bill" , "statement" , "quote" , "quotation" ]
+	# try :
+	# 	# Read the HTML file content with UTF-8 encoding
+	# 	# Using 'r' mode for text files, errors='ignore' handles encoding issues
+	# 	with open( artifact_location , "r" , encoding="utf-8" , errors="ignore" ) as f :
+	# 		html_content = f.read( )
+	# except Exception as e :
+	# 	# Return False if file cannot be read (permissions, encoding errors, etc.)
+	# 	return False
+	#
+	# # Check for required Netscape bookmark DOCTYPE declaration
+	# # re.IGNORECASE flag makes the search case-insensitive
+	# has_netscape_doctype = bool(
+	# 		re.search( r"<!DOCTYPE\s+NETSCAPE-Bookmark-file-1>" , html_content , re.IGNORECASE ) ,
+	# )
+	#
+	# # Check for definition list (DL) structure used in bookmark hierarchy
+	# # DL tags contain bookmark folders and items
+	# has_dl_structure = bool( re.search( r"<DL\s*>" , html_content , re.IGNORECASE ) )
+	#
+	# # Check for DT (definition term) entries with anchor tags
+	# # DT tags mark individual bookmarks, A tags contain the actual links
+	# has_dt_anchors = bool(
+	# 		re.search( r"<DT>\s*<A\s+[^>]*HREF\s*=" , html_content , re.IGNORECASE ) ,
+	# )
+	#
+	# # Check for ADD_DATE attribute specific to bookmark exports
+	# # ADD_DATE contains Unix timestamp when bookmark was created
+	# has_add_date = bool(
+	# 		re.search( r'ADD_DATE\s*=\s*["\']?\d+["\']?' , html_content , re.IGNORECASE ) ,
+	# )
+	#
+	# # All conditions must be met for absolute certainty
+	# # Boolean AND operation ensures strict matching
+	# return has_netscape_doctype and has_dl_structure and has_dt_anchors and has_add_date
 
-	# Payment keywords indicate financial transactions
-	payment_keywords = [
-		"payment" ,
-		"paid" ,
-		"due" ,
-		"owing" ,
-		"balance" ,
-		"transaction" ,
-		"purchase" ,
-		"order" ,
-		"sale" ,
-		"refund" ,
-	]
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	# Financial terms commonly appear in monetary documents
-	financial_terms = [
-		"total" ,
-		"subtotal" ,
-		"amount" ,
-		"price" ,
-		"cost" ,
-		"fee" ,
-		"charge" ,
-		"tax" ,
-		"vat" ,
-		"gst" ,
-		"discount" ,
-		"credit" ,
-		"debit" ,
-	]
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
 
-	# Business terms provide commercial context
-	business_terms = [
-		"customer" ,
-		"vendor" ,
-		"supplier" ,
-		"billing" ,
-		"account number" ,
-		"reference number" ,
-		"po number" ,
-		"order number" ,
-	]
+	artifact_label = artifact_location.stem.lower( ).strip( )
 
-	# Count keyword matches using sum with generator expression
-	invoice_score = sum( 1 for kw in invoice_keywords if kw in text_lower )
-	payment_score = sum( 1 for kw in payment_keywords if kw in text_lower )
-	financial_score = sum( 1 for kw in financial_terms if kw in text_lower )
-	business_score = sum( 1 for kw in business_terms if kw in text_lower )
+	if artifact_ext != ".html" :
+		return False
 
-	# Calculate total keyword score across all categories
-	total_keyword_score = (
-			invoice_score + payment_score + financial_score + business_score
-	)
+	return "bookmark" in artifact_label
 
-	logger.debug(
-			f"Keyword scores - Invoice: {invoice_score}, Payment: {payment_score}, "
-			f"Financial: {financial_score}, Business: {business_score}" ,
-	)
 
-	# Pattern detection for common financial formats
-	pattern_score = 0
+def is_anki_deck( artifact_location: Path ) -> bool :
+	"""
+	Detect if a file is an Anki flashcard deck with high accuracy.
 
-	# Currency symbols with amounts (e.g., $123.45, €50.00, £99)
-	# \s* allows optional whitespace, \d+ matches one or more digits
-	# (?:,\d{3})* matches optional thousands separators
-	# (?:\.\d{2})? matches optional decimal part
-	currency_pattern = r"[$€£¥]\s*\d+(?:,\d{3})*(?:\.\d{2})?"
-	if re.search( currency_pattern , text ) :
-		pattern_score += 2
-		logger.debug( "Currency pattern detected" )
+	Args:
+		artifact_location: Path object pointing to the file to analyze
 
-	# Amount patterns (e.g., "Total: 123.45", "Amount: $50")
-	# (?:...) creates non-capturing group
-	amount_pattern = r"(?:total|amount|price|cost|subtotal|balance)[\s:]+\$?\s*\d+(?:,\d{3})*(?:\.\d{2})?"
-	if re.search( amount_pattern , text_lower ) :
-		pattern_score += 2
-		logger.debug( "Amount pattern detected" )
+	Returns:
+		bool: True if file is detected as Anki deck, False otherwise
 
-	# Date patterns common in invoices (MM/DD/YYYY or YYYY-MM-DD)
-	date_pattern = r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{2}[/-]\d{2}"
-	if re.search( date_pattern , text ) :
-		pattern_score += 1
-		logger.debug( "Date pattern detected" )
+	"""
 
-	# Invoice number patterns (e.g., "INV-12345", "Invoice #123")
-	# \w+ matches alphanumeric characters, \d+ ensures numeric component
-	invoice_number_pattern = r"(?:invoice|receipt|bill|ref(?:erence)?)[#\s:-]*\w+\d+"
-	if re.search( invoice_number_pattern , text_lower ) :
-		pattern_score += 2
-		logger.debug( "Invoice number pattern detected" )
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	# Calculate total score combining keywords and patterns
-	total_score = total_keyword_score + pattern_score
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
 
-	logger.info(
-			f"Financial analysis - Keyword score: {total_keyword_score}, "
-			f"Pattern score: {pattern_score}, Total: {total_score}" ,
-	)
+	artifact_label = artifact_location.stem.lower( ).strip( )
 
-	# Decision threshold: need strong evidence across multiple dimensions
-	# At least 1 invoice keyword + 4 total score indicates financial doc
-	if invoice_score >= 1 and total_score >= 4 :
+	if artifact_ext in ANKI_EXTENSIONS :
 		return True
-	# Or 3+ keywords + 2+ patterns (strong combined evidence)
-	elif total_keyword_score >= 3 and pattern_score >= 2 :
+
+	if "anki" in artifact_label :
 		return True
-	# Or 5+ keywords regardless of patterns (keyword density)
-	elif total_keyword_score >= 5 :
+
+	if artifact_ext in TEXT_TYPES :
+		with open( artifact_location , "r" , encoding="utf-8" , errors="replace" ) as f :
+			first_line = f.readline( ).lower( )
+
+		if ((first_line.find( "question" ) != -1)
+				and (first_line.find( "answer" ) != -1)
+				and (first_line.find( "question" ) < first_line.find( "answer" ))
+		) :
+			return True
+
+		if ((first_line.find( "front" ) != -1)
+				and (first_line.find( "back" ) != -1)
+				and (first_line.find( "front" ) < first_line.find( "back" ))
+		) :
+			return True
+
+	return False
+
+
+def is_bitwarden_related( artifact_location: Path ) -> bool :
+	"""
+	Detect if a file contains 2FA backup/recovery codes.
+
+	Args:
+	artifact_location: Path object pointing to the file to analyze
+
+	Returns:
+		bool: True if backup codes detected, False otherwise
+	"""
+
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( )
+
+	if (artifact_ext not in TEXT_TYPES
+			or artifact_ext not in DOCUMENT_TYPES
+			or artifact_ext not in EMAIL_TYPES
+	) :
+		return False
+
+	# any() returns True if at least one keyword is found in filename
+	if any(
+			(keyword in artifact_label
+			 for keyword in [ "backup" , "recovery" , "2fa" , "mfa" , "dashlane" , "bitwarden" ]) ,
+	) :
 		return True
 
 	return False
+
+
+def is_financial_document(
+		artifact_location: Path ,
+		visual_processor: VisualProcessor ,
+		logger: logging.Logger ,
+) -> bool :
+	"""
+	Determine if a document contains financial, invoice, or purchase-related data.
+
+	Args:
+		artifact_location: Path object pointing to the document to analyze
+		visual_processor: VisualProcessor instance for OCR/text extraction
+		logger: Logger instance for tracking analysis progress
+
+	Returns:
+		bool: True if document contains financial data, False otherwise
+
+	"""
+
+	# Record start time for performance tracking
+	start_time = time.time( )
+	logger.info( f"Analyzing document for financial content: {artifact_location.name}" )
+
+	try :
+		# Extract text based on file type
+		# Different file types require different extraction methods
+		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+		# with open( profile_path , "r" , encoding="utf-8" ) as f :
+		# 	profile_data = json.load( f )  # returns a plain Python dict
+		#
+		# artifact_label = profile_data[ "original_name" ]
+
+		artifact_label = artifact_location.stem.lower( ).strip( )
+
+		if (artifact_ext not in DOCUMENT_TYPES
+				or artifact_ext not in EMAIL_TYPES
+				or artifact_ext not in TEXT_TYPES
+		) :
+			return False
+
+		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " , "invoice" , "cheque" ] ) :
+			return True
+
+		return False
+
+	except Exception as e :
+		# Log error with full exception details using exc_info
+		logger.error( f"Error analyzing {artifact_location.name}: {e}" , exc_info=True )
+		return False
 
 
 def is_book( artifact_location: Path ) -> bool :
@@ -504,82 +304,81 @@ def is_book( artifact_location: Path ) -> bool :
 	Detect whether a document is a book type.
 
 	Args:
-									artifact_location: Path object pointing to document file
+		artifact_location: Path object pointing to document file
 
 	Returns:
-									bool: True if document is likely a book, False otherwise
+		bool: True if document is likely a book, False otherwise
 
 	"""
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
 
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in [ "epub" , "cbr" , "djvu" ]
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( )
+
+	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
+		return True
+
+	if "solutions" in artifact_label and "manual" in artifact_label :
+		return True
+
+	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" ] ) :
+		return True
+
+	return False
 
 
 def is_code( artifact_location: Path ) -> bool :
 	"""
 	Check if file is source code based on extension.
 
-	Simple extension-based detection using CODE_EXTENSIONS list from config.
-	Matches file extension against known programming language extensions.
-
 	Args:
-									artifact_location: Path object to check
+		artifact_location: Path object to check
 
 	Returns:
-									bool: True if file is code, False otherwise
+		bool: True if file is code, False otherwise
 	"""
 
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
-
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
-
-	# Check if file extension is in CODE_EXTENSIONS list
-	# CODE_EXTENSIONS contains extensions like .py, .js, .java, etc.
-	return (artifact_location.suffix.lower( ).strip( ).strip( '.' ) in CODE_EXTENSIONS
-					and artifact_location.suffix.lower( ).strip( ).strip( '.' ) not in [ "html" ])
+	return (
+			("README" in artifact_location.stem.lower( ).strip( ))
+			or (artifact_location.suffix.lower( ).strip( ).strip( "." ) in CODE_EXTENSIONS)
+	)
 
 
 def is_executable( artifact_location: Path ) -> bool :
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
-
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
-
-	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in [ "exe" ]
+	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in EXECUTABLE_EXTENSIONS
 
 
 def is_3d_file( artifact_location: Path ) -> bool :
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
-
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
-
 	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in CAD_FILES
 
 
 def is_digital_contact_file( artifact_location: Path ) -> bool :
-	# Verify file exists using os.path for compatibility
-	if not os.path.exists( artifact_location ) :
-		return False
-
-	# Ensure path points to a file, not a directory
-	if not os.path.isfile( artifact_location ) :
-		return False
-
 	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in DIGITAL_CONTACT_EXTENSIONS
+
+
+def is_video_course( artifact_location: Path ) -> bool :
+	if artifact_location.suffix.lower( ).strip( ).strip( "." ) not in VIDEO_TYPES :
+		return False
+
+	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	
+	if not Path( profile_path ).exists( ) :
+		return False
+
+	with open( profile_path , "r" , encoding="utf-8" ) as f :
+		profile_data = json.load( f )  # returns a plain Python dict
+
+	print( f"profile_data: {profile_data}" )
+
+	if "youtube.com" in profile_data[ "metadata" ][ "format" ][ "PURL" ].lower( ) :
+		return True
+
+	return False

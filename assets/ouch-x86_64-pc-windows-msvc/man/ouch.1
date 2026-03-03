@@ -1,0 +1,65 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH ouch 1  "ouch 0.6.1" 
+.SH NAME
+ouch \- A command\-line utility for easily compressing and decompressing files and directories.
+.SH SYNOPSIS
+\fBouch\fR [\fB\-y\fR|\fB\-\-yes\fR] [\fB\-n\fR|\fB\-\-no\fR] [\fB\-A\fR|\fB\-\-accessible\fR] [\fB\-H\fR|\fB\-\-hidden\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-g\fR|\fB\-\-gitignore\fR] [\fB\-f\fR|\fB\-\-format\fR] [\fB\-p\fR|\fB\-\-password\fR] [\fB\-c\fR|\fB\-\-threads\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+A command\-line utility for easily compressing and decompressing files and directories.
+.PP
+Supported formats: tar, zip, gz, 7z, xz/lzma, bz/bz2, bz3, lz4, sz (Snappy), zst, rar and br.
+.PP
+Repository: https://github.com/ouch\-org/ouch
+.SH OPTIONS
+.TP
+\fB\-y\fR, \fB\-\-yes\fR
+Skip [Y/n] questions, default to yes
+.TP
+\fB\-n\fR, \fB\-\-no\fR
+Skip [Y/n] questions, default to no
+.TP
+\fB\-A\fR, \fB\-\-accessible\fR
+Activate accessibility mode, reducing visual noise
+.RS
+May also be specified with the \fBACCESSIBLE\fR environment variable. 
+.RE
+.TP
+\fB\-H\fR, \fB\-\-hidden\fR
+Ignore hidden files
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Silence output
+.TP
+\fB\-g\fR, \fB\-\-gitignore\fR
+Ignore files matched by git\*(Aqs ignore files
+.TP
+\fB\-f\fR, \fB\-\-format\fR=\fIFORMAT\fR
+Specify the format of the archive
+.TP
+\fB\-p\fR, \fB\-\-password\fR=\fIPASSWORD\fR
+Decompress or list with password
+.TP
+\fB\-c\fR, \fB\-\-threads\fR=\fITHREADS\fR
+Concurrent working threads
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH SUBCOMMANDS
+.TP
+ouch\-compress(1)
+Compress one or more files into one output file
+.TP
+ouch\-decompress(1)
+Decompresses one or more files, optionally into another folder
+.TP
+ouch\-list(1)
+List contents of an archive
+.TP
+ouch\-help(1)
+Print this message or the help of the given subcommand(s)
+.SH VERSION
+v0.6.1

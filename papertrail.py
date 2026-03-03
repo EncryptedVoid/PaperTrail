@@ -13,24 +13,26 @@ Author: Ashiq Gazi
 
 import logging
 from datetime import datetime
-from pathlib import Path
 
+from applications.identify_duplicates import DuplicateReviewer
+from applications.manual_file_triage import FileTriage
 from config import (
-	CHECKSUM_HISTORY_FILE ,
+	APPLICATION_FOLDERS ,
+	COMPLETED_FORMAT_CONVERSION_DIR ,
+	COMPLETED_SANITIZATION_DIR ,
 	LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
+	RECURSIVE_SORT_DIR ,
 	SESSION_LOG_FILE_PREFIX ,
 	SYSTEM_DIRECTORIES ,
+	SYSTEM_PROGRAM_TRACKING_FILES ,
 	UNPROCESSED_ARTIFACTS_DIR ,
 )
 from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
-from stages.identify_duplicates import DuplicateReviewer
-from stages.manual_file_triage import FileTriage
-from stages.metadata_extraction import extracting_metadata
+from stages.folder_decompression import decompressing_artifacts
 from stages.sanitize import sanitizing
-from stages.semantics_extraction import extracting_semantics
 from utilities.visual_processor import VisualProcessor
 
 # ============================================================================
@@ -43,8 +45,9 @@ from utilities.visual_processor import VisualProcessor
 for directory in SYSTEM_DIRECTORIES :
 	directory.mkdir( parents=True , exist_ok=True )
 
-CHECKSUM_HISTORY_FILE.parent.mkdir( parents=True , exist_ok=True )
-CHECKSUM_HISTORY_FILE.touch( exist_ok=True )
+for file in SYSTEM_PROGRAM_TRACKING_FILES :
+	file.parent.mkdir( parents=True , exist_ok=True )
+	file.touch( exist_ok=True )
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -92,40 +95,48 @@ print( "Root handlers after basicConfig:" , logging.root.handlers )
 # This marks the beginning of a new processing session in the logs
 logger.info( "WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM" )
 
+# app = FolderManagerApp( source_dir=RECURSIVE_SORT_DIR , dest_dir=UNPROCESSED_ARTIFACTS_DIR , logger=logger )
+# app.mainloop( )
+
+decompressing_artifacts(
+		logger=logger ,
+		source_dir=RECURSIVE_SORT_DIR ,
+		dest_dir=UNPROCESSED_ARTIFACTS_DIR ,
+)
+
 sanitizing(
 		logger=logger ,
 		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
-		recursive_allowed_dir=Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" ) ,
+		dest_dir=COMPLETED_SANITIZATION_DIR ,
 )
 
-if any( item.is_file( ) for item in UNPROCESSED_ARTIFACTS_DIR.iterdir( ) ) :
-	reviewer = DuplicateReviewer( logger=logger , source_dir=UNPROCESSED_ARTIFACTS_DIR )
-	reviewer.run( )
+duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
+duplicate_reviewer.run( )
 
-extracting_metadata(
+converting_files(
 		logger=logger ,
-		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
+		source_dir=COMPLETED_SANITIZATION_DIR ,
+		dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
-
-converting_files( logger=logger , source_dir=UNPROCESSED_ARTIFACTS_DIR )
 
 visual_processor = VisualProcessor( logger=logger )
 
 automatically_sorting(
 		logger=logger ,
 		visual_processor=visual_processor ,
-		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
+		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
 
-extracting_semantics(
-		logger=logger ,
-		visual_processor=visual_processor ,
-		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
-)
+manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
+manual_artifact_triage.run( )
 
-if any( item.is_file( ) for item in UNPROCESSED_ARTIFACTS_DIR.iterdir( ) ) :
-	triage = FileTriage( source_dir=UNPROCESSED_ARTIFACTS_DIR )
-	triage.run( )
+for directory in APPLICATION_FOLDERS :
+	logger.info( f"Performing final conversions in target application. Processing {directory}." )
+	converting_files(
+			logger=logger ,
+			source_dir=directory ,
+			dest_dir=directory ,
+	)
 
 # ============================================================================
 # PIPELINE COMPLETION

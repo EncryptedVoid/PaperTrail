@@ -1,0 +1,751 @@
+Tika server JAR found: C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets\tika-server-standard-3.2.3.jar
+
+Starting Tika server on port 9998...
+Java: openjdk version "21.0.10" 2026-01-20 LTS
+Tika server ready after 2s
+
+Found 100 file(s) in C:\Users\UserX\Desktop\PAPERTRAIL-LOAD
+
+===========================================================================
+  T1: Tika Subprocess
+===========================================================================
+  [  1/100] ._Virtue Ethics and the Fundamental Attribution Erro     2.56246s  multipart/appledouble
+  [  2/100] [Bibliography {MLA8}] ASHIQ GAZI - Connections Beyon     2.70478s  application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  [  3/100] (3) FSF1D - Mains De Crabe [Made up game].jpg            2.54766s  image/jpeg
+  [  4/100] (Final) Ashiq Gazi - AVI1O Portrait Colour Values Pr     2.56342s  image/jpeg
+  [  5/100] 20210106_164055.jpg                                      2.55614s  image/jpeg
+  [  6/100] 20210109_080610 (1).jpg                                  2.70788s  image/jpeg
+  [  7/100] 20210109_080610.jpg                                      2.88748s  image/jpeg
+  [  8/100] 20210514_060936.jpg                                      2.64409s  image/jpeg
+  [  9/100] 20210525_100918.jpg                                      2.60231s  image/jpeg
+  [ 10/100] 20210528_095123.jpg                                      2.67553s  image/jpeg
+  [ 11/100] 20210602_210108.jpg                                      2.93329s  image/jpeg
+  [ 12/100] 20210602_210108_1.jpg                                    2.64633s  image/jpeg
+  [ 13/100] 20210602_210111.jpg                                      2.68110s  image/jpeg
+  [ 14/100] 20210602_210111_1.jpg                                    2.65623s  image/jpeg
+  [ 15/100] 20210602_210118.jpg                                      2.64176s  image/jpeg
+  [ 16/100] 20210602_210118_1.jpg                                    2.61386s  image/jpeg
+  [ 17/100] 20210607_094322.jpg                                      2.61216s  image/jpeg
+  [ 18/100] 20210607_095655.jpg                                      2.65547s  image/jpeg
+  [ 19/100] 20210613_182121.jpg                                      2.65429s  image/jpeg
+  [ 20/100] 20210613_182121_1.jpg                                    2.75538s  image/jpeg
+  [ 21/100] 20210613_182140.jpg                                      2.88367s  image/jpeg
+  [ 22/100] 5.7 MPM1D Homework (2).jpg                               2.72219s  image/jpeg
+  [ 23/100] 5.9 MPM1D Homewowrk Answers (2).jpg                      2.78145s  image/jpeg
+  [ 24/100] 5.9 MPM1D Homewowrk Answers (3).jpg                      2.53855s  image/jpeg
+  [ 25/100] 20210510_213316_1.mp4                                    2.48591s  video/mp4
+  [ 26/100] 20210510_215800.mp4                                      2.49187s  video/mp4
+  [ 27/100] 20210510_215800_1.mp4                                    2.48029s  video/mp4
+  [ 28/100] 20210511_201601.mp4                                      2.46518s  video/mp4
+  [ 29/100] 20210511_201601_1.mp4                                    2.47640s  video/mp4
+  [ 30/100] 20210511_201622.mp4                                      2.44929s  video/mp4
+  [ 31/100] 20210511_201622_1.mp4                                    2.46977s  video/mp4
+  [ 32/100] 20210513_202035.mp4                                      2.46792s  video/mp4
+  [ 33/100] 20210513_202035_1.mp4                                    2.46976s  video/mp4
+  [ 34/100] 20210514_095850.mp4                                      2.49273s  video/mp4
+  [ 35/100] 20210514_095850_1.mp4                                    2.45381s  video/mp4
+  [ 36/100] 20210514_095858.mp4                                      2.48340s  video/mp4
+  [ 37/100] 20210514_095858_1.mp4                                    2.47447s  video/mp4
+  [ 38/100] 20210516_173848.mp4                                      2.49417s  video/mp4
+  [ 39/100] 20210529_160754.mp4                                      2.48785s  video/mp4
+  [ 40/100] 20210529_160754_1.mp4                                    2.46581s  video/mp4
+  [ 41/100] 20210529_175450.mp4                                      2.46697s  video/mp4
+  [ 42/100] 20210529_175450_1.mp4                                    2.45028s  video/mp4
+  [ 43/100] 20210530_173212.mp4                                      2.46579s  video/mp4
+  [ 44/100] 20210530_173212_1.mp4                                    2.47579s  video/mp4
+  [ 45/100] 20210530_173613.mp4                                      2.60497s  video/mp4
+  [ 46/100] 20210530_173613_1.mp4                                    2.54537s  video/mp4
+  [ 47/100] 20210530_173644.mp4                                      2.43354s  video/mp4
+  [ 48/100] 20210530_173644_1.mp4                                    2.40099s  video/mp4
+  [ 49/100] 20210609_093858.mp4                                      2.38109s  video/mp4
+  [ 50/100] 20210609_093858_1.mp4                                    2.40753s  video/mp4
+  [ 51/100] 20210611_093915.mp4                                      2.39343s  video/mp4
+  [ 52/100] 20210615_215418.mp4                                      2.41449s  video/mp4
+  [ 53/100] 20210615_215418_1.mp4                                    2.39661s  video/mp4
+  [ 54/100] 20210622_140102.mp4                                      2.46121s  video/mp4
+  [ 55/100] 20210622_140102_1.mp4                                    2.39227s  video/mp4
+  [ 56/100] 20210622_140128.mp4                                      2.39114s  video/mp4
+  [ 57/100] 20210622_190725.mp4                                      2.40421s  video/mp4
+  [ 58/100] 20210622_190725_1.mp4                                    2.45743s  video/mp4
+  [ 59/100] 20210623_220419.mp4                                      2.41141s  video/mp4
+  [ 60/100] 2B4723DA4EA7C13644B93CF561D9678A_video_dashinit.mp4      2.37025s  video/mp4
+  [ 61/100] 2c586ccf5d6d6ef722458144f4f23215.mp4                     2.38027s  video/mp4
+  [ 62/100] 4bec94c4190004e82a3571fd80598fad.mp4                     2.40690s  video/mp4
+  [ 63/100] 4e8057d73faeb83c654b5b1c2e0f1cee.mp4                     2.42934s  video/mp4
+  [ 64/100] 6c0cef32abf0354699095d97bff2ad81.mp4                     2.38783s  video/mp4
+  [ 65/100] (Solution Manual) Discrete_5.pdf                         2.38365s  application/pdf
+  [ 66/100] (Springer Undergraduate Mathematics Series) Nicolas      2.38603s  application/pdf
+  [ 67/100] ._TBMT_Sample_Assembly_Guide.pdf                         2.43077s  multipart/appledouble
+  [ 68/100] 1_3.pdf                                                  2.37970s  application/pdf
+  [ 69/100] [Ashiq Arib] Shattered Memories - Google Docs.pdf        2.40263s  application/pdf
+  [ 70/100] 1_3.png                                                  2.46420s  image/png
+  [ 71/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     2.49329s  image/jpeg
+  [ 72/100] (Script) Ashiq and Kamila_s 2019 Google Slides Leg.p     2.64941s  application/vnd.openxmlformats-officedocument.presentationml.presentation
+  [ 73/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     2.50696s  model/x.stl-binary
+  [ 74/100] 01.But what is a neural network？ ｜ Deep learning cha     2.30154s
+  [ 75/100] 02.The essence of calculus.webm                          2.48347s  video/webm
+  [ 76/100] 03.How are holograms possible？.webm                      2.29669s
+  [ 77/100] 04.But what is a Fourier series？  From heat flow to      2.30760s
+  [ 78/100] 05.But what is quantum computing？  (Grover's Algorit     2.24357s
+  [ 79/100] 06.But what is the Fourier Transform？  A visual intr     2.27266s
+  [ 80/100] 07.But what is the Central Limit Theorem？.webm           2.26001s
+  [ 81/100] 08.Transformers (how LLMs work) explained visually ｜     2.28751s
+  [ 82/100] 09.But why would light ＂slow down＂？ ｜ Visualizing Fe     2.28504s
+  [ 83/100] 10.e^(iπ) in 3.14 minutes, using dynamics ｜ DE5.webm     2.31132s
+  [ 84/100] 11.Newton’s fractal (which Newton knew nothing about     2.40843s  video/webm
+  [ 85/100] 12.But what is a convolution？.webm                       2.27204s
+  [ 86/100] 13.But how does bitcoin actually work？.webm              2.21519s
+  [ 87/100] 14.But what is the Riemann zeta function？ Visualizin     2.17561s
+  [ 88/100] 15.Group theory, abstraction, and the 196,883-dimens     2.39547s  video/webm
+  [ 89/100] 16.Some light quantum mechanics (with minutephysics)     2.39680s  video/webm
+  [ 90/100] 17.The more general uncertainty principle, regarding     2.40066s  video/webm
+  [ 91/100] 18.Fractals are typically not self-similar.webm          2.41193s  video/webm
+  [ 92/100] 19.Divergence and curl：  The language of Maxwell's e     2.17320s
+  [ 93/100] 20.Differential equations, a tourist's guide ｜ DE1.w     2.16568s
+  [ 94/100] 21.How (and why) to raise e to the power of a matrix     2.19756s
+  [ 95/100] 22.Vectors ｜ Chapter 1, Essence of linear algebra.we     2.18788s
+  [ 96/100] 23.But what are Hamming codes？ The origin of error c     2.25516s
+  [ 97/100] 24.Euler's formula with introductory group theory.we     2.40253s  video/webm
+  [ 98/100] 25.Bayes theorem, the geometry of changing beliefs.w     2.37329s  video/webm
+  [ 99/100] 26.Visualizing quaternions (4d numbers) with stereog     2.39891s  video/webm
+  [100/100] 27.Hilbert's Curve： Is infinite math useful？.webm        2.21266s
+
+  Total: 246.354s   Avg: 2.46354s/file
+
+===========================================================================
+  T2: Tika Server
+===========================================================================
+  [  1/100] ._Virtue Ethics and the Fundamental Attribution Erro     2.12840s  multipart/appledouble
+  [  2/100] [Bibliography {MLA8}] ASHIQ GAZI - Connections Beyon     2.07703s  application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  [  3/100] (3) FSF1D - Mains De Crabe [Made up game].jpg            2.06230s  image/jpeg
+  [  4/100] (Final) Ashiq Gazi - AVI1O Portrait Colour Values Pr     2.06750s  image/jpeg
+  [  5/100] 20210106_164055.jpg                                      2.07877s  image/jpeg
+  [  6/100] 20210109_080610 (1).jpg                                  2.07367s  image/jpeg
+  [  7/100] 20210109_080610.jpg                                      2.10827s  image/jpeg
+  [  8/100] 20210514_060936.jpg                                      2.06872s  image/jpeg
+  [  9/100] 20210525_100918.jpg                                      2.07532s  image/jpeg
+  [ 10/100] 20210528_095123.jpg                                      2.04560s  image/jpeg
+  [ 11/100] 20210602_210108.jpg                                      2.06323s  image/jpeg
+  [ 12/100] 20210602_210108_1.jpg                                    2.07221s  image/jpeg
+  [ 13/100] 20210602_210111.jpg                                      2.04638s  image/jpeg
+  [ 14/100] 20210602_210111_1.jpg                                    2.06689s  image/jpeg
+  [ 15/100] 20210602_210118.jpg                                      2.07918s  image/jpeg
+  [ 16/100] 20210602_210118_1.jpg                                    2.05991s  image/jpeg
+  [ 17/100] 20210607_094322.jpg                                      2.04918s  image/jpeg
+  [ 18/100] 20210607_095655.jpg                                      2.05583s  image/jpeg
+  [ 19/100] 20210613_182121.jpg                                      2.06078s  image/jpeg
+  [ 20/100] 20210613_182121_1.jpg                                    2.04537s  image/jpeg
+  [ 21/100] 20210613_182140.jpg                                      2.07134s  image/jpeg
+  [ 22/100] 5.7 MPM1D Homework (2).jpg                               2.08433s  image/jpeg
+  [ 23/100] 5.9 MPM1D Homewowrk Answers (2).jpg                      2.03765s  image/jpeg
+  [ 24/100] 5.9 MPM1D Homewowrk Answers (3).jpg                      2.04859s  image/jpeg
+  [ 25/100] 20210510_213316_1.mp4                                    2.06179s  video/mp4
+  [ 26/100] 20210510_215800.mp4                                      2.87498s  video/mp4
+  [ 27/100] 20210510_215800_1.mp4                                    2.87631s  video/mp4
+  [ 28/100] 20210511_201601.mp4                                      2.09397s  video/mp4
+  [ 29/100] 20210511_201601_1.mp4                                    2.06218s  video/mp4
+  [ 30/100] 20210511_201622.mp4                                      2.27269s  video/mp4
+  [ 31/100] 20210511_201622_1.mp4                                    2.26121s  video/mp4
+  [ 32/100] 20210513_202035.mp4                                      2.11744s  video/mp4
+  [ 33/100] 20210513_202035_1.mp4                                    2.08941s  video/mp4
+  [ 34/100] 20210514_095850.mp4                                      2.05882s  video/mp4
+  [ 35/100] 20210514_095850_1.mp4                                    2.06242s  video/mp4
+  [ 36/100] 20210514_095858.mp4                                      3.41841s  video/mp4
+  [ 37/100] 20210514_095858_1.mp4                                    3.35746s  video/mp4
+  [ 38/100] 20210516_173848.mp4                                      3.54407s  video/mp4
+  [ 39/100] 20210529_160754.mp4                                      3.01016s  video/mp4
+  [ 40/100] 20210529_160754_1.mp4                                    2.95498s  video/mp4
+  [ 41/100] 20210529_175450.mp4                                      4.13307s  video/mp4
+  [ 42/100] 20210529_175450_1.mp4                                    4.21398s  video/mp4
+  [ 43/100] 20210530_173212.mp4                                      2.78064s  video/mp4
+  [ 44/100] 20210530_173212_1.mp4                                    2.77413s  video/mp4
+  [ 45/100] 20210530_173613.mp4                                      2.34665s  video/mp4
+  [ 46/100] 20210530_173613_1.mp4                                    2.33275s  video/mp4
+  [ 47/100] 20210530_173644.mp4                                      2.12374s  video/mp4
+  [ 48/100] 20210530_173644_1.mp4                                    2.12146s  video/mp4
+  [ 49/100] 20210609_093858.mp4                                      2.25508s  video/mp4
+  [ 50/100] 20210609_093858_1.mp4                                    2.28121s  video/mp4
+  [ 51/100] 20210611_093915.mp4                                      2.43754s  video/mp4
+  [ 52/100] 20210615_215418.mp4                                      2.22368s  video/mp4
+  [ 53/100] 20210615_215418_1.mp4                                    2.24603s  video/mp4
+  [ 54/100] 20210622_140102.mp4                                      2.17228s  video/mp4
+  [ 55/100] 20210622_140102_1.mp4                                    2.19560s  video/mp4
+  [ 56/100] 20210622_140128.mp4                                      2.44179s  video/mp4
+  [ 57/100] 20210622_190725.mp4                                      2.33050s  video/mp4
+  [ 58/100] 20210622_190725_1.mp4                                    2.30688s  video/mp4
+  [ 59/100] 20210623_220419.mp4                                      2.49125s  video/mp4
+  [ 60/100] 2B4723DA4EA7C13644B93CF561D9678A_video_dashinit.mp4      2.06863s  video/mp4
+  [ 61/100] 2c586ccf5d6d6ef722458144f4f23215.mp4                     2.04267s  video/mp4
+  [ 62/100] 4bec94c4190004e82a3571fd80598fad.mp4                     2.03615s  video/mp4
+  [ 63/100] 4e8057d73faeb83c654b5b1c2e0f1cee.mp4                     2.05184s  video/mp4
+  [ 64/100] 6c0cef32abf0354699095d97bff2ad81.mp4                     2.10036s  video/mp4
+  [ 65/100] (Solution Manual) Discrete_5.pdf                         2.19636s  application/pdf
+  [ 66/100] (Springer Undergraduate Mathematics Series) Nicolas      2.10579s  application/pdf
+  [ 67/100] ._TBMT_Sample_Assembly_Guide.pdf                         2.05113s  multipart/appledouble
+  [ 68/100] 1_3.pdf                                                  2.04077s  application/pdf
+  [ 69/100] [Ashiq Arib] Shattered Memories - Google Docs.pdf        2.05119s  application/pdf
+  [ 70/100] 1_3.png                                                  2.03545s  image/png
+  [ 71/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     2.05778s  image/jpeg
+  [ 72/100] (Script) Ashiq and Kamila_s 2019 Google Slides Leg.p     2.13511s  application/vnd.openxmlformats-officedocument.presentationml.presentation
+  [ 73/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     2.04909s  model/x.stl-binary
+  [ 74/100] 01.But what is a neural network？ ｜ Deep learning cha     2.33667s  video/webm
+  [ 75/100] 02.The essence of calculus.webm                          2.16837s  video/webm
+  [ 76/100] 03.How are holograms possible？.webm                      3.09736s  video/webm
+  [ 77/100] 04.But what is a Fourier series？  From heat flow to      2.50750s  video/webm
+  [ 78/100] 05.But what is quantum computing？  (Grover's Algorit     2.42329s  video/webm
+  [ 79/100] 06.But what is the Fourier Transform？  A visual intr     2.57204s  video/webm
+  [ 80/100] 07.But what is the Central Limit Theorem？.webm           2.37851s  video/webm
+  [ 81/100] 08.Transformers (how LLMs work) explained visually ｜     2.44725s  video/webm
+  [ 82/100] 09.But why would light ＂slow down＂？ ｜ Visualizing Fe     2.58002s  video/webm
+  [ 83/100] 10.e^(iπ) in 3.14 minutes, using dynamics ｜ DE5.webm     2.09450s  video/webm
+  [ 84/100] 11.Newton’s fractal (which Newton knew nothing about     2.59051s  video/webm
+  [ 85/100] 12.But what is a convolution？.webm                       2.29963s  video/webm
+  [ 86/100] 13.But how does bitcoin actually work？.webm              2.37803s  video/webm
+  [ 87/100] 14.But what is the Riemann zeta function？ Visualizin     2.36423s  video/webm
+  [ 88/100] 15.Group theory, abstraction, and the 196,883-dimens     2.39083s  video/webm
+  [ 89/100] 16.Some light quantum mechanics (with minutephysics)     2.33664s  video/webm
+  [ 90/100] 17.The more general uncertainty principle, regarding     2.49638s  video/webm
+  [ 91/100] 18.Fractals are typically not self-similar.webm          2.32615s  video/webm
+  [ 92/100] 19.Divergence and curl：  The language of Maxwell's e     2.65316s  video/webm
+  [ 93/100] 20.Differential equations, a tourist's guide ｜ DE1.w     2.73048s  video/webm
+  [ 94/100] 21.How (and why) to raise e to the power of a matrix     2.40434s  video/webm
+  [ 95/100] 22.Vectors ｜ Chapter 1, Essence of linear algebra.we     2.14673s  video/webm
+  [ 96/100] 23.But what are Hamming codes？ The origin of error c     2.30256s  video/webm
+  [ 97/100] 24.Euler's formula with introductory group theory.we     2.39583s  video/webm
+  [ 98/100] 25.Bayes theorem, the geometry of changing beliefs.w     2.23740s  video/webm
+  [ 99/100] 26.Visualizing quaternions (4d numbers) with stereog     2.85350s  video/webm
+  [100/100] 27.Hilbert's Curve： Is infinite math useful？.webm        2.26684s  video/webm
+
+  Total: 233.752s   Avg: 2.33752s/file
+
+===========================================================================
+  T3: filetype only
+===========================================================================
+  [  1/100] ._Virtue Ethics and the Fundamental Attribution Erro     0.00043s  (unknown)
+  [  2/100] [Bibliography {MLA8}] ASHIQ GAZI - Connections Beyon     0.00024s  application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  [  3/100] (3) FSF1D - Mains De Crabe [Made up game].jpg            0.00018s  image/jpeg
+  [  4/100] (Final) Ashiq Gazi - AVI1O Portrait Colour Values Pr     0.00019s  image/jpeg
+  [  5/100] 20210106_164055.jpg                                      0.00018s  image/jpeg
+  [  6/100] 20210109_080610 (1).jpg                                  0.00018s  image/jpeg
+  [  7/100] 20210109_080610.jpg                                      0.00017s  image/jpeg
+  [  8/100] 20210514_060936.jpg                                      0.00017s  image/jpeg
+  [  9/100] 20210525_100918.jpg                                      0.00017s  image/jpeg
+  [ 10/100] 20210528_095123.jpg                                      0.00018s  image/jpeg
+  [ 11/100] 20210602_210108.jpg                                      0.00017s  image/jpeg
+  [ 12/100] 20210602_210108_1.jpg                                    0.00017s  image/jpeg
+  [ 13/100] 20210602_210111.jpg                                      0.00018s  image/jpeg
+  [ 14/100] 20210602_210111_1.jpg                                    0.00017s  image/jpeg
+  [ 15/100] 20210602_210118.jpg                                      0.00017s  image/jpeg
+  [ 16/100] 20210602_210118_1.jpg                                    0.00018s  image/jpeg
+  [ 17/100] 20210607_094322.jpg                                      0.00017s  image/jpeg
+  [ 18/100] 20210607_095655.jpg                                      0.00018s  image/jpeg
+  [ 19/100] 20210613_182121.jpg                                      0.00018s  image/jpeg
+  [ 20/100] 20210613_182121_1.jpg                                    0.00018s  image/jpeg
+  [ 21/100] 20210613_182140.jpg                                      0.00018s  image/jpeg
+  [ 22/100] 5.7 MPM1D Homework (2).jpg                               0.00018s  image/jpeg
+  [ 23/100] 5.9 MPM1D Homewowrk Answers (2).jpg                      0.00017s  image/jpeg
+  [ 24/100] 5.9 MPM1D Homewowrk Answers (3).jpg                      0.00017s  image/jpeg
+  [ 25/100] 20210510_213316_1.mp4                                    0.00431s  video/mp4
+  [ 26/100] 20210510_215800.mp4                                      0.00023s  video/mp4
+  [ 27/100] 20210510_215800_1.mp4                                    0.00021s  video/mp4
+  [ 28/100] 20210511_201601.mp4                                      0.00020s  video/mp4
+  [ 29/100] 20210511_201601_1.mp4                                    0.00020s  video/mp4
+  [ 30/100] 20210511_201622.mp4                                      0.00020s  video/mp4
+  [ 31/100] 20210511_201622_1.mp4                                    0.00021s  video/mp4
+  [ 32/100] 20210513_202035.mp4                                      0.00025s  video/mp4
+  [ 33/100] 20210513_202035_1.mp4                                    0.00020s  video/mp4
+  [ 34/100] 20210514_095850.mp4                                      0.00020s  video/mp4
+  [ 35/100] 20210514_095850_1.mp4                                    0.00020s  video/mp4
+  [ 36/100] 20210514_095858.mp4                                      0.00020s  video/mp4
+  [ 37/100] 20210514_095858_1.mp4                                    0.00020s  video/mp4
+  [ 38/100] 20210516_173848.mp4                                      0.00020s  video/mp4
+  [ 39/100] 20210529_160754.mp4                                      0.00020s  video/mp4
+  [ 40/100] 20210529_160754_1.mp4                                    0.00020s  video/mp4
+  [ 41/100] 20210529_175450.mp4                                      0.00020s  video/mp4
+  [ 42/100] 20210529_175450_1.mp4                                    0.00020s  video/mp4
+  [ 43/100] 20210530_173212.mp4                                      0.00020s  video/mp4
+  [ 44/100] 20210530_173212_1.mp4                                    0.00020s  video/mp4
+  [ 45/100] 20210530_173613.mp4                                      0.00020s  video/mp4
+  [ 46/100] 20210530_173613_1.mp4                                    0.00020s  video/mp4
+  [ 47/100] 20210530_173644.mp4                                      0.00019s  video/mp4
+  [ 48/100] 20210530_173644_1.mp4                                    0.00021s  video/mp4
+  [ 49/100] 20210609_093858.mp4                                      0.00023s  video/mp4
+  [ 50/100] 20210609_093858_1.mp4                                    0.00021s  video/mp4
+  [ 51/100] 20210611_093915.mp4                                      0.00021s  video/mp4
+  [ 52/100] 20210615_215418.mp4                                      0.00020s  video/mp4
+  [ 53/100] 20210615_215418_1.mp4                                    0.00020s  video/mp4
+  [ 54/100] 20210622_140102.mp4                                      0.00020s  video/mp4
+  [ 55/100] 20210622_140102_1.mp4                                    0.00020s  video/mp4
+  [ 56/100] 20210622_140128.mp4                                      0.00022s  video/mp4
+  [ 57/100] 20210622_190725.mp4                                      0.00020s  video/mp4
+  [ 58/100] 20210622_190725_1.mp4                                    0.00020s  video/mp4
+  [ 59/100] 20210623_220419.mp4                                      0.00020s  video/mp4
+  [ 60/100] 2B4723DA4EA7C13644B93CF561D9678A_video_dashinit.mp4      0.00020s  video/mp4
+  [ 61/100] 2c586ccf5d6d6ef722458144f4f23215.mp4                     0.00020s  video/mp4
+  [ 62/100] 4bec94c4190004e82a3571fd80598fad.mp4                     0.00020s  video/mp4
+  [ 63/100] 4e8057d73faeb83c654b5b1c2e0f1cee.mp4                     0.00020s  video/mp4
+  [ 64/100] 6c0cef32abf0354699095d97bff2ad81.mp4                     0.00020s  video/mp4
+  [ 65/100] (Solution Manual) Discrete_5.pdf                         0.00026s  application/pdf
+  [ 66/100] (Springer Undergraduate Mathematics Series) Nicolas      0.00024s  application/pdf
+  [ 67/100] ._TBMT_Sample_Assembly_Guide.pdf                         0.00025s  (unknown)
+  [ 68/100] 1_3.pdf                                                  0.00022s  application/pdf
+  [ 69/100] [Ashiq Arib] Shattered Memories - Google Docs.pdf        0.00022s  application/pdf
+  [ 70/100] 1_3.png                                                  0.00021s  image/png
+  [ 71/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     0.00017s  image/jpeg
+  [ 72/100] (Script) Ashiq and Kamila_s 2019 Google Slides Leg.p     0.00023s  application/vnd.openxmlformats-officedocument.presentationml.presentation
+  [ 73/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     0.00022s  (unknown)
+  [ 74/100] 01.But what is a neural network？ ｜ Deep learning cha     0.00020s  video/webm
+  [ 75/100] 02.The essence of calculus.webm                          0.00019s  video/webm
+  [ 76/100] 03.How are holograms possible？.webm                      0.00019s  video/webm
+  [ 77/100] 04.But what is a Fourier series？  From heat flow to      0.00021s  video/webm
+  [ 78/100] 05.But what is quantum computing？  (Grover's Algorit     0.00019s  video/webm
+  [ 79/100] 06.But what is the Fourier Transform？  A visual intr     0.00020s  video/webm
+  [ 80/100] 07.But what is the Central Limit Theorem？.webm           0.00019s  video/webm
+  [ 81/100] 08.Transformers (how LLMs work) explained visually ｜     0.00020s  video/webm
+  [ 82/100] 09.But why would light ＂slow down＂？ ｜ Visualizing Fe     0.00021s  video/webm
+  [ 83/100] 10.e^(iπ) in 3.14 minutes, using dynamics ｜ DE5.webm     0.00019s  video/webm
+  [ 84/100] 11.Newton’s fractal (which Newton knew nothing about     0.00019s  video/webm
+  [ 85/100] 12.But what is a convolution？.webm                       0.00019s  video/webm
+  [ 86/100] 13.But how does bitcoin actually work？.webm              0.00019s  video/webm
+  [ 87/100] 14.But what is the Riemann zeta function？ Visualizin     0.00020s  video/webm
+  [ 88/100] 15.Group theory, abstraction, and the 196,883-dimens     0.00020s  video/webm
+  [ 89/100] 16.Some light quantum mechanics (with minutephysics)     0.00020s  video/webm
+  [ 90/100] 17.The more general uncertainty principle, regarding     0.00021s  video/webm
+  [ 91/100] 18.Fractals are typically not self-similar.webm          0.00018s  video/webm
+  [ 92/100] 19.Divergence and curl：  The language of Maxwell's e     0.00025s  video/webm
+  [ 93/100] 20.Differential equations, a tourist's guide ｜ DE1.w     0.00020s  video/webm
+  [ 94/100] 21.How (and why) to raise e to the power of a matrix     0.00019s  video/webm
+  [ 95/100] 22.Vectors ｜ Chapter 1, Essence of linear algebra.we     0.00020s  video/webm
+  [ 96/100] 23.But what are Hamming codes？ The origin of error c     0.00019s  video/webm
+  [ 97/100] 24.Euler's formula with introductory group theory.we     0.00019s  video/webm
+  [ 98/100] 25.Bayes theorem, the geometry of changing beliefs.w     0.00019s  video/webm
+  [ 99/100] 26.Visualizing quaternions (4d numbers) with stereog     0.00019s  video/webm
+  [100/100] 27.Hilbert's Curve： Is infinite math useful？.webm        0.00020s  video/webm
+
+  Total: 0.024s   Avg: 0.00024s/file
+
+===========================================================================
+  T4: filetype + Tika Server
+===========================================================================
+  [  1/100] ._Virtue Ethics and the Fundamental Attribution Erro     2.05227s  multipart/appledouble [FB]
+  [  2/100] [Bibliography {MLA8}] ASHIQ GAZI - Connections Beyon     0.00035s  application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  [  3/100] (3) FSF1D - Mains De Crabe [Made up game].jpg            0.00018s  image/jpeg
+  [  4/100] (Final) Ashiq Gazi - AVI1O Portrait Colour Values Pr     0.00018s  image/jpeg
+  [  5/100] 20210106_164055.jpg                                      0.00017s  image/jpeg
+  [  6/100] 20210109_080610 (1).jpg                                  0.00017s  image/jpeg
+  [  7/100] 20210109_080610.jpg                                      0.00022s  image/jpeg
+  [  8/100] 20210514_060936.jpg                                      0.00017s  image/jpeg
+  [  9/100] 20210525_100918.jpg                                      0.00017s  image/jpeg
+  [ 10/100] 20210528_095123.jpg                                      0.00017s  image/jpeg
+  [ 11/100] 20210602_210108.jpg                                      0.00017s  image/jpeg
+  [ 12/100] 20210602_210108_1.jpg                                    0.00017s  image/jpeg
+  [ 13/100] 20210602_210111.jpg                                      0.00017s  image/jpeg
+  [ 14/100] 20210602_210111_1.jpg                                    0.00017s  image/jpeg
+  [ 15/100] 20210602_210118.jpg                                      0.00018s  image/jpeg
+  [ 16/100] 20210602_210118_1.jpg                                    0.00017s  image/jpeg
+  [ 17/100] 20210607_094322.jpg                                      0.00017s  image/jpeg
+  [ 18/100] 20210607_095655.jpg                                      0.00017s  image/jpeg
+  [ 19/100] 20210613_182121.jpg                                      0.00016s  image/jpeg
+  [ 20/100] 20210613_182121_1.jpg                                    0.00017s  image/jpeg
+  [ 21/100] 20210613_182140.jpg                                      0.00017s  image/jpeg
+  [ 22/100] 5.7 MPM1D Homework (2).jpg                               0.00017s  image/jpeg
+  [ 23/100] 5.9 MPM1D Homewowrk Answers (2).jpg                      0.00017s  image/jpeg
+  [ 24/100] 5.9 MPM1D Homewowrk Answers (3).jpg                      0.00016s  image/jpeg
+  [ 25/100] 20210510_213316_1.mp4                                    0.00021s  video/mp4
+  [ 26/100] 20210510_215800.mp4                                      0.00020s  video/mp4
+  [ 27/100] 20210510_215800_1.mp4                                    0.00020s  video/mp4
+  [ 28/100] 20210511_201601.mp4                                      0.00020s  video/mp4
+  [ 29/100] 20210511_201601_1.mp4                                    0.00019s  video/mp4
+  [ 30/100] 20210511_201622.mp4                                      0.00020s  video/mp4
+  [ 31/100] 20210511_201622_1.mp4                                    0.00023s  video/mp4
+  [ 32/100] 20210513_202035.mp4                                      0.00023s  video/mp4
+  [ 33/100] 20210513_202035_1.mp4                                    0.00020s  video/mp4
+  [ 34/100] 20210514_095850.mp4                                      0.00021s  video/mp4
+  [ 35/100] 20210514_095850_1.mp4                                    0.00020s  video/mp4
+  [ 36/100] 20210514_095858.mp4                                      0.00022s  video/mp4
+  [ 37/100] 20210514_095858_1.mp4                                    0.00022s  video/mp4
+  [ 38/100] 20210516_173848.mp4                                      0.00021s  video/mp4
+  [ 39/100] 20210529_160754.mp4                                      0.00020s  video/mp4
+  [ 40/100] 20210529_160754_1.mp4                                    0.00021s  video/mp4
+  [ 41/100] 20210529_175450.mp4                                      0.00020s  video/mp4
+  [ 42/100] 20210529_175450_1.mp4                                    0.00020s  video/mp4
+  [ 43/100] 20210530_173212.mp4                                      0.00023s  video/mp4
+  [ 44/100] 20210530_173212_1.mp4                                    0.00021s  video/mp4
+  [ 45/100] 20210530_173613.mp4                                      0.00020s  video/mp4
+  [ 46/100] 20210530_173613_1.mp4                                    0.00021s  video/mp4
+  [ 47/100] 20210530_173644.mp4                                      0.00027s  video/mp4
+  [ 48/100] 20210530_173644_1.mp4                                    0.00025s  video/mp4
+  [ 49/100] 20210609_093858.mp4                                      0.00024s  video/mp4
+  [ 50/100] 20210609_093858_1.mp4                                    0.00022s  video/mp4
+  [ 51/100] 20210611_093915.mp4                                      0.00022s  video/mp4
+  [ 52/100] 20210615_215418.mp4                                      0.00022s  video/mp4
+  [ 53/100] 20210615_215418_1.mp4                                    0.00021s  video/mp4
+  [ 54/100] 20210622_140102.mp4                                      0.00020s  video/mp4
+  [ 55/100] 20210622_140102_1.mp4                                    0.00020s  video/mp4
+  [ 56/100] 20210622_140128.mp4                                      0.00020s  video/mp4
+  [ 57/100] 20210622_190725.mp4                                      0.00020s  video/mp4
+  [ 58/100] 20210622_190725_1.mp4                                    0.00021s  video/mp4
+  [ 59/100] 20210623_220419.mp4                                      0.00020s  video/mp4
+  [ 60/100] 2B4723DA4EA7C13644B93CF561D9678A_video_dashinit.mp4      0.00021s  video/mp4
+  [ 61/100] 2c586ccf5d6d6ef722458144f4f23215.mp4                     0.00021s  video/mp4
+  [ 62/100] 4bec94c4190004e82a3571fd80598fad.mp4                     0.00020s  video/mp4
+  [ 63/100] 4e8057d73faeb83c654b5b1c2e0f1cee.mp4                     0.00020s  video/mp4
+  [ 64/100] 6c0cef32abf0354699095d97bff2ad81.mp4                     0.00020s  video/mp4
+  [ 65/100] (Solution Manual) Discrete_5.pdf                         0.00025s  application/pdf
+  [ 66/100] (Springer Undergraduate Mathematics Series) Nicolas      0.00024s  application/pdf
+  [ 67/100] ._TBMT_Sample_Assembly_Guide.pdf                         2.04733s  multipart/appledouble [FB]
+  [ 68/100] 1_3.pdf                                                  0.00038s  application/pdf
+  [ 69/100] [Ashiq Arib] Shattered Memories - Google Docs.pdf        0.00023s  application/pdf
+  [ 70/100] 1_3.png                                                  0.00021s  image/png
+  [ 71/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     0.00018s  image/jpeg
+  [ 72/100] (Script) Ashiq and Kamila_s 2019 Google Slides Leg.p     0.00021s  application/vnd.openxmlformats-officedocument.presentationml.presentation
+  [ 73/100] 3DBenchy_-_Multi-part_-_Single_-_Cargo_box_-_3DBench     2.01862s  model/x.stl-binary [FB]
+  [ 74/100] 01.But what is a neural network？ ｜ Deep learning cha     0.00036s  video/webm
+  [ 75/100] 02.The essence of calculus.webm                          0.00020s  video/webm
+  [ 76/100] 03.How are holograms possible？.webm                      0.00020s  video/webm
+  [ 77/100] 04.But what is a Fourier series？  From heat flow to      0.00021s  video/webm
+  [ 78/100] 05.But what is quantum computing？  (Grover's Algorit     0.00020s  video/webm
+  [ 79/100] 06.But what is the Fourier Transform？  A visual intr     0.00019s  video/webm
+  [ 80/100] 07.But what is the Central Limit Theorem？.webm           0.00019s  video/webm
+  [ 81/100] 08.Transformers (how LLMs work) explained visually ｜     0.00019s  video/webm
+  [ 82/100] 09.But why would light ＂slow down＂？ ｜ Visualizing Fe     0.00021s  video/webm
+  [ 83/100] 10.e^(iπ) in 3.14 minutes, using dynamics ｜ DE5.webm     0.00019s  video/webm
+  [ 84/100] 11.Newton’s fractal (which Newton knew nothing about     0.00019s  video/webm
+  [ 85/100] 12.But what is a convolution？.webm                       0.00019s  video/webm
+  [ 86/100] 13.But how does bitcoin actually work？.webm              0.00020s  video/webm
+  [ 87/100] 14.But what is the Riemann zeta function？ Visualizin     0.00020s  video/webm
+  [ 88/100] 15.Group theory, abstraction, and the 196,883-dimens     0.00020s  video/webm
+  [ 89/100] 16.Some light quantum mechanics (with minutephysics)     0.00019s  video/webm
+  [ 90/100] 17.The more general uncertainty principle, regarding     0.00021s  video/webm
+  [ 91/100] 18.Fractals are typically not self-similar.webm          0.00019s  video/webm
+  [ 92/100] 19.Divergence and curl：  The language of Maxwell's e     0.00021s  video/webm
+  [ 93/100] 20.Differential equations, a tourist's guide ｜ DE1.w     0.00019s  video/webm
+  [ 94/100] 21.How (and why) to raise e to the power of a matrix     0.00020s  video/webm
+  [ 95/100] 22.Vectors ｜ Chapter 1, Essence of linear algebra.we     0.00019s  video/webm
+  [ 96/100] 23.But what are Hamming codes？ The origin of error c     0.00020s  video/webm
+  [ 97/100] 24.Euler's formula with introductory group theory.we     0.00019s  video/webm
+  [ 98/100] 25.Bayes theorem, the geometry of changing beliefs.w     0.00019s  video/webm
+  [ 99/100] 26.Visualizing quaternions (4d numbers) with stereog     0.00020s  video/webm
+  [100/100] 27.Hilbert's Curve： Is infinite math useful？.webm        0.00019s  video/webm
+
+  Total: 6.138s   Avg: 0.06138s/file
+
+
+===========================================================================
+PER-FILE MIME COMPARISON
+===========================================================================
+  File                                     T1 (Tika Sub)                  T2 (Tika Srv)                  T3 (filetype)                  T4 (ft+Tika)
+  ---------------------------------------- ------------------------------ ------------------------------ ------------------------------ ------------------------------
+  ._Virtue Ethics and the Fundamental Att  multipart/appledouble          multipart/appledouble          (unknown)                      multipart/appledouble
+  [Bibliography {MLA8}] ASHIQ GAZI - Conn  application/vnd.openxmlformats-officedocument.wordprocessingml.document application/vnd.openxmlformats-officedocument.wordprocessingml.document application/vnd.openxmlformats-officedocument.wordprocessingml.document application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  (3) FSF1D - Mains De Crabe [Made up gam  image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  (Final) Ashiq Gazi - AVI1O Portrait Col  image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210106_164055.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210109_080610 (1).jpg                  image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210109_080610.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210514_060936.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210525_100918.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210528_095123.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210602_210108.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210602_210108_1.jpg                    image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210602_210111.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210602_210111_1.jpg                    image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210602_210118.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210602_210118_1.jpg                    image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210607_094322.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210607_095655.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210613_182121.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210613_182121_1.jpg                    image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210613_182140.jpg                      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  5.7 MPM1D Homework (2).jpg               image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  5.9 MPM1D Homewowrk Answers (2).jpg      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  5.9 MPM1D Homewowrk Answers (3).jpg      image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  20210510_213316_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210510_215800.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210510_215800_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210511_201601.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210511_201601_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210511_201622.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210511_201622_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210513_202035.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210513_202035_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210514_095850.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210514_095850_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210514_095858.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210514_095858_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210516_173848.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210529_160754.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210529_160754_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210529_175450.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210529_175450_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210530_173212.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210530_173212_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210530_173613.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210530_173613_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210530_173644.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210530_173644_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210609_093858.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210609_093858_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210611_093915.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210615_215418.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210615_215418_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210622_140102.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210622_140102_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210622_140128.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210622_190725.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210622_190725_1.mp4                    video/mp4                      video/mp4                      video/mp4                      video/mp4
+  20210623_220419.mp4                      video/mp4                      video/mp4                      video/mp4                      video/mp4
+  2B4723DA4EA7C13644B93CF561D9678A_video_  video/mp4                      video/mp4                      video/mp4                      video/mp4
+  2c586ccf5d6d6ef722458144f4f23215.mp4     video/mp4                      video/mp4                      video/mp4                      video/mp4
+  4bec94c4190004e82a3571fd80598fad.mp4     video/mp4                      video/mp4                      video/mp4                      video/mp4
+  4e8057d73faeb83c654b5b1c2e0f1cee.mp4     video/mp4                      video/mp4                      video/mp4                      video/mp4
+  6c0cef32abf0354699095d97bff2ad81.mp4     video/mp4                      video/mp4                      video/mp4                      video/mp4
+  (Solution Manual) Discrete_5.pdf         application/pdf                application/pdf                application/pdf                application/pdf
+  (Springer Undergraduate Mathematics Ser  application/pdf                application/pdf                application/pdf                application/pdf
+  ._TBMT_Sample_Assembly_Guide.pdf         multipart/appledouble          multipart/appledouble          (unknown)                      multipart/appledouble
+  1_3.pdf                                  application/pdf                application/pdf                application/pdf                application/pdf
+  [Ashiq Arib] Shattered Memories - Googl  application/pdf                application/pdf                application/pdf                application/pdf
+  1_3.png                                  image/png                      image/png                      image/png                      image/png
+  3DBenchy_-_Multi-part_-_Single_-_Cargo_  image/jpeg                     image/jpeg                     image/jpeg                     image/jpeg
+  (Script) Ashiq and Kamila_s 2019 Google  application/vnd.openxmlformats-officedocument.presentationml.presentation application/vnd.openxmlformats-officedocument.presentationml.presentation application/vnd.openxmlformats-officedocument.presentationml.presentation application/vnd.openxmlformats-officedocument.presentationml.presentation
+  3DBenchy_-_Multi-part_-_Single_-_Cargo_  model/x.stl-binary             model/x.stl-binary             (unknown)                      model/x.stl-binary
+  01.But what is a neural network？ ｜ Deep                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  02.The essence of calculus.webm          video/webm                     video/webm                     video/webm                     video/webm
+  03.How are holograms possible？.webm                                     video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  04.But what is a Fourier series？  From                                  video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  05.But what is quantum computing？  (Gro                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  06.But what is the Fourier Transform？                                   video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  07.But what is the Central Limit Theore                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  08.Transformers (how LLMs work) explain                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  09.But why would light ＂slow down＂？ ｜ V                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  10.e^(iπ) in 3.14 minutes, using dynami                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  11.Newton’s fractal (which Newton knew   video/webm                     video/webm                     video/webm                     video/webm
+  12.But what is a convolution？.webm                                      video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  13.But how does bitcoin actually work？.                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  14.But what is the Riemann zeta functio                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  15.Group theory, abstraction, and the 1  video/webm                     video/webm                     video/webm                     video/webm
+  16.Some light quantum mechanics (with m  video/webm                     video/webm                     video/webm                     video/webm
+  17.The more general uncertainty princip  video/webm                     video/webm                     video/webm                     video/webm
+  18.Fractals are typically not self-simi  video/webm                     video/webm                     video/webm                     video/webm
+  19.Divergence and curl：  The language o                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  20.Differential equations, a tourist's                                  video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  21.How (and why) to raise e to the powe                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  22.Vectors ｜ Chapter 1, Essence of line                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  23.But what are Hamming codes？ The orig                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+  24.Euler's formula with introductory gr  video/webm                     video/webm                     video/webm                     video/webm
+  25.Bayes theorem, the geometry of chang  video/webm                     video/webm                     video/webm                     video/webm
+  26.Visualizing quaternions (4d numbers)  video/webm                     video/webm                     video/webm                     video/webm
+  27.Hilbert's Curve： Is infinite math us                                 video/webm                     video/webm                     video/webm                     ⚠T3 ⚠T4
+
+===========================================================================
+PER-EXTENSION TIMING SUMMARY
+===========================================================================
+
+  .docx  (2 files)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess              5.267s    2.63362s
+    T2: Tika Server                  4.205s    2.10271s
+    T3: filetype only                0.001s    0.00033s
+    T4: filetype + Tika Server       2.053s    1.02631s
+    T4 speedup vs T1:                 3x
+    T3 accuracy vs T1:         1/2 match, 1 unknown
+    T4 accuracy vs T1:         2/2 match, 1 used fallback
+
+  .jpg  (22 files)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess             58.960s    2.68001s
+    T2: Tika Server                 45.421s    2.06459s
+    T3: filetype only                0.004s    0.00018s
+    T4: filetype + Tika Server       0.004s    0.00017s
+    T4 speedup vs T1:             15652x
+    T3 accuracy vs T1:         22/22 match, 0 unknown
+    T4 accuracy vs T1:         22/22 match, 0 used fallback
+
+  .mp4  (40 files)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess             97.938s    2.44844s
+    T2: Tika Server                 99.624s    2.49060s
+    T3: filetype only                0.012s    0.00031s
+    T4: filetype + Tika Server       0.008s    0.00021s
+    T4 speedup vs T1:             11573x
+    T3 accuracy vs T1:         40/40 match, 0 unknown
+    T4 accuracy vs T1:         40/40 match, 0 used fallback
+
+  .pdf  (5 files)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess             11.983s    2.39656s
+    T2: Tika Server                 10.445s    2.08905s
+    T3: filetype only                0.001s    0.00024s
+    T4: filetype + Tika Server       2.048s    0.40969s
+    T4 speedup vs T1:                 6x
+    T3 accuracy vs T1:         4/5 match, 1 unknown
+    T4 accuracy vs T1:         5/5 match, 1 used fallback
+
+  .png  (2 files)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess              4.957s    2.47874s
+    T2: Tika Server                  4.093s    2.04662s
+    T3: filetype only                0.000s    0.00019s
+    T4: filetype + Tika Server       0.000s    0.00020s
+    T4 speedup vs T1:             12573x
+    T3 accuracy vs T1:         2/2 match, 0 unknown
+    T4 accuracy vs T1:         2/2 match, 0 used fallback
+
+  .pptx  (1 file)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess              2.649s    2.64941s
+    T2: Tika Server                  2.135s    2.13511s
+    T3: filetype only                0.000s    0.00023s
+    T4: filetype + Tika Server       0.000s    0.00021s
+    T4 speedup vs T1:             12774x
+    T3 accuracy vs T1:         1/1 match, 0 unknown
+    T4 accuracy vs T1:         1/1 match, 0 used fallback
+
+  .stl  (1 file)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess              2.507s    2.50696s
+    T2: Tika Server                  2.049s    2.04909s
+    T3: filetype only                0.000s    0.00022s
+    T4: filetype + Tika Server       2.019s    2.01862s
+    T4 speedup vs T1:                 1x
+    T3 accuracy vs T1:         0/1 match, 1 unknown
+    T4 accuracy vs T1:         1/1 match, 1 used fallback
+
+  .webm  (27 files)
+    Trial                             Total    Avg/file
+    ---------------------------- ----------  ----------
+    T1: Tika Subprocess             62.092s    2.29972s
+    T2: Tika Server                 65.779s    2.43625s
+    T3: filetype only                0.005s    0.00020s
+    T4: filetype + Tika Server       0.005s    0.00020s
+    T4 speedup vs T1:             11385x
+    T3 accuracy vs T1:         9/27 match, 0 unknown
+    T4 accuracy vs T1:         9/27 match, 0 used fallback
+
+===========================================================================
+GRAND TOTALS
+===========================================================================
+  Files: 100
+
+  Trial                                 Total    Avg/file
+  -------------------------------- ----------  ----------
+  T1: Tika Subprocess                246.354s    2.46354s
+  T2: Tika Server                    233.752s    2.33752s
+  T3: filetype only                    0.024s    0.00024s
+  T4: filetype + Tika Server           6.138s    0.06138s
+
+  T4 overall speedup vs T1: 40x
+
+  T3 accuracy: 79/100 match T1, 3 unknown
+  T4 accuracy: 82/100 match T1, 3 needed Tika fallback
+
+  PROJECTIONS
+       Files   T1 (subprocess)    T4 (filetype+fb)
+  ----------  ----------------  ------------------
+      10,000              6.8h             10.2min
+      50,000             34.2h             51.1min
+     100,000             68.4h            102.3min
+     500,000            342.2h            511.5min
+
+===========================================================================
+MIME MISMATCHES vs T1 ground truth (18 files)
+===========================================================================
+  01.But what is a neural network？ ｜ Deep learning chapter 1.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  03.How are holograms possible？.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  04.But what is a Fourier series？  From heat flow to drawing with circles ｜ DE4.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  05.But what is quantum computing？  (Grover's Algorithm).webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  06.But what is the Fourier Transform？  A visual introduction..webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  07.But what is the Central Limit Theorem？.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  08.Transformers (how LLMs work) explained visually ｜ DL5.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  09.But why would light ＂slow down＂？ ｜ Visualizing Feynman's lecture on the refractive index.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  10.e^(iπ) in 3.14 minutes, using dynamics ｜ DE5.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  12.But what is a convolution？.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  13.But how does bitcoin actually work？.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  14.But what is the Riemann zeta function？ Visualizing analytic continuation.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  19.Divergence and curl：  The language of Maxwell's equations, fluid flow, and more.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  20.Differential equations, a tourist's guide ｜ DE1.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  21.How (and why) to raise e to the power of a matrix ｜ DE6.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  22.Vectors ｜ Chapter 1, Essence of linear algebra.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  23.But what are Hamming codes？ The origin of error correction.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+  27.Hilbert's Curve： Is infinite math useful？.webm
+    T1 Tika Sub:
+    T2 Tika Srv:   video/webm
+    T3 filetype:   video/webm
+    T4 ft+Tika:    video/webm
+
+Tika server stopped

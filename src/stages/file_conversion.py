@@ -14,25 +14,22 @@ This module provides functionality to convert artifacts by:
 
 Author: Ashiq Gazi
 """
-
+import json
 import logging
 import shutil
 import time
+import uuid
 from pathlib import Path
 from typing import List
 
 from tqdm import tqdm
 
 from config import (
-	ARCHIVAL_DIR ,
-	ARTIFACT_PREFIX ,
-	ARTIFACT_PROFILES_DIR ,
-	AUDIO_TYPES ,
-	DOCUMENT_TYPES ,
+	ANKI_EXTENSIONS , ARTIFACT_PREFIX , ARTIFACT_PROFILES_DIR , AUDIO_TYPES ,
+	CAD_FILES , CODE_EXTENSIONS , DIGITAL_CONTACT_EXTENSIONS , DOCUMENT_TYPES ,
 	EMAIL_TYPES ,
-	IMAGE_TYPES ,
-	PROFILE_PREFIX ,
-	SPREADSHEET_TYPES , VIDEO_TYPES ,
+	EXECUTABLE_EXTENSIONS , IMAGE_TYPES ,
+	PROFILE_PREFIX , VIDEO_TYPES ,
 )
 from utilities.dependancy_ensurance import (
 	ensure_ffmpeg ,
@@ -41,68 +38,38 @@ from utilities.dependancy_ensurance import (
 	ensure_pandoc ,
 	ensure_par2 ,
 )
+from utilities.extract_metadata import extract_metadata
 from utilities.format_converting import (
 	convert_audio_to_mp3 ,
 	convert_document_to_pdf ,
 	convert_email_to_pdf ,
 	convert_image_to_png ,
-	convert_pub_to_pdf , convert_video_to_mp4 , convert_xlsx_to_csv ,
+	convert_video_to_mp4 ,
 )
 
 
 def converting_files(
 		logger: logging.Logger ,
 		source_dir: Path ,
+		dest_dir: Path ,
 ) -> None :
 	"""
 	Convert artifacts to standardized formats based on detected artifact types.
 
-	This method performs comprehensive artifact conversion by detecting artifact types using
-	Magika content analysis, routing artifacts to appropriate converters based on type,
-	archiving original artifacts before conversion, and moving converted artifacts to the
-	success directory. Files that fail type detection or conversion are moved to
-	the failure directory.
-
-	The conversion process includes:
-	- File discovery and size-based sorting (smallest first for faster feedback)
-	- Profile loading and validation for each artifact
-	- Content-based artifact type detection using Magika with confidence scoring
-	- Original artifact archiving before conversion for backup purposes
-	- Type-specific conversion routing (documents, images, videos, audio, archives)
-	- Profile updates with conversion metadata and results
-	- File moving to success or failure directories based on conversion results
-	- Comprehensive error logging with full exception details
-
-	Supported artifact types and conversions:
-	- Documents: Converted to PDF format
-	- Images:    Converted to PNG format
-	- Videos:    Converted to MP4 format
-	- Audio:     Converted to MP3 format
-	- Archives:  Converted to 7Z format
-
 	Args:
-																	logger: Logger instance for tracking operations and errors
-																	source_dir: Directory containing artifact artifacts to process. Files must follow
-																																	the ARTIFACT-{uuid}.ext naming convention
-
+		:param logger: Logger instance for tracking operations and errors
+		:param source_dir: Directory containing artifacts to process.
+		:param dest_dir: Destination directory to store converted artifacts.
 	Returns:
-																	None. This method processes artifacts in-place and moves them to appropriate
-																	directories based on conversion results.
+		None. This method processes artifacts in-place and moves them to appropriate
+		directories based on conversion results.
 
 	Raises:
-																	FileNotFoundError: If source directory or artifact profile does not exist
-																	ValueError: If profile JSON is corrupted or artifact type confidence is too low
-																	TypeError: If artifact type detection does not meet minimum confidence score
+		FileNotFoundError: If source directory or artifact profile does not exist
+		ValueError: If profile JSON is corrupted or artifact type confidence is too low
+		TypeError: If artifact type detection does not meet minimum confidence score
 
-	Note:
-																	- Files are processed in order of size (smallest first) for faster feedback
-																	- Requires corresponding PROFILE-{uuid}.json artifacts in ARTIFACT_PROFILES_DIR
-																	- Original artifacts are archived before conversion for backup purposes
-																	- File type detection uses Magika with minimum confidence threshold
-																	- Unsupported artifact types are passed through without conversion
-																	- Text and code artifacts are not converted but still processed
-																	- Naming conflicts in destination directories are automatically resolved
-																	- All conversion failures are logged with full exception details (exc_info=True)
+
 	"""
 
 	ensure_ffmpeg( )
@@ -147,7 +114,7 @@ def converting_files(
 
 	# Process each artifact with progress bar
 	# tqdm provides visual progress feedback to users
-	for artifact in tqdm(
+	for raw_artifact in tqdm(
 			unprocessed_artifacts ,
 			desc="Converting format" ,
 			unit="artifacts" ,
@@ -156,126 +123,134 @@ def converting_files(
 			start_time = time.time( )
 
 			# Log the start of processing for this artifact
-			logger.info( f"Processing artifact: {artifact.name}" )
-
-			# ====================================================================
-			# PROFILE LOADING AND VALIDATION
-			# ====================================================================
-
-			# Extract UUID from filename for profile lookup
-			# Expected format: ARTIFACT-{uuid}.ext
-			# We strip the prefix and extension to get just the UUID
-			artifact_id = artifact.stem[ (len( ARTIFACT_PREFIX ) + 1) : ]
-
-			# Construct the path to the corresponding profile JSON file
-			# Profile contains metadata about the artifact's processing history
-			artifact_profile_json = (
-					ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_id}.json"
-			)
-
-			# ====================================================================
-			# FILE TYPE DETECTION
-			# ====================================================================
+			logger.info( f"Processing artifact: {raw_artifact.name}" )
 
 			# Extract detected artifact type label
 			# Convert to lowercase for consistent comparison with type constants
-			artifact_ext: str = artifact.suffix.lower( ).strip( ).strip( "." )
-			logger.info( f"Detected type for {artifact.name}: {artifact_ext})" )
+			artifact_ext: str = raw_artifact.suffix.lower( ).strip( ).strip( "." )
+			logger.info( f"Detected type for {raw_artifact.name}: {artifact_ext})" )
 
-			if artifact_ext in [
-				"epub" ,
-				"cbr" ,
-				"djvu" ,
-				"html" ,
-				"txt" ,
-				"csv" ,
-			] :
+			metadata = None
+
+			if (artifact_ext in
+					[ "epub" , "cbr" , "djvu" , "html" , "txt" , "csv" , "arw" , "cr2" , "nef" , "heic" , "onepkg" , ]
+					or artifact_ext in ANKI_EXTENSIONS
+					or artifact_ext in CAD_FILES
+					or artifact_ext in DIGITAL_CONTACT_EXTENSIONS
+					or artifact_ext in EXECUTABLE_EXTENSIONS
+					or artifact_ext in CODE_EXTENSIONS
+			) :
 				logger.info( f"This Artifact will be ignored and tended to during manual triage. " )
+				shutil.move( src=raw_artifact , dst=dest_dir / raw_artifact.name )
 				continue
 
-			# ====================================================================
-			# CONVERSION ROUTING
-			# ====================================================================
+			elif artifact_ext in [
+				"pdf" ,
+				"mp4" ,
+				"mp3" ,
+				"png" ,
+			] :
+				logger.info( f"This Artifact is already in the target format. Conversion not needed. " )
+				shutil.move( src=raw_artifact , dst=dest_dir / raw_artifact.name )
+				continue
 
-			# Route to appropriate converter based on detected artifact type
-			# Each type has its own specialized conversion function
+			unique_id = uuid.uuid4( )
 
-			archival_directory = ARCHIVAL_DIR / artifact.name
+			original_name = raw_artifact.stem
 
-			if artifact_ext in [ "pub" ] :
-				logger.debug( f"Converting document: {artifact.name}" )
-				shutil.copy2( str( artifact ) , str( archival_directory ) )
-				logger.debug( f"Archived original artifact to: {archival_directory}" )
-				convert_pub_to_pdf( src=artifact , logger=logger )
+			artifact = raw_artifact.rename( raw_artifact.parent / f"{ARTIFACT_PREFIX}-{unique_id}{raw_artifact.suffix}" )
+			logger.debug( f"Renaming artifact with UUID4 to avoid collisions: {artifact}" )
 
-			elif artifact_ext in SPREADSHEET_TYPES :
-				logger.debug( f"Converting document: {artifact.name}" )
-				shutil.copy2( str( artifact ) , str( archival_directory ) )
-				logger.debug( f"Archived original artifact to: {archival_directory}" )
-				convert_xlsx_to_csv( src=artifact , logger=logger )
+			artifact_profile_json = (ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{unique_id}.json")
+			logger.debug( f"Output JSON will be saved to: {artifact_profile_json}" )
 
-			elif artifact_ext in DOCUMENT_TYPES :
-				# Convert documents to PDF for standardization
-				# PDF is universal and preserves formatting
-				logger.debug( f"Converting document: {artifact.name}" )
-				shutil.copy2( str( artifact ) , str( archival_directory ) )
-				logger.debug( f"Archived original artifact to: {archival_directory}" )
-				convert_document_to_pdf( src=artifact , logger=logger )
+			if artifact_ext in DOCUMENT_TYPES :
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_document_to_pdf( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in IMAGE_TYPES :
-				# Convert images to PNG for lossless quality
-				# PNG supports transparency and high quality
-				logger.debug( f"Converting image: {artifact.name}" )
-				shutil.copy2( str( artifact ) , str( archival_directory ) )
-				logger.debug( f"Archived original artifact to: {archival_directory}" )
-				convert_image_to_png( src=artifact , logger=logger )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_image_to_png( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in VIDEO_TYPES :
-				# Convert videos to MP4 for broad compatibility
-				# MP4 is universally supported and efficient
-				logger.debug( f"Converting video: {artifact.name}" )
-				shutil.copy2( str( artifact ) , str( archival_directory ) )
-				logger.debug( f"Archived original artifact to: {archival_directory}" )
-				convert_video_to_mp4( src=artifact , logger=logger )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_video_to_mp4( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in AUDIO_TYPES :
-				# Convert audio to MP3 for broad compatibility
-				# MP3 is universally supported with good quality at high bitrates
-				logger.debug( f"Converting audio: {artifact.name}" )
-				shutil.copy2( str( artifact ) , str( archival_directory ) )
-				logger.debug( f"Archived original artifact to: {archival_directory}" )
-				convert_audio_to_mp3( src=artifact , logger=logger )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_audio_to_mp3( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in EMAIL_TYPES :
-				# Convert email artifacts to standard EML format
-				# EML is the standard MIME email format
-				logger.debug( f"Converting email: {artifact.name}" )
-				shutil.copy2( str( artifact ) , str( archival_directory ) )
-				logger.debug( f"Archived original artifact to: {archival_directory}" )
-				convert_email_to_pdf( src=artifact , logger=logger )
+				metadata = extract_metadata( artifact_location=artifact , logger=logger )
+				formatted_artifact = convert_email_to_pdf( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
+				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			else :
 				# Log unsupported artifact types
 				# These artifacts will be passed through without conversion
-				logger.warning(
-						f"Could not find appropriate conversion protocol of type {artifact_ext} for {artifact.name}" ,
-				)
+				logger.warning( f"Could not find appropriate conversion protocol of type {artifact_ext} for {artifact.name}" )
+				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 
-			# Get the size of the output JSON artifact for logging
-			logger.info(
-					f"Output JSON artifact size: {artifact_profile_json.stat( ).st_size:,} bytes" ,
-			)
+			# Write the metadata dictionary to a JSON artifact
+			# 'w': Open artifact in write mode
+			# encoding='utf-8': Use UTF-8 encoding to support international characters
+			# indent=2: Pretty-print JSON with 2-space indentation
+			# ensure_ascii=False: Allow non-ASCII characters in output
+			if metadata :
+				profile = {
+					"original_name" : original_name ,
+					"uuid"          : str( unique_id ) ,
+					"extension"     : artifact_ext ,
+					"metadata"      : metadata ,
+				}
+
+				logger.info( f"Writing metadata to output artifact: {artifact_profile_json}" )
+				with open( artifact_profile_json , "w" , encoding="utf-8" ) as f :
+					json.dump( profile , f , indent=2 , ensure_ascii=False )
+				logger.info( f"Output JSON artifact size: {artifact_profile_json.stat( ).st_size:,} bytes" )
 
 			# Calculate total operation duration
 			total_duration = time.time( ) - start_time
-			logger.info(
-					f"Format Conversion Completed Successfully in {total_duration:.2f} seconds" ,
-			)
+			logger.info( f"Format Conversion Completed Successfully in {total_duration:.2f} seconds" )
 
 		except Exception as e :
 			# Log the error with full exception details
 			# exc_info=True includes the full stack trace
-			error_msg: str = f"Error processing {artifact.name}: {e}"
+			error_msg: str = f"Error processing {raw_artifact.name}: {e}"
 			logger.error( error_msg , exc_info=True )
 			continue  # Continue with next artifact
 

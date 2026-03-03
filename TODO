@@ -1,0 +1,76 @@
+V1.3.0 TODO:
+[✅] Fix errors with stl and pdf and exe files
+[✅] Remove popup in DuplicateReviewer
+[✅] Rename artifact at the end with LLM
+[✅] Store filename during metadata extraction in the metadata
+[✅] If "paystub" in file name, then is_financial_doc = True
+[✅] If " T4 " in file name, then is_financial_doc = True MEANING DO NOT STRIP SPACE CHARS
+[✅] If "immigration" in file name, then is_immigration_doc = True
+[✅] If "refugee" in file name, then is_immigration_doc = True
+[✅] If "passport" in file name, then is_immigration_doc = True
+[✅] If "work permit" in file name, then is_immigration_doc = True
+[✅] Remove windows file-system filename increment tag "(N)"
+[✅] Remove Libre Office as an option
+[✅] Move Artifact Profiles dir into the PaperTrail Processing dir
+[✅] Add order prefixes to papertrail processing stage state machine dirs "[N]-" and "copy"
+[✅] TEX files should go to gitlab dir
+[✅] Add .ps1 files as supported file type
+[✅] Add .onepkg files as supported file type
+[✅] Add .qpf, .qsf, vwf, .vwf.vt files as supported CODE file type
+[✅] Move "checksum_history.txt" into papertrail processing
+[✅] Fix .msi corruption detection
+
+TODO:
+[ ] Fix PNG to PDF converter function
+[ ] Fix scanning functions
+[ ] Complete ai processing functions
+[ ] Add function for getting metadata with new Apache Tika Server
+[ ] Markdown to PDF converter function
+[ ] Name Artifact Profile files using artifact checksums and not UUIDs
+[ ] Embed metadata to converted file using artifact profile file
+[ ] Fix is_financial_doc detector function
+
+V1.5.0 TODO:
+[ ] Use multi-threading to convert artifacts in parallel
+[ ] Use multi-threading to sanitize artifacts in parallel
+[ ] ERROR: (process:29816): GLib-GIO-WARNING **: 06:45:12.738: Unexpectedly,
+    UWP app `Microsoft.OutlookForWindows_1.2024.1204.300_x64__8wekyb3d8bbwe'
+    (AUMId `Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows') supports 4 extensions but has no verbs
+    Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]
+    (process:29816): GLib-GIO-WARNING **: 06:45:13.636: Unexpectedly,
+    UWP app `Clipchamp.Clipchamp_4.5.10220.0_x64__yxz26nhyzhsrt' (AUMId `Clipchamp.Clipchamp_yxz26nhyzhsrt!App')
+    supports 41 extensions but has no verbs
+    (process:29816): GLib-GIO-WARNING **: 06:45:14.057: Unexpectedly,
+    UWP app `Microsoft.ScreenSketch_11.2511.47.0_x64__8wekyb3d8bbwe' (AUMId `Microsoft.ScreenSketch_8wekyb3d8bbwe!App')
+    supports 29 extensions but has no verb
+[ ] Add mimes for NEF, TEX, and RUN files
+[ ] Figure out how the program deals with files with extensions with 1+ periods
+[ ] Add "is_video_course" function
+[ ] ERROR: pip install bitsandbytes --prefer-binary
+[ ] ERROR: `torch_dtype` is deprecated! Use `dtype` instead!
+[ ] Give unique logger prefixes for each stage
+
+V1.6.0 TODO:
+[ ] Document detection in images
+[ ] Improve book/textbook detection
+[ ] Add "is_movie" function
+[ ] Use multi-threading to extract metadata artifacts in parallel
+[ ] Use multi-threading to automatically sort artifacts in parallel (EXCEPT FOR LLM FINANCES DOC CHECK)
+[ ] Standardize format/structure of stage functions
+[ ] Standardize format/structure of utility functions
+[ ] Standardize error raising and handling behavior
+[ ] Update ensurance functions to remove unneeded functions, unneeded package checks, windows unsupported operations
+[ ] Update .toml with new package needs and version needs
+[ ] Improve comments and logs across all files
+[ ] Improve failure logs
+[ ] Add logging to the duplicate reviewer
+[ ] Add timeouts to the duplicate reviewer
+
+V1.7.0 TODO:
+[ ] Debriefing tool that asks user to input when file fails or cannot be progressed forward
+[ ] Entire process is monitored and displayed in GUI
+[ ] Project is self contained - All FOSS are self-contained binaries and python packages auto-install
+[ ] Audio Transcription and subtitling
+[ ] Audio Visualization
+[ ] Auto-run program when trigger folder has artifacts
+[ ] Add PDFArranger features to Manual Artifact Triage

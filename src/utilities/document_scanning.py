@@ -1,37 +1,9 @@
-"""
-FOR HANDWRITTEN NOTES - Use noteshrink
-Specifically designed to clean up handwritten notes, removes:
-- Bleed-through from opposite side
-- Background artifacts
-- Smudges and noise
-- Makes ink colors vivid
-"""
-
-# INSTALLATION
-# pip install numpy scipy pillow pdf2image img2pdf
-# Also needs ImageMagick: apt install imagemagick (Linux) or brew install imagemagick (Mac)
-
 import shutil
 import subprocess
 from pathlib import Path
 
 
-def process_handwritten_notes( input_files , output_pdf="notes.pdf" ) :
-	"""
-	Clean up handwritten notes automatically.
-
-	Args:
-									input_files: Single image, list of images, or glob pattern like 'scans/*.jpg'
-									output_pdf: Output PDF filename
-
-	Features:
-	- Removes bleed-through from back of page
-	- Makes background pure white
-	- Makes ink colors vivid and clear
-	- Reduces file size by 90%+
-	- Perfect for handwritten class notes
-	"""
-
+def process_handwritten_notes( input_files , output_pdf ) :
 	# Build command
 	if isinstance( input_files , str ) :
 		if "*" in input_files :
@@ -54,11 +26,7 @@ def process_handwritten_notes( input_files , output_pdf="notes.pdf" ) :
 	return output_pdf
 
 
-def process_printed_documents( input_path , output_dir="output" ) :
-	"""
-	For PRINTED documents with clean edges (like Adobe Scan).
-	Uses document-scanner package.
-	"""
+def process_printed_documents( input_path , output_dir ) :
 	input_path = Path( input_path )
 	output_dir = Path( output_dir )
 	output_dir.mkdir( exist_ok=True )
