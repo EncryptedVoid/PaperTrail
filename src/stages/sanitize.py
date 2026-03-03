@@ -159,5 +159,5 @@ def sanitizing(
 			logger.error( f"Error processing artifact {artifact.name}: {str( e )}" )
 			continue
 
-	stop_apache_tika_server( )
+	stop_apache_tika_server( logger=logger , tika_server_process=tika_server_process )
 	return None

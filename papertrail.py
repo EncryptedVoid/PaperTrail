@@ -19,7 +19,7 @@ from applications.manual_file_triage import FileTriage
 from config import (
 	APPLICATION_FOLDERS , COMPLETED_FORMAT_CONVERSION_DIR ,
 	COMPLETED_SANITIZATION_DIR ,
-	COMPLETED_SEMANTICS_EXTRACTION_DIR , LOG_DIR ,
+	LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
 	RECURSIVE_SORT_DIR ,
@@ -125,7 +125,7 @@ automatically_sorting(
 		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
 
-manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_SEMANTICS_EXTRACTION_DIR )
+manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
 manual_artifact_triage.run( )
 
 for directory in APPLICATION_FOLDERS :

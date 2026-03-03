@@ -167,26 +167,56 @@ def converting_files(
 			if artifact_ext in DOCUMENT_TYPES :
 				metadata = extract_metadata( artifact_location=artifact , logger=logger )
 				formatted_artifact = convert_document_to_pdf( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
 				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in IMAGE_TYPES :
 				metadata = extract_metadata( artifact_location=artifact , logger=logger )
 				formatted_artifact = convert_image_to_png( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
 				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in VIDEO_TYPES :
 				metadata = extract_metadata( artifact_location=artifact , logger=logger )
 				formatted_artifact = convert_video_to_mp4( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
 				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in AUDIO_TYPES :
 				metadata = extract_metadata( artifact_location=artifact , logger=logger )
 				formatted_artifact = convert_audio_to_mp3( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
 				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			elif artifact_ext in EMAIL_TYPES :
 				metadata = extract_metadata( artifact_location=artifact , logger=logger )
 				formatted_artifact = convert_email_to_pdf( src=artifact , logger=logger )
+				if formatted_artifact is None :
+					logger.info(
+							f"Conversion function did not return the path to the new converted file. "
+							f"Keeping file in {source_dir}" ,
+					)
+					continue
 				shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
 
 			else :

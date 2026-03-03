@@ -122,7 +122,7 @@ def automatically_sorting(
 
 			elif any(
 					(keyword in artifact_label
-					 for keyword in [ "syllabus" ]) ,
+					 for keyword in [ "syllabus" , "midterm" , "lecture" , "final exam" ]) ,
 			) and artifact_ext in DOCUMENT_TYPES :
 				logger.info( f"Moving academic/educational document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
 				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )

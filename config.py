@@ -13,22 +13,20 @@ from pathlib import Path
 from typing import List , Set
 
 # ── Root Directories ──────────────────────────────────────────────────────────
-TARGET_DRIVE: Path = Path( "E:" )
+# TARGET_DRIVE: Path = Path( "E:" )
+TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop\\" )
+# UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
+UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PAPERTRAIL-PROCESSING" )
+
 BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
-UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
 RECURSIVE_SORT_DIR = Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" )
 PROGRAM_ASSETS_DIR = Path( r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets" )
 
 # ── Processing Directories ─────────────────────────────────────────────────────
-# Archive storage for fully processed and verified artifacts
 ARCHIVAL_DIR: Path = Path( BASE_DIR / "ARCHIVE" )
-# Persistent JSON/YAML profiles describing each processed artifact
 ARTIFACT_PROFILES_DIR: Path = Path( BASE_DIR / "ARTIFACT_PROFILES" )
-# Output directory for application logs
 LOG_DIR: Path = Path( BASE_DIR / "PAPERTRAIL-LOGS" )
-# Running log of all artifact checksums for integrity tracking
 CHECKSUM_HISTORY_FILE: Path = Path( BASE_DIR / "checksum_history.txt" )
-# Scratch space for intermediate files during processing
 TEMP_DIR: Path = Path( BASE_DIR / "TEMP" )
 DELETE_DIR: Path = Path( BASE_DIR / "TO_BE_DELETED" )
 
@@ -43,15 +41,10 @@ COMPLETED_SEMANTICS_EXTRACTION_DIR: Path = Path(
 		BASE_DIR / "STAGE_STATE_MACHINE" / "[4]COMPLETED_SEMANTICS_EXTRACTION" )
 
 # ── Review Directories ─────────────────────────────────────────────────────────
-# Artifacts flagged as corrupted and requiring manual inspection
 CORRUPTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/CORRUPTED_ARTIFACTS" )
-# Artifacts identified as duplicates of already-processed items
 DUPLICATE_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/DUPLICATE_ARTIFACTS" )
-# Artifacts that could not be processed due to password protection
 PASSWORD_PROTECTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/PASSWORD_PROTECTED_ARTIFACTS" )
-# Artifacts with file types not supported by the current pipeline
 UNSUPPORTED_ARTIFACTS_DIR: Path = Path( BASE_DIR / "REVIEW/UNSUPPORTED_ARTIFACTS" )
-# Artifacts that require alterations to be done manually
 ALTERATIONS_REQUIRED_DIR: Path = Path( BASE_DIR / "REVIEW/ALTERATIONS_REQUIRED" )
 SCANNING_REQUIRED_DIR: Path = Path( ALTERATIONS_REQUIRED_DIR / "DOCUMENT_SCANNING_REQUIRED" )
 UNESSENTIAL_DIR: Path = Path( BASE_DIR / "UNESSENTIAL_ITEMS" )
@@ -445,6 +438,8 @@ EXECUTABLE_EXTENSIONS = [
 	"run" ,  # Linux self-executing binary
 	"ps1" ,
 	"rdp" ,
+	"apk" ,
+	"jar" ,
 ]
 
 ANKI_EXTENSIONS = [

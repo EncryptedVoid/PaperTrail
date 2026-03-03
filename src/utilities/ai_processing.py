@@ -246,9 +246,9 @@ def generate_tags(
 	if result :
 		# Normalize: strip whitespace around each tag, lowercase, remove empty
 		tags = ", ".join(
-				tag.strip( ).lower( )
-				for tag in result.split( "," )
-				if tag.strip( ) ,
+				(tag.strip( ).lower( )
+				 for tag in result.split( "," )
+				 if tag.strip( )) ,
 		)
 		logger.info( f"[TAGS] Generated: {tags}" )
 		return tags

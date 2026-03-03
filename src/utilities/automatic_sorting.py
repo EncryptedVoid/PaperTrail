@@ -144,18 +144,20 @@ def is_bookmark_file( artifact_location: Path ) -> bool :
 	# return has_netscape_doctype and has_dl_structure and has_dt_anchors and has_add_date
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	with open( profile_path , "r" , encoding="utf-8" ) as f :
-		profile_data = json.load( f )  # returns a plain Python dict
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
 
-	artifact_label = profile_data[ "original_name" ]
+	artifact_label = artifact_location.stem.lower( ).strip( )
 
 	if artifact_ext != ".html" :
 		return False
 
-	return "bookmark" in artifact_location.stem.lower( ).strip( )
+	return "bookmark" in artifact_label
 
 
 def is_anki_deck( artifact_location: Path ) -> bool :
@@ -171,13 +173,15 @@ def is_anki_deck( artifact_location: Path ) -> bool :
 	"""
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	with open( profile_path , "r" , encoding="utf-8" ) as f :
-		profile_data = json.load( f )  # returns a plain Python dict
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
 
-	artifact_label = profile_data[ "original_name" ]
+	artifact_label = artifact_location.stem.lower( ).strip( )
 
 	if artifact_ext in ANKI_EXTENSIONS :
 		return True
@@ -216,13 +220,15 @@ def is_bitwarden_related( artifact_location: Path ) -> bool :
 	"""
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	with open( profile_path , "r" , encoding="utf-8" ) as f :
-		profile_data = json.load( f )  # returns a plain Python dict
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
 
-	artifact_label = profile_data[ "original_name" ]
+	artifact_label = artifact_location.stem.lower( ).strip( )
 
 	if (artifact_ext not in TEXT_TYPES
 			or artifact_ext not in DOCUMENT_TYPES
@@ -266,14 +272,15 @@ def is_financial_document(
 		# Extract text based on file type
 		# Different file types require different extraction methods
 		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-		artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-		profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+		# with open( profile_path , "r" , encoding="utf-8" ) as f :
+		# 	profile_data = json.load( f )  # returns a plain Python dict
+		#
+		# artifact_label = profile_data[ "original_name" ]
 
-		with open( profile_path , "r" , encoding="utf-8" ) as f :
-			profile_data = json.load( f )  # returns a plain Python dict
-
-		artifact_label = profile_data[ "original_name" ]
+		artifact_label = artifact_location.stem.lower( ).strip( )
 
 		if (artifact_ext not in DOCUMENT_TYPES
 				or artifact_ext not in EMAIL_TYPES
@@ -305,13 +312,15 @@ def is_book( artifact_location: Path ) -> bool :
 	"""
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	with open( profile_path , "r" , encoding="utf-8" ) as f :
-		profile_data = json.load( f )  # returns a plain Python dict
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
 
-	artifact_label = profile_data[ "original_name" ]
+	artifact_label = artifact_location.stem.lower( ).strip( )
 
 	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
 		return True
@@ -360,6 +369,9 @@ def is_video_course( artifact_location: Path ) -> bool :
 
 	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
 	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	
+	if not Path( profile_path ).exists( ) :
+		return False
 
 	with open( profile_path , "r" , encoding="utf-8" ) as f :
 		profile_data = json.load( f )  # returns a plain Python dict

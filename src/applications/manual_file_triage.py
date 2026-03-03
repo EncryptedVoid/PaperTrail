@@ -30,7 +30,8 @@ from config import (
 	AFFINE_DIR , ALTERATIONS_CSV , ALTERATIONS_REQUIRED_DIR , ANKI_DIR ,
 	ARCHIVAL_DIR , AUDIO_TYPES , BITWARDEN_DIR , CALIBRE_LIBRARY_DIR ,
 	DELETE_DIR , DIGITAL_ASSET_MANAGEMENT_DIR , DOCUMENT_TYPES , EMAIL_TYPES ,
-	FIREFLYIII_DIR , GAMES_ARCHIVE_DIR , GITLAB_DIR , IMAGE_TYPES , IMMICH_DIR ,
+	FILE_TRIAGE_BATCH_SIZE , FILE_TRIAGE_MAX_PDF_PG , FIREFLYIII_DIR , GAMES_ARCHIVE_DIR , GITLAB_DIR , IMAGE_TYPES ,
+	IMMICH_DIR ,
 	JAVA_PATH , JELLYFIN_DIR , LINKWARDEN_DIR , MANUALS_ARCHIVE_DIR ,
 	MONICA_CRM_DIR , ODOO_CRM_DIR , ODOO_INVENTORY_DIR , ODOO_MAINTENANCE_DIR ,
 	ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
@@ -884,7 +885,7 @@ class FileTriage :
 			if self._needs_tagging( dest_list ) :
 				self._run_tagging( Path( self.current_file ) )
 
-			if self.batch_n >= self.FILE_TRIAGE_BATCH_SIZE :
+			if self.batch_n >= FILE_TRIAGE_BATCH_SIZE :
 				self._flush_silent( )
 
 		self.show_next( )
@@ -1305,7 +1306,7 @@ class FileTriage :
 
 		doc = fitz.open( Path( self.current_file ) )
 		total = len( doc )
-		show = min( total , self.FILE_TRIAGE_MAX_PDF_PG )
+		show = min( total , FILE_TRIAGE_MAX_PDF_PG )
 
 		ctk.CTkLabel( self.prev_scroll ,
 									text=f"PDF  ·  {total} page(s)" + (f"  ·  showing first {show}" if total > show else "") ,
