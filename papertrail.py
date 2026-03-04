@@ -14,8 +14,8 @@ Author: Ashiq Gazi
 import logging
 from datetime import datetime
 
-# from applications.identify_duplicates import DuplicateReviewer
-from applications.manual_file_triage import FileTriage
+from applications.identify_duplicates import DuplicateReviewer
+# from applications.manual_file_triage import FileTriage
 from config import (
 	APPLICATION_FOLDERS ,
 	COMPLETED_FORMAT_CONVERSION_DIR ,
@@ -110,14 +110,14 @@ sanitizing(
 		dest_dir=COMPLETED_SANITIZATION_DIR ,
 )
 
-# duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_SANITIZATION_DIR )
-# duplicate_reviewer.run( )
-
 converting_files(
 		logger=logger ,
 		source_dir=COMPLETED_SANITIZATION_DIR ,
 		dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
+
+duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
+duplicate_reviewer.run( )
 
 visual_processor = VisualProcessor( logger=logger )
 
@@ -127,16 +127,8 @@ automatically_sorting(
 		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
 
-manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
-manual_artifact_triage.run( )
-
-for directory in APPLICATION_FOLDERS :
-	logger.info( f"Performing final conversions in target application. Processing {directory}." )
-	converting_files(
-			logger=logger ,
-			source_dir=directory ,
-			dest_dir=directory ,
-	)
+# manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
+# manual_artifact_triage.run( )
 
 # ============================================================================
 # PIPELINE COMPLETION

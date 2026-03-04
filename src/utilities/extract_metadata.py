@@ -45,7 +45,7 @@ def extract_metadata( artifact_location: Path , logger: logging.Logger ) -> subp
 			"-jar" ,
 			str( TIKA_APP_JAR_PATH ) ,
 			"--json" ,
-			artifact_location.as_uri( ) ,
+			str( artifact_location ) ,
 		]
 
 	try :

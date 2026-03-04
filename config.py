@@ -15,7 +15,7 @@ from typing import List , Set
 # ── Root Directories ──────────────────────────────────────────────────────────
 TARGET_DRIVE: Path = Path( "E:" )
 # TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop\\" )
-UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL" )
+UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL-LOAD" )
 # UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PAPERTRAIL-PROCESSING" )
 
 BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
@@ -49,18 +49,14 @@ ALTERATIONS_CSV: Path = ALTERATIONS_REQUIRED_DIR / "alterations_log.csv"
 # ── Application Data Directories ──────────────────────────────────────────────
 AFFINE_DIR: Path = Path(
 		TARGET_DRIVE / "AFFINE" )  # https://affine.pro/
-ANKI_DIR: Path = Path(
-		TARGET_DRIVE / "ANKI" )  # https://apps.ankiweb.net/
-BITWARDEN_DIR: Path = Path(
-		TARGET_DRIVE / "BITWARDEN" )  # https://bitwarden.com/
 PERSONAL_LIBRARY_DIR: Path = Path(
-		TARGET_DRIVE / "PERSONAL_LIBRARY" )  # https://github.com/booklore-app/booklore
+		TARGET_DRIVE / "PERSONAL_LIBRARY\BOOKDROP" )  # https://github.com/booklore-app/booklore
 DIGITAL_ASSET_MANAGEMENT_DIR: Path = Path(
 		TARGET_DRIVE / "DIGITAL_ASSET_MANAGEMENT" )  # https://www.pydio.com/
 FIREFLYIII_DIR: Path = Path(
 		TARGET_DRIVE / "FIREFLY-III" )  # https://www.firefly-iii.org/
 JELLYFIN_DIR: Path = Path(
-		TARGET_DRIVE / "JELLYFIN" )  # https://jellyfin.org/
+		TARGET_DRIVE / "JELLYFIN\SELF-HOSTED-APP\media" )  # https://jellyfin.org/
 GITLAB_DIR: Path = Path(
 		TARGET_DRIVE / "GITLAB" )  # https://about.gitlab.com/
 IMMICH_DIR: Path = Path(
@@ -82,15 +78,19 @@ ODOO_INVENTORY_DIR: Path = Path(
 PERFORMANCE_PORTFOLIO_DIR: Path = Path(
 		TARGET_DRIVE / "PORTFOLIO_PERFORMANCE" )  # https://www.portfolio-performance.info/en/
 ULTIMAKER_CURA_DIR: Path = Path(
-		TARGET_DRIVE / "ULTIMAKER_CURA" )
+		DIGITAL_ASSET_MANAGEMENT_DIR / "ULTIMAKER_CURA" )
 GAMES_ARCHIVE_DIR: Path = Path(
-		TARGET_DRIVE / "GAMES_ARCHIVE" )
+		DIGITAL_ASSET_MANAGEMENT_DIR / "GAMES_ARCHIVE" )
 PERSONAL_ARCHIVE_DIR: Path = Path(
-		TARGET_DRIVE / "PERSONAL_ARCHIVE" )
+		DIGITAL_ASSET_MANAGEMENT_DIR / "PERSONAL_ARCHIVE" )
 MANUALS_ARCHIVE_DIR: Path = Path(
-		TARGET_DRIVE / "MANUALS_ARCHIVE" )
+		DIGITAL_ASSET_MANAGEMENT_DIR / "MANUALS_ARCHIVE" )
 SOFTWARE_ARCHIVE_DIR: Path = Path(
-		TARGET_DRIVE / "SOFTWARE_ARCHIVE" )
+		DIGITAL_ASSET_MANAGEMENT_DIR / "SOFTWARE_ARCHIVE" )
+ANKI_DIR: Path = Path(
+		DIGITAL_ASSET_MANAGEMENT_DIR / "ANKI" )  # https://apps.ankiweb.net/
+BITWARDEN_DIR: Path = Path(
+		DIGITAL_ASSET_MANAGEMENT_DIR / "BITWARDEN" )  # https://bitwarden.com/
 
 #  ── System Directory Index ─────────────────────────────────────────────────────
 # Complete set of all managed directories, excluding loose files

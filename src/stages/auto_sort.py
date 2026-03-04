@@ -95,37 +95,45 @@ def automatically_sorting(
 				logger.info( f"Moved file to: {IMMICH_DIR}" )
 
 			elif artifact_ext in [ "iso" ] :
-				shutil.move( src=artifact , dst=SOFTWARE_ARCHIVE_DIR / f"{sanitized_label}.{artifact_ext}" )
-				logger.info( f"Moved file to: {SOFTWARE_ARCHIVE_DIR}" )
+				shutil.move(
+						src=artifact ,
+						dst=(SOFTWARE_ARCHIVE_DIR / "OPERATING_SYSTEMS") / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moved file to: {(SOFTWARE_ARCHIVE_DIR / "OPERATING_SYSTEMS")}" )
 
 			elif artifact_ext in [ "onepkg" ] :
 				shutil.move( src=artifact , dst=AFFINE_DIR / f"{sanitized_label}.{artifact_ext}" )
 				logger.info( f"Copied file to: {AFFINE_DIR}" )
 
 			elif "resume" in artifact_label and artifact_ext in DOCUMENT_TYPES :
-				logger.info( f"Moving resume/professional document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
-				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moving resume/professional document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL")}" )
+				shutil.move(
+						src=artifact ,
+						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL") / f"{sanitized_label}.{artifact_ext}" )
 
 			elif (any(
 					(keyword in artifact_label
 					 for keyword in [ "immigration" , "refugee" , "passport" , "work permit" ]) ,
 			) and artifact_ext not in AUDIO_TYPES and artifact_ext not in VIDEO_TYPES) :
-				logger.info( f"Moving immigration/legal document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
-				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moving immigration/legal document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "IMMIGRATION")}" )
+				shutil.move(
+						src=artifact ,
+						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "IMMIGRATION") / f"{sanitized_label}.{artifact_ext}" )
 
 			elif any(
 					(artifact_ext == extension
 					 for extension in [ "qpf" , "qsf" , "vwf" ]) ,
 			) :
-				logger.info( f"Moving lab/simulation artifact to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
-				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info(f"Moving lab/simulation artifact to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_LAB_REPORT")}" )
+				shutil.move(
+						src=artifact ,
+						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_LAB_REPORT") / f"{sanitized_label}.{artifact_ext}" )
 
 			elif any(
 					(keyword in artifact_label
 					 for keyword in [ "syllabus" , "midterm" , "lecture" , "final exam" ]) ,
 			) and artifact_ext in DOCUMENT_TYPES :
-				logger.info( f"Moving academic/educational document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
-				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moving academic/educational document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" )}" )
+				shutil.move( src=artifact , dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC") / f"{sanitized_label}.{artifact_ext}" )
 
 			elif is_video_course( artifact_location=artifact ) :
 				logger.info( f"Detected video course file: {artifact.name}" )
@@ -206,8 +214,10 @@ def automatically_sorting(
 				shutil.copy2( src=artifact , dst=ODOO_INVENTORY_DIR / f"{sanitized_label}.{artifact_ext}" )
 
 				# Final move to primary storage location
-				logger.info( f"Moving financial document to: {DIGITAL_ASSET_MANAGEMENT_DIR}" )
-				shutil.move( src=artifact , dst=DIGITAL_ASSET_MANAGEMENT_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moving financial document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "FINANCIAL")}" )
+				shutil.move(
+						src=artifact ,
+						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "FINANCIAL") / f"{sanitized_label}.{artifact_ext}" )
 
 			else :
 				# File is supported but didn't match any category

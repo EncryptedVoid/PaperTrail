@@ -25,12 +25,12 @@ from typing import List
 from tqdm import tqdm
 
 from config import (
-	ANKI_EXTENSIONS , ARTIFACT_PREFIX , ARTIFACT_PROFILES_DIR , AUDIO_TYPES ,
+	ANKI_EXTENSIONS , ARCHIVE_TYPES , ARTIFACT_PREFIX , ARTIFACT_PROFILES_DIR , AUDIO_TYPES ,
 	CAD_FILES , CODE_EXTENSIONS , DIGITAL_CONTACT_EXTENSIONS , DOCUMENT_TYPES ,
 	EMAIL_TYPES ,
 	EXECUTABLE_EXTENSIONS , IMAGE_TYPES ,
 	PROFILE_PREFIX , VIDEO_TYPES ,
-)
+	)
 from utilities.dependancy_ensurance import (
 	ensure_ffmpeg ,
 	ensure_imagemagick ,
@@ -139,6 +139,7 @@ def converting_files(
 					or artifact_ext in DIGITAL_CONTACT_EXTENSIONS
 					or artifact_ext in EXECUTABLE_EXTENSIONS
 					or artifact_ext in CODE_EXTENSIONS
+					or artifact_ext in ARCHIVE_TYPES
 			) :
 				logger.info( f"This Artifact will be ignored and tended to during manual triage. " )
 				shutil.move( src=raw_artifact , dst=dest_dir / raw_artifact.name )

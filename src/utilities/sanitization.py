@@ -210,6 +210,9 @@ def is_supported_type( artifact_location: Path ) -> bool :
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
 
+	if artifact_ext == "gif":
+		return False
+
 	return (
 			artifact_ext in EMAIL_TYPES
 			or artifact_ext in MICROSOFT_FILE_TYPES

@@ -320,15 +320,15 @@ def is_book( artifact_location: Path ) -> bool :
 	#
 	# artifact_label = profile_data[ "original_name" ]
 
-	artifact_label = artifact_location.stem.lower( ).strip( )
+	artifact_label = artifact_location.stem.lower( ).strip(" " ).strip(".").strip("_")
 
 	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
 		return True
 
-	if "solutions" in artifact_label and "manual" in artifact_label :
+	if "solution" in artifact_label and "manual" in artifact_label :
 		return True
 
-	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" ] ) :
+	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" , "libgen"] ) :
 		return True
 
 	return False
@@ -345,10 +345,18 @@ def is_code( artifact_location: Path ) -> bool :
 		bool: True if file is code, False otherwise
 	"""
 
-	return (
-			("README" in artifact_location.stem.lower( ).strip( ))
-			or (artifact_location.suffix.lower( ).strip( ).strip( "." ) in CODE_EXTENSIONS)
-	)
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( ).strip(".").strip("_")
+
+	return "README" in artifact_label or artifact_ext in CODE_EXTENSIONS
 
 
 def is_executable( artifact_location: Path ) -> bool :
