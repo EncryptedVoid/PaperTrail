@@ -20,6 +20,7 @@ status. Processing statistics and timing information are logged for monitoring.
 
 import logging
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import List , Set
@@ -32,9 +33,9 @@ from config import (
 	PASSWORD_PROTECTED_ARTIFACTS_DIR ,
 	UNSUPPORTED_ARTIFACTS_DIR
 )
+from utilities.artifact_data_manipulation import stop_apache_tika_server
 from utilities.checksum import generate_checksum , load_checksum_history , save_checksum
-from utilities.dependancy_ensurance import ensure_apache_tika , ensure_apache_tika_server , ensure_ffmpeg
-from utilities.document_data_extraction import stop_apache_tika_server
+from utilities.dependancy_ensurance import ensure_apache_tika , ensure_ffmpeg
 from utilities.sanitization import is_corrupted , is_password_protected , is_supported_type
 
 
@@ -42,10 +43,10 @@ def sanitizing(
 		logger: logging.Logger ,
 		source_dir: Path ,
 		dest_dir: Path ,
+		tika_server_process: subprocess.Popen | None = None ,  # ← add this
 ) -> None :
 	ensure_apache_tika( )
 	ensure_ffmpeg( )
-	tika_server_process = ensure_apache_tika_server( logger=logger , tika_server_process=None )
 
 	# Log conversion stage header for clear progress tracking
 	# This helps distinguish conversion logs from other pipeline stages

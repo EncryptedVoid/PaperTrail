@@ -1272,3 +1272,89 @@ Return ONLY comma-separated tags. Examples:
 - medical, lab report, blood work, diagnostic, hospital, patient record"""
 
 ARTIFACT_SCANNING_PROMPT = "Extract ALL readable text from this document image. Preserve the original structure and formatting."
+
+# These describe the OLD container/codec — injecting them would be misleading
+EXCLUDED_KEYS_AFTER_CONVERSION: Set[ str ] = {
+	# ── MIME / format identity ───────────────────────────────────────
+	"Content-Type" ,
+	"content-type" ,
+	"Content-Encoding" ,
+	"mime_type" ,
+	"format_name" ,
+	"format_long_name" ,
+
+	# ── Container / codec specifics ──────────────────────────────────
+	"codec_name" ,
+	"codec_long_name" ,
+	"codec_type" ,
+	"codec_tag" ,
+	"codec_tag_string" ,
+	"codec_time_base" ,
+	"profile" ,
+	"level" ,
+	"pix_fmt" ,
+	"sample_fmt" ,
+	"sample_rate" ,
+	"channels" ,
+	"channel_layout" ,
+	"bit_rate" ,
+	"max_bit_rate" ,
+	"bits_per_raw_sample" ,
+	"bits_per_sample" ,
+	"nb_frames" ,
+	"nb_streams" ,
+	"r_frame_rate" ,
+	"avg_frame_rate" ,
+	"time_base" ,
+	"start_time" ,
+	"start_pts" ,
+	"duration_ts" ,
+
+	# ── Container size / offsets ─────────────────────────────────────
+	"File Size" ,
+	"File Name" ,
+	"size" ,
+	"probe_score" ,
+
+	# ── Tika internal / processing fields ────────────────────────────
+	"X-Parsed-By" ,
+	"X-TIKA:content_handler" ,
+	"X-TIKA:embedded_depth" ,
+	"X-TIKA:parse_time_millis" ,
+	"X-TIKA:Parsed-By" ,
+	"X-TIKA:Parsed-By-Full-Set" ,
+	"resourceName" ,
+	"Content-Length" ,
+
+	# ── PDF-specific structure fields ────────────────────────────────
+	"pdf:PDFVersion" ,
+	"pdf:PDFExtensionVersion" ,
+	"pdf:docinfo:pdf_version" ,
+	"pdf:encrypted" ,
+	"pdf:hasXFA" ,
+	"pdf:hasXMP" ,
+	"pdf:hasMarkedContent" ,
+	"pdf:hasCollection" ,
+	"pdf:totalUnmappedUnicodeChars" ,
+	"pdf:unmappedUnicodeCharsPerPage" ,
+	"pdf:containsDamagedFont" ,
+	"pdf:containsNonEmbeddedFont" ,
+	"pdf:overallPercentageUnmappedUnicodeChars" ,
+	"pdf:charsPerPage" ,
+
+	# ── Image format specifics that won't apply after conversion ─────
+	"Compression Type" ,
+	"Compression" ,
+	"Data Precision" ,
+	"tiff:BitsPerSample" ,
+	"tiff:ImageLength" ,
+	"tiff:ImageWidth" ,
+	"tiff:SamplesPerPixel" ,
+	"tiff:Compression" ,
+}
+
+# Prefixes that indicate internal/structural keys to skip entirely
+EXCLUDED_PREFIXES_AFTER_CONVERSION = (
+	"X-TIKA:" ,
+	"access_permission:" ,
+	"pdf:docinfo:")

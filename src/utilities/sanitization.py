@@ -41,7 +41,7 @@ from config import (
 	TEXT_TYPES ,
 	VIDEO_TYPES
 )
-from utilities.document_data_extraction import detect_filetype
+from utilities.artifact_data_manipulation import detect_filetype
 
 
 def is_password_protected( artifact_location: Path ) -> bool :
@@ -210,7 +210,7 @@ def is_supported_type( artifact_location: Path ) -> bool :
 
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
 
-	if artifact_ext == "gif":
+	if artifact_ext == "gif" :
 		return False
 
 	return (
