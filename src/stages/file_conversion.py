@@ -6,7 +6,6 @@ import logging
 import shutil
 import subprocess
 import time
-import uuid
 from pathlib import Path
 from typing import List , Optional
 
@@ -16,7 +15,6 @@ from config import (
 	ANKI_EXTENSIONS ,
 	ARCHIVAL_DIR ,
 	ARCHIVE_TYPES ,
-	ARTIFACT_PREFIX ,
 	ARTIFACT_PROFILES_DIR ,
 	AUDIO_TYPES ,
 	CAD_FILES ,
@@ -30,6 +28,7 @@ from config import (
 	VIDEO_TYPES ,
 )
 from utilities.artifact_data_manipulation import get_metadata , inject_metadata
+from utilities.checksum import generate_checksum
 from utilities.dependancy_ensurance import (
 	ensure_ffmpeg ,
 	ensure_imagemagick ,
@@ -50,7 +49,7 @@ def converting_files(
 		logger: logging.Logger ,
 		source_dir: Path ,
 		dest_dir: Path ,
-		tika_server_process: subprocess.Popen | None = None ,  # ← NEW PARAM
+		tika_server_process: subprocess.Popen | None = None ,
 ) -> None :
 	ensure_ffmpeg( )
 	ensure_imagemagick( )
@@ -75,17 +74,17 @@ def converting_files(
 	total_artifacts = len( unprocessed_artifacts )
 	logger.info( f"Found {total_artifacts} file(s) to process" )
 
-	for raw_artifact in tqdm(
+	for artifact in tqdm(
 			unprocessed_artifacts ,
 			desc="Converting format" ,
 			unit="artifacts" ,
 	) :
 		try :
 			start_time = time.time( )
-			logger.info( f"Processing artifact: {raw_artifact.name}" )
+			logger.info( f"Processing artifact: {artifact.name}" )
 
-			artifact_ext: str = raw_artifact.suffix.lower( ).strip( ).strip( "." )
-			logger.info( f"Detected type for {raw_artifact.name}: {artifact_ext}" )
+			artifact_ext: str = artifact.suffix.lower( ).strip( ).strip( "." )
+			logger.info( f"Detected type for {artifact.name}: {artifact_ext}" )
 
 			# ── Skip types that don't need conversion ────────────────
 			if (artifact_ext in
@@ -99,24 +98,13 @@ def converting_files(
 					or artifact_ext in ARCHIVE_TYPES
 			) :
 				logger.info( f"Skipping — will be handled during manual triage." )
-				shutil.move( src=raw_artifact , dst=dest_dir / raw_artifact.name )
+				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 				continue
 
 			elif artifact_ext in [ "pdf" , "mp4" , "mp3" , "png" ] :
 				logger.info( f"Already in target format. No conversion needed." )
-				shutil.move( src=raw_artifact , dst=dest_dir / raw_artifact.name )
+				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 				continue
-
-			# ── Rename with UUID ─────────────────────────────────────
-			unique_id = uuid.uuid4( )
-			original_name = raw_artifact.stem
-			artifact = raw_artifact.rename(
-					raw_artifact.parent / f"{ARTIFACT_PREFIX}-{unique_id}{raw_artifact.suffix}" ,
-			)
-
-			artifact_profile_json = (
-					ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{unique_id}.json"
-			)
 
 			# ── Extract metadata via Tika SERVER (fast, non-fatal) ───
 			metadata: Optional[ dict ] = None
@@ -152,106 +140,78 @@ def converting_files(
 				formatted_artifact = convert_email_to_pdf( src=artifact , logger=logger )
 
 			else :
+				# FIX: No conversion protocol — leave in source_dir
 				logger.warning(
-						f"No conversion protocol for type '{artifact_ext}' — passing through" ,
+						f"No conversion protocol for type '{artifact_ext}' "
+						f"— leaving in source directory for manual triage" ,
 				)
-				# Clean up the now-pointless profile JSON
-				if artifact_profile_json.exists( ) :
-					artifact_profile_json.unlink( )
-					logger.debug( f"Removed orphaned profile: {artifact_profile_json.name}" )
-				# Revert UUID name → original name before moving
-				reverted = artifact.rename(
-						artifact.parent / f"{original_name}{artifact.suffix}" ,
-				)
-				shutil.move( src=reverted , dst=dest_dir / reverted.name )
 				continue
 
 			# ── Handle conversion failure ────────────────────────────
+			# FIX: Failed conversions stay in source_dir.
+			# If the converter deleted the source, restore from archive
+			# back into source_dir (not dest_dir).
 			if formatted_artifact is None :
 				logger.warning(
 						f"Conversion failed for {artifact.name} — "
-						f"reverting to original name and passing through" ,
+						f"leaving in source directory" ,
 				)
 
-				# Clean up the now-pointless profile JSON
-				if artifact_profile_json.exists( ) :
-					artifact_profile_json.unlink( )
-					logger.debug( f"Removed orphaned profile: {artifact_profile_json.name}" )
-
-				# The file might still exist at its UUID path if the
-				# converter returned None without deleting the source
-				if artifact.exists( ) :
-					reverted = artifact.rename(
-							artifact.parent / f"{original_name}{artifact.suffix}" ,
-					)
-					shutil.move( src=reverted , dst=dest_dir / reverted.name )
-				else :
+				if not artifact.exists( ) :
 					# Converter deleted the source but produced no output —
-					# check if the archive copy survived
+					# restore from archive back into source_dir
 					archive_copy = ARCHIVAL_DIR / artifact.name
 					if archive_copy.exists( ) :
-						restored = shutil.copy2(
+						shutil.copy2(
 								src=archive_copy ,
-								dst=source_dir / f"{original_name}{artifact.suffix}" ,
+								dst=source_dir / artifact.name ,
 						)
-						shutil.move( src=restored , dst=dest_dir / Path( restored ).name )
-						logger.info( f"Restored from archive: {original_name}{artifact.suffix}" )
+						logger.info( f"Restored from archive into source dir: {artifact.name}" )
 					else :
 						logger.error(
 								f"Conversion failed AND source is gone for "
-								f"{original_name}{artifact.suffix} — file lost" ,
+								f"{artifact.name} — file lost" ,
 						)
 				continue
 
-			shutil.move( src=formatted_artifact , dst=dest_dir / formatted_artifact.name )
+			# ── Move converted file to dest_dir ──────────────────────
+			converted_path = dest_dir / formatted_artifact.name
+			shutil.move( src=formatted_artifact , dst=converted_path )
 
 			# ── Inject original metadata into the converted file ─────
-			converted_path = dest_dir / formatted_artifact.name
 			if metadata :
+				original_file_checksum = generate_checksum( logger=logger , artifact_path=artifact )
+				artifact_checksum = generate_checksum( logger=logger , artifact_path=converted_path )
+
 				injected = inject_metadata(
 						file_path=converted_path ,
 						raw_metadata=metadata ,
-						original_name=original_name ,
-						unique_id=str( unique_id ) ,
+						original_file_checksum=original_file_checksum ,
 						original_ext=artifact_ext ,
 						logger=logger ,
 				)
-				if injected :
-					logger.info( f"Metadata injected into {converted_path.name}" )
-				else :
-					logger.debug( f"Metadata injection skipped/failed for {converted_path.name}" )
 
-			# ── Write profile JSON (only if we got metadata) ─────────
-			if metadata :
+				artifact_profile_json = (
+						ARTIFACT_PROFILES_DIR / f"{PROFILE_PREFIX}-{artifact_checksum}.json"
+				)
+
 				profile = {
-					"original_name" : original_name ,
-					"uuid"          : str( unique_id ) ,
-					"extension"     : artifact_ext ,
-					"metadata"      : metadata ,
+					"original_metadata" : metadata ,
 				}
 				with open( artifact_profile_json , "w" , encoding="utf-8" ) as f :
 					json.dump( profile , f , indent=2 , ensure_ascii=False )
 				logger.info( f"Profile written: {artifact_profile_json.name}" )
 
+				if injected :
+					logger.info( f"Metadata injected into {converted_path.name}" )
+				else :
+					logger.debug( f"Metadata injection skipped/failed for {converted_path.name}" )
+
 			total_duration = time.time( ) - start_time
 			logger.info( f"Completed in {total_duration:.2f}s" )
 
 		except Exception as e :
-			logger.error( f"Error processing {raw_artifact.name}: {e}" , exc_info=True )
-			# Clean up orphaned profile if it was created
-			try :
-				if artifact_profile_json.exists( ) :
-					artifact_profile_json.unlink( )
-			except NameError :
-				pass  # artifact_profile_json wasn't assigned yet
-			# Revert UUID name if the file still exists under its UUID path
-			try :
-				if artifact.exists( ) and artifact.name != raw_artifact.name :
-					artifact.rename(
-							artifact.parent / f"{original_name}{artifact.suffix}" ,
-					)
-			except NameError :
-				pass  # artifact / original_name weren't assigned yet
+			logger.error( f"Error processing {artifact.name}: {e}" , exc_info=True )
 			continue
 
 	logger.info( "Conversion stage completed" )

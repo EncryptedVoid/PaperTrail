@@ -21,7 +21,7 @@ import random
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List , Optional
 
 import ollama
 import pypdf
@@ -227,12 +227,13 @@ def _llm_generate(
 		)
 		elapsed = time.perf_counter( ) - start
 		result = response[ "response" ].strip( )
-		logger.debug( f"[LLM] Response received in {elapsed:.2f}s ({len( result )} chars)" )
+		logger.debug( f"[LLM] Response received from {model} in {elapsed:.2f}s ({len( result )} chars)" )
 		return result
 
 	except Exception as e :
 		elapsed = time.perf_counter( ) - start
-		logger.error( f"[LLM] Generation failed after {elapsed:.2f}s — {type( e ).__name__}: {e}" )
+		logger.error( f"[LLM] Generation failed on {model} after {elapsed:.2f}s: {type( e ).__name__}: {e}" ,
+									exc_info=True )
 		return None
 
 
@@ -243,14 +244,14 @@ def _vision_generate(
 		system: str ,
 ) -> Optional[ str ] :
 	"""Send an image + prompt to the vision model and return the response string."""
-	logger.debug( f"[VISION] Processing {file_path.name} with {VISION_MODEL}" )
+	logger.debug( f"[VISION] Processing '{file_path.name}' with {VISION_MODEL}" )
 	start = time.perf_counter( )
 
 	try :
 		raw_bytes = file_path.read_bytes( )
 		b64_image = base64.b64encode( raw_bytes ).decode( "utf-8" )
 		file_size_mb = len( raw_bytes ) / (1024 * 1024)
-		logger.debug( f"[VISION] Image loaded: {file_size_mb:.2f} MB" )
+		logger.debug( f"[VISION] Image loaded: '{file_path.name}' ({file_size_mb:.2f} MB)" )
 
 		client = ollama.Client( )
 		response = client.generate(
@@ -262,12 +263,13 @@ def _vision_generate(
 		)
 		elapsed = time.perf_counter( ) - start
 		result = response[ "response" ].strip( )
-		logger.debug( f"[VISION] Response received in {elapsed:.2f}s ({len( result )} chars)" )
+		logger.debug( f"[VISION] Response received for '{file_path.name}' in {elapsed:.2f}s ({len( result )} chars)" )
 		return result
 
 	except Exception as e :
 		elapsed = time.perf_counter( ) - start
-		logger.error( f"[VISION] Generation failed after {elapsed:.2f}s — {type( e ).__name__}: {e}" )
+		logger.error( f"[VISION] Generation failed for '{file_path.name}' after {elapsed:.2f}s: {type( e ).__name__}: {e}" ,
+									exc_info=True )
 		return None
 
 
@@ -284,7 +286,7 @@ def _parse_bool_response( response: Optional[ str ] ) -> bool :
 	return cleaned == "true"
 
 
-def _extract_text_for_detection(
+def extract_text_for_detection(
 		logger: logging.Logger ,
 		artifact_location: Path ,
 		max_content_chars: int = 9000 ,
@@ -296,22 +298,22 @@ def _extract_text_for_detection(
 	token usage manageable. Then extracts text via extract_document_text.
 	Returns truncated content string or None on failure.
 	"""
+	logger.info( f"[DETECT] Extracting text for detection from '{artifact_location.name}'" )
 	file_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
 	source_path = artifact_location
 
 	# Subset large PDFs before extraction
 	if file_ext == "pdf" :
+		logger.debug( f"[DETECT] '{artifact_location.name}' is a PDF, attempting page subset" )
 		try :
-			source_path = compile_doc_subset( artifact_location )
+			source_path = compile_doc_subset( artifact_location , logger )
 			if source_path != artifact_location :
-				logger.debug(
-						f"[DETECT] Subsetted {artifact_location.name} → {source_path.name}" ,
-				)
+				logger.debug( f"[DETECT] Subsetted '{artifact_location.name}' -> '{source_path.name}'" )
+			else :
+				logger.debug( f"[DETECT] '{artifact_location.name}' has {PDF_SUBSET_SIZE} or fewer pages, no subset needed" )
 		except Exception as e :
 			logger.warning(
-					f"[DETECT] PDF subset failed for {artifact_location.name}, "
-					f"using original: {type( e ).__name__}: {e}" ,
-			)
+					f"[DETECT] PDF subset failed for '{artifact_location.name}', using original: {type( e ).__name__}: {e}" )
 			source_path = artifact_location
 
 	content = extract_document_text( logger , source_path )
@@ -320,17 +322,20 @@ def _extract_text_for_detection(
 	if source_path != artifact_location and source_path.exists( ) :
 		try :
 			source_path.unlink( )
-		except OSError :
-			pass
+			logger.debug( f"[DETECT] Cleaned up temporary subset file '{source_path.name}'" )
+		except OSError as e :
+			logger.warning( f"[DETECT] Failed to clean up temporary subset file '{source_path.name}': {e}" )
 
 	if not content :
+		logger.warning( f"[DETECT] No content extracted from '{artifact_location.name}'" )
 		return None
 
 	truncated = content[ :max_content_chars ]
 	if len( content ) > max_content_chars :
 		logger.debug(
-				f"[DETECT] Content truncated from {len( content )} to {max_content_chars} chars" ,
-		)
+				f"[DETECT] Content truncated from {len( content )} to {max_content_chars} chars for '{artifact_location.name}'" )
+
+	logger.info( f"[DETECT] Extracted {len( truncated )} chars from '{artifact_location.name}'" )
 	return truncated
 
 
@@ -349,7 +354,7 @@ def generate_filename(
 	Works for any file whose content has already been extracted (text or visual description).
 	Returns a lowercase underscore-separated name without extension, or None on failure.
 	"""
-	logger.info( "[FILENAME] Generating descriptive filename" )
+	logger.info( f"[FILENAME] Generating descriptive filename from {len( content )} chars of content" )
 
 	truncated = content[ :max_content_chars ]
 	if len( content ) > max_content_chars :
@@ -367,10 +372,10 @@ def generate_filename(
 			.lower( )
 			.split( "." )[ 0 ]
 		)
-		logger.info( f"[FILENAME] Generated: {cleaned}" )
+		logger.info( f"[FILENAME] Generated filename: '{cleaned}'" )
 		return cleaned
 
-	logger.warning( "[FILENAME] Failed to generate filename" )
+	logger.warning( "[FILENAME] LLM returned no result, filename generation failed" )
 	return None
 
 
@@ -385,7 +390,7 @@ def extract_document_text(
 	Falls back to vision-based OCR if Tika fails or returns empty content.
 	Returns extracted text string or None on complete failure.
 	"""
-	logger.info( f"[SCAN-TEXT] Extracting text from: {file_path.name}" )
+	logger.info( f"[SCAN-TEXT] Extracting text from '{file_path.name}'" )
 	start = time.perf_counter( )
 
 	# ── Attempt 1: Apache Tika ────────────────────────────────────────────
@@ -398,31 +403,31 @@ def extract_document_text(
 		if proc.returncode == 0 and proc.stdout.strip( ) :
 			content = proc.stdout.strip( )
 			elapsed = time.perf_counter( ) - start
-			logger.info( f"[SCAN-TEXT] Tika extracted {len( content )} chars in {elapsed:.2f}s" )
+			logger.info( f"[SCAN-TEXT] Tika extracted {len( content )} chars from '{file_path.name}' in {elapsed:.2f}s" )
 			return content
 
-		logger.warning( f"[SCAN-TEXT] Tika returned empty or failed (code {proc.returncode})" )
+		logger.warning( f"[SCAN-TEXT] Tika returned empty or failed for '{file_path.name}' (exit code {proc.returncode})" )
 		if proc.stderr :
-			logger.debug( f"[SCAN-TEXT] Tika stderr: {proc.stderr[ :500 ]}" )
+			logger.debug( f"[SCAN-TEXT] Tika stderr for '{file_path.name}': {proc.stderr[ :500 ]}" )
 
 	except subprocess.TimeoutExpired :
-		logger.warning( f"[SCAN-TEXT] Tika timed out after {timeout}s" )
+		logger.warning( f"[SCAN-TEXT] Tika timed out after {timeout}s for '{file_path.name}'" )
 	except FileNotFoundError :
-		logger.error( "[SCAN-TEXT] Java or Tika JAR not found — check paths" )
+		logger.error( "[SCAN-TEXT] Java or Tika JAR not found — check JAVA_PATH and TIKA_APP_JAR_PATH" )
 	except Exception as e :
-		logger.error( f"[SCAN-TEXT] Tika error — {type( e ).__name__}: {e}" )
+		logger.error( f"[SCAN-TEXT] Tika error for '{file_path.name}': {type( e ).__name__}: {e}" , exc_info=True )
 
 	# ── Attempt 2: Vision-based OCR fallback ──────────────────────────────
-	logger.info( f"[SCAN-TEXT] Falling back to vision OCR for: {file_path.name}" )
+	logger.info( f"[SCAN-TEXT] Falling back to vision OCR for '{file_path.name}'" )
 	result = _vision_generate( logger , file_path , user_prompt=ARTIFACT_SCANNING_PROMPT , system=SCAN_SYSTEM_PROMPT )
 
 	if result :
 		elapsed = time.perf_counter( ) - start
-		logger.info( f"[SCAN-TEXT] Vision OCR extracted {len( result )} chars in {elapsed:.2f}s" )
+		logger.info( f"[SCAN-TEXT] Vision OCR extracted {len( result )} chars from '{file_path.name}' in {elapsed:.2f}s" )
 		return result
 
 	elapsed = time.perf_counter( ) - start
-	logger.error( f"[SCAN-TEXT] All extraction methods failed for {file_path.name} after {elapsed:.2f}s" )
+	logger.error( f"[SCAN-TEXT] All extraction methods failed for '{file_path.name}' after {elapsed:.2f}s" )
 	return None
 
 
@@ -435,7 +440,7 @@ def extract_visual_description(
 
 	Returns a concise 2-4 sentence description of visible content, or None on failure.
 	"""
-	logger.info( f"[VISUAL-DESC] Describing: {file_path.name}" )
+	logger.info( f"[VISUAL-DESC] Generating visual description for '{file_path.name}'" )
 
 	result = _vision_generate(
 			logger=logger ,
@@ -445,11 +450,11 @@ def extract_visual_description(
 	)
 
 	if result :
-		logger.info( f"[VISUAL-DESC] Description generated ({len( result )} chars)" )
-		logger.debug( f"[VISUAL-DESC] Preview: {result[ :150 ]}..." )
+		logger.info( f"[VISUAL-DESC] Description generated for '{file_path.name}' ({len( result )} chars)" )
+		logger.debug( f"[VISUAL-DESC] Preview for '{file_path.name}': {result[ :150 ]}..." )
 		return result
 
-	logger.warning( f"[VISUAL-DESC] Failed to describe {file_path.name}" )
+	logger.warning( f"[VISUAL-DESC] Failed to generate description for '{file_path.name}'" )
 	return None
 
 
@@ -457,13 +462,13 @@ def generate_tags(
 		logger: logging.Logger ,
 		content: str ,
 		max_content_chars: int = 9000 ,
-) -> Optional[ str ] :
+) -> Optional[ List[ str ] ] :
 	"""
 	Generate comma-separated classification tags from document content.
 
 	Returns a string of 5-10 lowercase tags, or None on failure.
 	"""
-	logger.info( "[TAGS] Generating classification tags" )
+	logger.info( f"[TAGS] Generating classification tags from {len( content )} chars of content" )
 
 	truncated = content[ :max_content_chars ]
 	if len( content ) > max_content_chars :
@@ -473,29 +478,39 @@ def generate_tags(
 	result = _llm_generate( logger , prompt=prompt , system=TAGS_SYSTEM_PROMPT )
 
 	if result :
-		tags = ", ".join(
-				(tag.strip( ).lower( )
-				 for tag in result.split( "," )
-				 if tag.strip( )) ,
-		)
-		logger.info( f"[TAGS] Generated: {tags}" )
+		tags = (
+			(tag.strip( ).lower( )
+			 for tag in result.split( "," )
+			 if tag.strip( )))
+
+		logger.info( f"[TAGS] Generated tags: {tags}" )
 		return tags
 
-	logger.warning( "[TAGS] Failed to generate tags" )
+	logger.warning( "[TAGS] LLM returned no result, tag generation failed" )
 	return None
 
 
-def compile_doc_subset( input_pdf: Path ) -> Path :
+def compile_doc_subset( input_pdf: Path , logger: logging.Logger ) -> Path :
+	"""
+	Create a subset of a large PDF by sampling pages.
+
+	Keeps the first page, last page, and a random sample of middle pages
+	up to PDF_SUBSET_SIZE total. Returns the original path if the PDF is
+	already small enough.
+	"""
 	reader = pypdf.PdfReader( str( input_pdf ) )
 	total_pages = len( reader.pages )
+	logger.debug( f"[SUBSET] '{input_pdf.name}' has {total_pages} pages (subset threshold: {PDF_SUBSET_SIZE})" )
 
 	if total_pages <= PDF_SUBSET_SIZE :
+		logger.debug( f"[SUBSET] '{input_pdf.name}' is within threshold, no subset needed" )
 		return input_pdf
 
 	first , last = 0 , total_pages - 1
 	middle_indices = list( range( 1 , last ) )
 	sampled = random.sample( middle_indices , min( PDF_SUBSET_SIZE - 2 , len( middle_indices ) ) )
 	selected = sorted( [ first ] + sampled + [ last ] )
+	logger.debug( f"[SUBSET] Selected {len( selected )} pages from '{input_pdf.name}': {selected}" )
 
 	writer = pypdf.PdfWriter( )
 	for i in selected :
@@ -505,6 +520,8 @@ def compile_doc_subset( input_pdf: Path ) -> Path :
 	with open( output_path , "wb" ) as f :
 		writer.write( f )
 
+	logger.info(
+			f"[SUBSET] Created subset of '{input_pdf.name}' -> '{output_path.name}' ({len( selected )}/{total_pages} pages)" )
 	return output_path
 
 
@@ -512,7 +529,7 @@ def compile_doc_subset( input_pdf: Path ) -> Path :
 # Public API — Thematic detection functions
 # ──────────────────────────────────────────────────────────────────────────────
 
-def detect_video_course_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_video_course_theme( artifact_location: Path , logger: logging.Logger , ) -> bool :
 	"""
 	Detect whether a video file is part of an educational course or tutorial.
 
@@ -520,12 +537,8 @@ def detect_video_course_theme( artifact_location: Path , logger: logging.Logger 
 	indicators of being course/lecture material. Returns False if metadata
 	cannot be retrieved.
 	"""
+	logger.info( f"[DETECT-VIDEO-COURSE] Analyzing '{artifact_location.name}'" )
 
-	logger.info( f"[DETECT-VIDEO-COURSE] Analyzing: {artifact_location.name}" )
-
-	# We need a running Tika server — attempt without a process handle
-	# by passing None; get_metadata will log the error and return None
-	# if the server isn't running.
 	metadata = get_metadata(
 			logger=logger ,
 			artifact=artifact_location ,
@@ -533,209 +546,165 @@ def detect_video_course_theme( artifact_location: Path , logger: logging.Logger 
 	)
 
 	if not metadata :
-		logger.warning(
-				f"[DETECT-VIDEO-COURSE] No metadata available for {artifact_location.name} "
-				f"— cannot determine video course status" ,
-		)
+		logger.warning( f"[DETECT-VIDEO-COURSE] No metadata available for '{artifact_location.name}', cannot classify" )
 		return False
 
-	# Flatten the metadata dict into a readable text block for the LLM
 	meta_lines = [ ]
 	for key , value in metadata.items( ) :
 		if isinstance( value , list ) :
 			value = "; ".join( str( v ) for v in value )
 		meta_lines.append( f"{key}: {value}" )
 	meta_text = "\n".join( meta_lines )
+	logger.debug(
+			f"[DETECT-VIDEO-COURSE] Extracted {len( meta_text )} chars of metadata from '{artifact_location.name}'" )
 
 	prompt = _VIDEO_COURSE_PROMPT.format( content=meta_text[ :9000 ] )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_course = _parse_bool_response( result )
-	logger.info( f"[DETECT-VIDEO-COURSE] {artifact_location.name} → {is_course}" )
+	logger.info( f"[DETECT-VIDEO-COURSE] '{artifact_location.name}' -> {is_course} (raw response: '{result}')" )
 	return is_course
 
 
-def detect_book_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_book_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is an officially published book (not a textbook).
 
-	Subsets large PDFs before extraction to stay within token limits.
 	Analyzes extracted text content for book indicators like ISBN, publisher
 	info, chapter structure, and literary narrative patterns.
 	"""
-	logger.info( f"[DETECT-BOOK] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-BOOK] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-BOOK] Running book theme detection ({len( content )} chars of content)" )
 
 	prompt = _BOOK_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_book = _parse_bool_response( result )
-	logger.info( f"[DETECT-BOOK] {artifact_location.name} → {is_book}" )
+	logger.info( f"[DETECT-BOOK] Result: {is_book} (raw response: '{result}')" )
 	return is_book
 
 
-def detect_textbook_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_textbook_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is an educational textbook.
 
-	Subsets large PDFs before extraction. Looks for textbook-specific
-	indicators: edition numbers, exercises, academic publishers, learning
-	objectives, glossaries, and subject-oriented structure.
+	Looks for textbook-specific indicators: edition numbers, exercises,
+	academic publishers, learning objectives, glossaries, and
+	subject-oriented structure.
 	"""
-	logger.info( f"[DETECT-TEXTBOOK] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-TEXTBOOK] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-TEXTBOOK] Running textbook theme detection ({len( content )} chars of content)" )
 
 	prompt = _TEXTBOOK_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_textbook = _parse_bool_response( result )
-	logger.info( f"[DETECT-TEXTBOOK] {artifact_location.name} → {is_textbook}" )
+	logger.info( f"[DETECT-TEXTBOOK] Result: {is_textbook} (raw response: '{result}')" )
 	return is_textbook
 
 
-def detect_professional_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_professional_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is a professional/employment artifact.
 
-	Subsets large PDFs before extraction. Identifies resumes, contracts,
-	certificates, offer letters, and other career-related documents that
-	belong to a specific individual.
+	Identifies resumes, contracts, certificates, offer letters, and other
+	career-related documents that belong to a specific individual.
 	"""
-	logger.info( f"[DETECT-PROFESSIONAL] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-PROFESSIONAL] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-PROFESSIONAL] Running professional theme detection ({len( content )} chars of content)" )
 
 	prompt = _PROFESSIONAL_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_professional = _parse_bool_response( result )
-	logger.info( f"[DETECT-PROFESSIONAL] {artifact_location.name} → {is_professional}" )
+	logger.info( f"[DETECT-PROFESSIONAL] Result: {is_professional} (raw response: '{result}')" )
 	return is_professional
 
 
-def detect_financial_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_financial_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is related to finances or monetary transactions.
 
-	Subsets large PDFs before extraction. Catches invoices, receipts, tax
-	forms, bank statements, credit card offers, tracking info, and any
-	document involving money or financial accounts.
+	Catches invoices, receipts, tax forms, bank statements, credit card
+	offers, tracking info, and any document involving money or financial
+	accounts.
 	"""
-	logger.info( f"[DETECT-FINANCIAL] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-FINANCIAL] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-FINANCIAL] Running financial theme detection ({len( content )} chars of content)" )
 
 	prompt = _FINANCIAL_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_financial = _parse_bool_response( result )
-	logger.info( f"[DETECT-FINANCIAL] {artifact_location.name} → {is_financial}" )
+	logger.info( f"[DETECT-FINANCIAL] Result: {is_financial} (raw response: '{result}')" )
 	return is_financial
 
 
-def detect_immigration_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_immigration_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is related to immigration or travel authorization.
 
-	Subsets large PDFs before extraction. Identifies documents from
-	immigration bodies (IRCC, CBSA, ICE, USCIS, etc.), visa applications,
-	permits, travel bookings, and border service records.
+	Identifies documents from immigration bodies (IRCC, CBSA, ICE, USCIS,
+	etc.), visa applications, permits, travel bookings, and border service
+	records.
 	"""
-	logger.info( f"[DETECT-IMMIGRATION] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-IMMIGRATION] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-IMMIGRATION] Running immigration theme detection ({len( content )} chars of content)" )
 
 	prompt = _IMMIGRATION_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_immigration = _parse_bool_response( result )
-	logger.info( f"[DETECT-IMMIGRATION] {artifact_location.name} → {is_immigration}" )
+	logger.info( f"[DETECT-IMMIGRATION] Result: {is_immigration} (raw response: '{result}')" )
 	return is_immigration
 
 
-def detect_legal_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_legal_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is a legal or legally binding document.
 
-	Subsets large PDFs before extraction. Identifies contracts, terms and
-	conditions, legal notices, wills, court filings, lawyer correspondence,
-	and any law-related or legally binding material.
+	Identifies contracts, terms and conditions, legal notices, wills,
+	court filings, lawyer correspondence, and any law-related or legally
+	binding material.
 	"""
-	logger.info( f"[DETECT-LEGAL] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-LEGAL] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-LEGAL] Running legal theme detection ({len( content )} chars of content)" )
 
 	prompt = _LEGAL_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_legal = _parse_bool_response( result )
-	logger.info( f"[DETECT-LEGAL] {artifact_location.name} → {is_legal}" )
+	logger.info( f"[DETECT-LEGAL] Result: {is_legal} (raw response: '{result}')" )
 	return is_legal
 
 
-def detect_academic_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_academic_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is related to academia or school work.
 
-	Subsets large PDFs before extraction. Identifies research papers, grades,
-	assignments, lecture notes, syllabi, exams, and any document produced
-	for or by educational institutions at any level.
+	Identifies research papers, grades, assignments, lecture notes, syllabi,
+	exams, and any document produced for or by educational institutions at
+	any level.
 	"""
-	logger.info( f"[DETECT-ACADEMIC] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-ACADEMIC] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-ACADEMIC] Running academic theme detection ({len( content )} chars of content)" )
 
 	prompt = _ACADEMIC_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_academic = _parse_bool_response( result )
-	logger.info( f"[DETECT-ACADEMIC] {artifact_location.name} → {is_academic}" )
+	logger.info( f"[DETECT-ACADEMIC] Result: {is_academic} (raw response: '{result}')" )
 	return is_academic
 
 
-def detect_instruction_manual_theme( artifact_location: Path , logger: logging.Logger ) -> bool :
+def detect_instruction_manual_theme( logger: logging.Logger , content: str ) -> bool :
 	"""
 	Detect whether a document is an instruction manual or product guide.
 
-	Subsets large PDFs before extraction. Identifies user manuals, setup
-	guides, assembly instructions, owner's manuals, troubleshooting guides,
-	and any document designed to instruct on product usage or maintenance.
+	Identifies user manuals, setup guides, assembly instructions, owner's
+	manuals, troubleshooting guides, and any document designed to instruct
+	on product usage or maintenance.
 	"""
-	logger.info( f"[DETECT-MANUAL] Analyzing: {artifact_location.name}" )
-
-	content = _extract_text_for_detection( logger , artifact_location )
-	if not content :
-		logger.warning( f"[DETECT-MANUAL] No content extracted from {artifact_location.name}" )
-		return False
+	logger.info( f"[DETECT-MANUAL] Running instruction manual theme detection ({len( content )} chars of content)" )
 
 	prompt = _INSTRUCTION_MANUAL_PROMPT.format( content=content )
 	result = _llm_generate( logger , prompt=prompt , system=_DETECTION_SYSTEM_PROMPT )
 
 	is_manual = _parse_bool_response( result )
-	logger.info( f"[DETECT-MANUAL] {artifact_location.name} → {is_manual}" )
+	logger.info( f"[DETECT-MANUAL] Result: {is_manual} (raw response: '{result}')" )
 	return is_manual
 
 
@@ -747,13 +716,12 @@ def detect_document_scan( artifact_location: Path , logger: logging.Logger ) -> 
 	document scan: large blocks of text, paragraph structure, page-like
 	layout, etc. Only processes image files — returns False for non-images.
 	"""
-	logger.info( f"[DETECT-SCAN] Analyzing: {artifact_location.name}" )
+	logger.info( f"[DETECT-SCAN] Analyzing '{artifact_location.name}' for document scan indicators" )
 
-	# Only process image files
 	image_extensions = { "png" , "jpg" , "jpeg" , "bmp" , "tiff" , "tif" , "webp" , "heic" , "heif" }
 	file_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
 	if file_ext not in image_extensions :
-		logger.debug( f"[DETECT-SCAN] {artifact_location.name} is not an image — skipping" )
+		logger.debug( f"[DETECT-SCAN] '{artifact_location.name}' is not an image (ext='{file_ext}'), skipping" )
 		return False
 
 	result = _vision_generate(
@@ -764,5 +732,5 @@ def detect_document_scan( artifact_location: Path , logger: logging.Logger ) -> 
 	)
 
 	is_scan = _parse_bool_response( result )
-	logger.info( f"[DETECT-SCAN] {artifact_location.name} → {is_scan}" )
+	logger.info( f"[DETECT-SCAN] '{artifact_location.name}' -> {is_scan} (raw response: '{result}')" )
 	return is_scan

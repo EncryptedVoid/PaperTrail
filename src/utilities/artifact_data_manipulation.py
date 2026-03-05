@@ -78,8 +78,7 @@ def _flatten_metadata( raw: dict , prefix: str = "" ) -> Dict[ str , str ] :
 
 def _build_injection_dict(
 		raw_metadata: dict ,
-		original_name: str ,
-		unique_id: str ,
+		original_file_checksum: str ,
 		original_ext: str ,
 		target_ext: str ,
 ) -> Dict[ str , str ] :
@@ -102,8 +101,7 @@ def _build_injection_dict(
 	now = datetime.now( timezone.utc ).isoformat( )
 	filtered[ "papertrail:processed_by" ] = "PaperTrail Automated Pipeline"
 	filtered[ "papertrail:conversion_date" ] = now
-	filtered[ "papertrail:artifact_uuid" ] = unique_id
-	filtered[ "papertrail:original_filename" ] = f"{original_name}.{original_ext}"
+	filtered[ "papertrail:original_file_checksum" ] = f"{original_file_checksum}"
 	filtered[ "papertrail:original_format" ] = original_ext
 	filtered[ "papertrail:converted_to" ] = target_ext
 	filtered[ "papertrail:metadata_injected" ] = "true"
@@ -438,31 +436,10 @@ def stop_apache_tika_server(
 def inject_metadata(
 		file_path: Path ,
 		raw_metadata: dict ,
-		original_name: str ,
-		unique_id: str ,
+		original_file_checksum: str ,
 		original_ext: str ,
 		logger: logging.Logger ,
 ) -> bool :
-	"""
-	Inject ALL metadata from the original file into the converted file.
-
-	Preserves every metadata field except format-specific container/codec
-	fields that would be incorrect for the new file type. Adds PaperTrail
-	provenance signature fields.
-
-	Non-fatal — returns False on failure and never raises.
-
-	Args:
-		file_path:     Path to the converted file (.pdf, .png, .mp3, .mp4).
-		raw_metadata:  Raw metadata dict from Tika server or ffprobe.
-		original_name: Original filename stem (without extension).
-		unique_id:     UUID4 string assigned during processing.
-		original_ext:  Original file extension (without dot).
-		logger:        Logger instance.
-
-	Returns:
-		True if metadata was successfully injected, False otherwise.
-	"""
 	if not raw_metadata :
 		logger.debug( f"No metadata to inject for {file_path.name}" )
 		return False
@@ -476,8 +453,7 @@ def inject_metadata(
 	# Build the complete injection dict: all fields + provenance
 	meta = _build_injection_dict(
 			raw_metadata=raw_metadata ,
-			original_name=original_name ,
-			unique_id=unique_id ,
+			original_file_checksum=original_file_checksum ,
 			original_ext=original_ext ,
 			target_ext=target_ext ,
 	)
@@ -486,10 +462,7 @@ def inject_metadata(
 		logger.debug( f"Injection dict empty for {file_path.name}" )
 		return False
 
-	logger.info(
-			f"Injecting {len( meta )} fields into {file_path.name} "
-			f"(original: {original_name}.{original_ext} → {target_ext})" ,
-	)
+	logger.info( f"Injecting {len( meta )} fields into {file_path.name} " )
 
 	ext = file_path.suffix.lower( )
 

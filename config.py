@@ -230,7 +230,10 @@ MICROSOFT_FILE_TYPES = [
 	"xlsm" ,
 	"xlsx" ,
 	"onepkg" ,
+	"one" ,
+	"onetoc2" ,
 	"pub" ,
+	"pot" ,
 ]
 
 IMAGE_TYPES = [
@@ -431,6 +434,10 @@ EXECUTABLE_EXTENSIONS = [
 	"rdp" ,
 	"apk" ,
 	"jar" ,
+]
+
+SOFTWARE_EXTENSIONS = [
+	"iso" ,
 ]
 
 ANKI_EXTENSIONS = [

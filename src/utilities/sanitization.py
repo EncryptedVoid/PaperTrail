@@ -38,7 +38,7 @@ from config import (
 	EXTENSION_ALIASES ,
 	IMAGE_TYPES ,
 	MICROSOFT_FILE_TYPES ,
-	TEXT_TYPES ,
+	SOFTWARE_EXTENSIONS , TEXT_TYPES ,
 	VIDEO_TYPES
 )
 from utilities.artifact_data_manipulation import detect_filetype
@@ -167,6 +167,9 @@ def is_corrupted(
 	) :
 		return True
 
+	if artifact_location.suffix.lower( ).strip( ).endswith( "~" ) :
+		return True
+
 	# Detect actual content type via magic bytes / Tika server
 	detected_ext = detect_filetype( logger , artifact_location , tika_server_process )
 
@@ -227,6 +230,7 @@ def is_supported_type( artifact_location: Path ) -> bool :
 			or artifact_ext in ANKI_EXTENSIONS
 			or artifact_ext in EXECUTABLE_EXTENSIONS
 			or artifact_ext in DIGITAL_CONTACT_EXTENSIONS
+			or artifact_ext in SOFTWARE_EXTENSIONS
 	)
 
 

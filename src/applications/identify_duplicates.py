@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Duplicate Finder & Reviewer  v2 — Redesigned
-─────────────────────────────────────────────
-Performance overhaul:
-  • LRU preview cache (PIL images, PDF renders, text, metadata)
-  • Background preloading of upcoming pairs while user reviews current
-  • Stable widget tree — widgets created once, updated via itemconfig
-  • All heavy I/O off the main thread
-  • Pure CTk where possible; raw tk.Canvas only for pixel rendering
+Duplicate Finder & Reviewer  v3 — Per-category streaming
+─────────────────────────────────────────────────────────
+v3 changes:
+  • Detection runs per file-type category (Media → Images → Documents → Other)
+  • Results stream to the reviewer as each category finishes
+  • User can review early results while later categories still scan
+  • "Needs Alteration" action moves both files to ALTERATIONS_REQUIRED_DIR
+
+v2 performance (preserved):
+  • LRU preview cache, background preloading, stable widget tree
+  • Size-bucketing → parallel SHA-256, BK-tree pHash, doc prefilters
 """
 
 import difflib
@@ -25,7 +28,7 @@ import time
 import tkinter as tk
 import uuid
 from collections import Counter , OrderedDict , defaultdict
-from concurrent.futures import Future , ThreadPoolExecutor
+from concurrent.futures import Future , ThreadPoolExecutor , as_completed
 from pathlib import Path
 from tkinter import filedialog , messagebox
 
@@ -40,9 +43,16 @@ import imagehash
 import cv2
 
 from config import (
-	ARCHIVAL_DIR , DOCUMENT_TYPES , IMAGE_TYPES ,
-	JAVA_PATH , TIKA_APP_JAR_PATH ,
+	ALTERATIONS_REQUIRED_DIR ,
+	ARCHIVAL_DIR ,
+	DELETE_DIR ,
+	DOCUMENT_TYPES ,
+	IMAGE_TYPES ,
+	JAVA_PATH ,
+	TIKA_APP_JAR_PATH ,
 )
+
+fitz.TOOLS.mupdf_display_errors( False )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PALETTE & CONSTANTS
@@ -69,12 +79,82 @@ FONT_MONO = ("Consolas" , 9)
 _IMG_EXTS = { f".{e}" for e in IMAGE_TYPES }
 _DOC_EXTS = { f".{e}" for e in DOCUMENT_TYPES } | { ".txt" , ".md" , ".csv" , ".log" }
 _VID_EXTS = { ".mp4" , ".mov" , ".avi" , ".mkv" , ".webm" , ".m4v" }
+_AUDIO_EXTS = { ".mp3" , ".wav" , ".flac" , ".aac" , ".ogg" , ".wma" , ".m4a" , ".opus" }
 _TXT_EXTS = { ".txt" , ".md" , ".csv" , ".log" , ".json" , ".yaml" , ".yml" , ".toml" , ".xml" }
 _CAMERA_RAW_EXTS = { ".nef" , ".heic" , ".arw" , ".cr2" }
 
-CACHE_MAX_ITEMS = 64  # max cached preview renders
-PREFETCH_AHEAD = 5  # pairs to preload in background
-BG_WORKERS = 3  # background thread pool size
+CACHE_MAX_ITEMS = 64
+PREFETCH_AHEAD = 5
+BG_WORKERS = 3
+
+HASH_WORKERS = 8
+HASH_CHUNK_SIZE = 1 << 16
+IMG_HASH_WORKERS = 6
+DOC_SIZE_RATIO = 0.3
+DOC_LEN_RATIO = 0.4
+
+# ── File-type categories (scanned in this order) ────────────────────────
+# Media is fastest (exact+names only), images medium (pHash), docs slowest.
+CATEGORY_ORDER = [ "Media" , "Images" , "Documents" , "Other" ]
+CATEGORY_EXTS = {
+	"Images"    : _IMG_EXTS ,
+	"Documents" : _DOC_EXTS | { ".pdf" } ,
+	"Media"     : _VID_EXTS | _AUDIO_EXTS ,
+	# "Other" is implicit — anything not in the above
+}
+
+
+def _categorize_files( files: list[ Path ] ) -> dict[ str , list[ Path ] ] :
+	buckets: dict[ str , list[ Path ] ] = { c : [ ] for c in CATEGORY_ORDER }
+	assigned = set( )
+	for cat in ("Images" , "Documents" , "Media") :
+		exts = CATEGORY_EXTS[ cat ]
+		for f in files :
+			if f.suffix.lower( ) in exts :
+				buckets[ cat ].append( f )
+				assigned.add( id( f ) )
+	for f in files :
+		if id( f ) not in assigned :
+			buckets[ "Other" ].append( f )
+	return { k : v for k , v in buckets.items( ) if v }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BK-TREE
+# ══════════════════════════════════════════════════════════════════════════════
+
+class BKTree :
+	def __init__( self , distance_fn ) :
+		self._dist = distance_fn
+		self._root = None
+
+	def insert( self , item ) :
+		if self._root is None :
+			self._root = (item , { })
+			return
+		node = self._root
+		while True :
+			d = self._dist( node[ 0 ] , item )
+			if d in node[ 1 ] :
+				node = node[ 1 ][ d ]
+			else :
+				node[ 1 ][ d ] = (item , { })
+				return
+
+	def find( self , item , threshold ) -> list :
+		if self._root is None :
+			return [ ]
+		results = [ ]
+		candidates = [ self._root ]
+		while candidates :
+			node = candidates.pop( )
+			d = self._dist( node[ 0 ] , item )
+			if d <= threshold :
+				results.append( node[ 0 ] )
+			for child_d , child_node in node[ 1 ].items( ) :
+				if d - threshold <= child_d <= d + threshold :
+					candidates.append( child_node )
+		return results
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -82,16 +162,6 @@ BG_WORKERS = 3  # background thread pool size
 # ══════════════════════════════════════════════════════════════════════════════
 
 class PreviewCache :
-	"""
-    Thread-safe LRU cache for decoded preview data.
-    Stores:  (fp, kind) → payload
-      kind="image"    → PIL.Image (raw, pre-decode)
-      kind="pdf"      → list[PIL.Image] (one per page)
-      kind="text"     → str
-      kind="meta"     → str
-      kind="video"    → PIL.Image (first frame)
-    """
-
 	def __init__( self , maxsize: int = CACHE_MAX_ITEMS ) :
 		self._data: OrderedDict = OrderedDict( )
 		self._maxsize = maxsize
@@ -120,7 +190,6 @@ class PreviewCache :
 				self._data.popitem( last=False )
 
 	def prefetch( self , fp: str , kinds: list[ str ] | None = None ) :
-		"""Submit background jobs to warm the cache for a file."""
 		if not Path( fp ).exists( ) :
 			return
 		if kinds is None :
@@ -151,8 +220,8 @@ class PreviewCache :
 		key = (fp , kind)
 		try :
 			if kind == "image" :
-				val = Image.open( fp )
-				val.load( )  # force full decode now
+				val = Image.open( fp );
+				val.load( )
 			elif kind == "pdf" :
 				val = self._load_pdf( fp )
 			elif kind == "text" :
@@ -198,7 +267,6 @@ class PreviewCache :
 		self._pool.shutdown( wait=False , cancel_futures=True )
 
 
-# Module-level singleton — created by DuplicateReviewer
 _preview_cache: PreviewCache | None = None
 
 
@@ -349,7 +417,33 @@ def _groups_to_pairs( groups: list ) -> list[ tuple[ str , str ] ] :
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DETECTION ENGINE  (unchanged logic, cleaned formatting)
+# FAST HASHING HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _sha256_chunked( filepath: Path ) -> str | None :
+	try :
+		h = hashlib.sha256( )
+		with open( filepath , "rb" ) as f :
+			while True :
+				chunk = f.read( HASH_CHUNK_SIZE )
+				if not chunk :
+					break
+				h.update( chunk )
+		return h.hexdigest( )
+	except Exception :
+		return None
+
+
+def _phash_one( filepath: Path ) -> tuple[ str , object ] | None :
+	try :
+		img = Image.open( filepath ).convert( "RGB" )
+		return (str( filepath ) , imagehash.phash( img ))
+	except Exception :
+		return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DETECTION ENGINE  (v3 — accepts pre-collected file list per category)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class DetectionEngine :
@@ -358,10 +452,13 @@ class DetectionEngine :
 		"images" : 4.0 , "docs" : 3.0 ,
 	}
 
-	def __init__( self , folder , recursive , img_thresh , doc_thresh ,
-								do_images , do_docs , do_exact , do_names , do_names_cross_ext ,
-								min_kb , on_progress , on_done , on_error ) :
-		self.folder = Path( folder )
+	def __init__( self , folder=None , files=None , recursive=True ,
+								img_thresh=10 , doc_thresh=0.85 ,
+								do_images=True , do_docs=True , do_exact=True ,
+								do_names=True , do_names_cross_ext=False ,
+								min_kb=0 , on_progress=None , on_done=None , on_error=None ) :
+		self.folder = Path( folder ) if folder else None
+		self._provided_files = files
 		self.recursive = recursive
 		self.img_thresh = int( img_thresh )
 		self.doc_thresh = float( doc_thresh )
@@ -372,9 +469,9 @@ class DetectionEngine :
 		self.do_names_cross_ext = do_names_cross_ext
 		self.min_bytes = int( min_kb ) * 1024
 		self._cancel = False
-		self._progress = on_progress
-		self._done = on_done
-		self._error = on_error
+		self._progress = on_progress or (lambda m , p : None)
+		self._done = on_done or (lambda g : None)
+		self._error = on_error or (lambda e : None)
 
 	def cancel( self ) :
 		self._cancel = True
@@ -399,11 +496,22 @@ class DetectionEngine :
 	def _phase_progress( self , msg , frac , start , end ) :
 		self._progress( msg , start + frac * (end - start) )
 
-	def run( self ) :
+	def run( self ) -> list :
+		"""Run detection. Returns groups list. Also calls on_done callback."""
 		try :
 			self._progress( "Collecting files…" , 0.0 )
 			files = self._collect( )
-			if self._cancel : return
+			if self._cancel :
+				return [ ]
+			self._progress( f"Found {len( files )} files. Building index…" , 0.01 )
+
+			self._size_map: dict[ str , int ] = { }
+			for f in files :
+				try :
+					self._size_map[ str( f ) ] = f.stat( ).st_size
+				except OSError :
+					pass
+
 			phases = self._build_phases( )
 			pm = { n : (s , e) for n , s , e in phases }
 			pairs = [ ]
@@ -426,12 +534,22 @@ class DetectionEngine :
 			if self.do_docs and not self._cancel :
 				s , e = pm[ "docs" ]
 				pairs += self._docs( files , s , e )
-			if self._cancel : return
-			self._done( self._union_find( pairs ) )
+			if self._cancel :
+				return [ ]
+
+			groups = self._union_find( pairs )
+			self._done( groups )
+			return groups
 		except Exception as e :
 			self._error( str( e ) )
+			return [ ]
 
-	def _collect( self ) :
+	def _collect( self ) -> list[ Path ] :
+		if self._provided_files is not None :
+			return [
+				f for f in self._provided_files
+				if f.is_file( ) and f.stat( ).st_size >= self.min_bytes
+			]
 		it = self.folder.rglob( "*" ) if self.recursive else self.folder.iterdir( )
 		out = [ ]
 		for p in it :
@@ -442,19 +560,45 @@ class DetectionEngine :
 				pass
 		return out
 
+	# ── EXACT DUPES ──────────────────────────────────────────────────────
+
 	def _exact( self , files , p_start , p_end ) :
-		buckets = defaultdict( list )
-		n = len( files )
-		for i , f in enumerate( files ) :
-			if self._cancel : return [ ]
-			if i % 30 == 0 :
-				self._phase_progress( f"Checksumming {i}/{n}…" , i / max( n , 1 ) , p_start , p_end )
-			try :
-				h = hashlib.sha256( f.read_bytes( ) ).hexdigest( )
-				buckets[ h ].append( str( f ) )
-			except Exception :
-				pass
-		return [ v for v in buckets.values( ) if len( v ) >= 2 ]
+		size_buckets: dict[ int , list[ Path ] ] = defaultdict( list )
+		for f in files :
+			sz = self._size_map.get( str( f ) )
+			if sz is not None :
+				size_buckets[ sz ].append( f )
+		to_hash = [ ]
+		for sz , group in size_buckets.items( ) :
+			if len( group ) >= 2 :
+				to_hash.extend( group )
+		n_skip = len( files ) - len( to_hash )
+		self._phase_progress(
+				f"Size prefilter: {len( to_hash )} candidates ({n_skip} unique sizes skipped)" ,
+				0.05 , p_start , p_end )
+		if not to_hash :
+			return [ ]
+		hash_buckets: dict[ str , list[ str ] ] = defaultdict( list )
+		total = len( to_hash )
+		done = 0
+		with ThreadPoolExecutor( max_workers=HASH_WORKERS ) as pool :
+			future_map = { pool.submit( _sha256_chunked , f ) : f for f in to_hash }
+			for future in as_completed( future_map ) :
+				if self._cancel :
+					pool.shutdown( wait=False , cancel_futures=True )
+					return [ ]
+				done += 1
+				if done % 100 == 0 :
+					self._phase_progress( f"Hashing {done}/{total}…" ,
+																0.05 + 0.95 * (done / total) , p_start , p_end )
+				f = future_map[ future ]
+				h = future.result( )
+				if h is not None :
+					hash_buckets[ h ].append( str( f ) )
+		self._phase_progress( f"Hashing done ({total} files)" , 1.0 , p_start , p_end )
+		return [ v for v in hash_buckets.values( ) if len( v ) >= 2 ]
+
+	# ── FILENAME MATCH ───────────────────────────────────────────────────
 
 	def _names( self , files , p_start , p_end ) :
 		buckets = defaultdict( list )
@@ -462,7 +606,7 @@ class DetectionEngine :
 		for i , f in enumerate( files ) :
 			if self._cancel : return [ ]
 			if f.suffix.lower( ) in _CAMERA_RAW_EXTS : continue
-			if i % 50 == 0 :
+			if i % 200 == 0 :
 				self._phase_progress( f"Matching filenames {i}/{n}…" , i / max( n , 1 ) , p_start , p_end )
 			buckets[ (sanitize_artifact_name( f.name ) , f.suffix.lower( )) ].append( str( f ) )
 		return [ v for v in buckets.values( ) if len( v ) >= 2 ]
@@ -473,44 +617,74 @@ class DetectionEngine :
 		for i , f in enumerate( files ) :
 			if self._cancel : return [ ]
 			if f.suffix.lower( ) in _CAMERA_RAW_EXTS : continue
-			if i % 50 == 0 :
+			if i % 200 == 0 :
 				self._phase_progress( f"Cross-ext match {i}/{n}…" , i / max( n , 1 ) , p_start , p_end )
 			buckets[ sanitize_artifact_name( f.name ) ].append( str( f ) )
 		return [ v for v in buckets.values( ) if len( v ) >= 2 ]
 
+	# ── IMAGES ───────────────────────────────────────────────────────────
+
 	def _images( self , files , p_start , p_end ) :
 		img_files = [ f for f in files if f.suffix.lower( ) in _IMG_EXTS ]
 		n = len( img_files )
-		if n == 0 : return [ ]
-		p_mid = p_start + 0.6 * (p_end - p_start)
-		hashes = { }
-		for i , f in enumerate( img_files ) :
-			if self._cancel : return [ ]
-			if i % 10 == 0 :
-				self._phase_progress( f"Hashing images {i + 1}/{n}…" , i / max( n , 1 ) , p_start , p_mid )
-			try :
-				img = Image.open( f ).convert( "RGB" )
-				hashes[ str( f ) ] = imagehash.phash( img )
-			except Exception :
-				pass
-		items = list( hashes.items( ) )
-		m = len( items )
-		pairs = [ ]
-		for i in range( m ) :
-			if self._cancel : return pairs
-			if i % 100 == 0 :
-				self._phase_progress( f"Comparing images {i}/{m}…" , i / max( m , 1 ) , p_mid , p_end )
-			for j in range( i + 1 , m ) :
-				if items[ i ][ 1 ] - items[ j ][ 1 ] <= self.img_thresh :
-					pairs.append( [ items[ i ][ 0 ] , items[ j ][ 0 ] ] )
+		if n == 0 :
+			return [ ]
+		p_hash_end = p_start + 0.5 * (p_end - p_start)
+		p_tree_end = p_start + 0.7 * (p_end - p_start)
+		self._phase_progress( f"Hashing {n} images ({IMG_HASH_WORKERS} threads)…" , 0.0 , p_start , p_hash_end )
+		hashes: list[ tuple[ str , object ] ] = [ ]
+		done = 0
+		with ThreadPoolExecutor( max_workers=IMG_HASH_WORKERS ) as pool :
+			future_map = { pool.submit( _phash_one , f ) : f for f in img_files }
+			for future in as_completed( future_map ) :
+				if self._cancel :
+					pool.shutdown( wait=False , cancel_futures=True )
+					return [ ]
+				done += 1
+				if done % 50 == 0 :
+					self._phase_progress( f"pHash {done}/{n}…" , done / max( n , 1 ) , p_start , p_hash_end )
+				result = future.result( )
+				if result is not None :
+					hashes.append( result )
+		self._phase_progress( f"Hashed {len( hashes )} images. Building BK-tree…" , 0.0 , p_hash_end , p_tree_end )
+		if len( hashes ) < 2 :
+			return [ ]
+
+		def hamming_dist( a , b ) :
+			return a[ 1 ] - b[ 1 ]
+
+		tree = BKTree( hamming_dist )
+		for item in hashes :
+			tree.insert( item )
+		self._phase_progress( "BK-tree built. Querying…" , 0.0 , p_tree_end , p_end )
+		pairs: list[ list[ str ] ] = [ ]
+		seen_pairs: set[ tuple[ str , str ] ] = set( )
+		m = len( hashes )
+		for i , item in enumerate( hashes ) :
+			if self._cancel :
+				return pairs
+			if i % 200 == 0 :
+				self._phase_progress( f"BK-tree query {i}/{m}…" , i / max( m , 1 ) , p_tree_end , p_end )
+			neighbors = tree.find( item , self.img_thresh )
+			for nb in neighbors :
+				if nb[ 0 ] == item[ 0 ] :
+					continue
+				key = (min( item[ 0 ] , nb[ 0 ] ) , max( item[ 0 ] , nb[ 0 ] ))
+				if key not in seen_pairs :
+					seen_pairs.add( key )
+					pairs.append( [ item[ 0 ] , nb[ 0 ] ] )
+		self._phase_progress( f"Image comparison done ({len( pairs )} pairs)" , 1.0 , p_tree_end , p_end )
 		return pairs
+
+	# ── DOCUMENTS ────────────────────────────────────────────────────────
 
 	def _docs( self , files , p_start , p_end ) :
 		doc_files = [ f for f in files if f.suffix.lower( ) in _DOC_EXTS ]
 		n = len( doc_files )
-		if n == 0 : return [ ]
+		if n == 0 :
+			return [ ]
 		p_mid = p_start + 0.5 * (p_end - p_start)
-		texts = { }
+		texts: dict[ str , str ] = { }
 		for i , f in enumerate( doc_files ) :
 			if self._cancel : return [ ]
 			if i % 5 == 0 :
@@ -520,18 +694,40 @@ class DetectionEngine :
 				texts[ str( f ) ] = txt
 		items = list( texts.items( ) )
 		m = len( items )
+		lengths = { k : len( v ) for k , v in items }
+		file_sizes = { }
+		for k , _ in items :
+			file_sizes[ k ] = self._size_map.get( k , 0 )
 		total_cmp = max( m * (m - 1) // 2 , 1 )
-		pairs , done = [ ] , 0
+		pairs , done , skipped = [ ] , 0 , 0
 		for i in range( m ) :
 			if self._cancel : return pairs
+			fp_i , txt_i = items[ i ]
+			len_i = lengths[ fp_i ]
+			sz_i = file_sizes[ fp_i ]
 			for j in range( i + 1 , m ) :
 				done += 1
-				if done % 20 == 0 :
-					self._phase_progress( f"Comparing docs {done}/{total_cmp}…" , done / total_cmp , p_mid , p_end )
-				ratio = difflib.SequenceMatcher( None , texts[ items[ i ][ 0 ] ] , texts[ items[ j ][ 0 ] ] ,
-																				 autojunk=True ).ratio( )
-				if ratio >= self.doc_thresh :
-					pairs.append( [ items[ i ][ 0 ] , items[ j ][ 0 ] ] )
+				fp_j = items[ j ][ 0 ]
+				len_j = lengths[ fp_j ]
+				sz_j = file_sizes[ fp_j ]
+				if sz_i and sz_j :
+					ratio = min( sz_i , sz_j ) / max( sz_i , sz_j )
+					if ratio < DOC_SIZE_RATIO :
+						skipped += 1;
+						continue
+				if len_i and len_j :
+					ratio = min( len_i , len_j ) / max( len_i , len_j )
+					if ratio < DOC_LEN_RATIO :
+						skipped += 1;
+						continue
+				if done % 50 == 0 :
+					self._phase_progress(
+							f"Comparing docs {done}/{total_cmp} ({skipped} skipped)…" ,
+							done / total_cmp , p_mid , p_end )
+				sim = difflib.SequenceMatcher( None , txt_i , texts[ fp_j ] , autojunk=True ).ratio( )
+				if sim >= self.doc_thresh :
+					pairs.append( [ fp_i , fp_j ] )
+		self._phase_progress( f"Document comparison done ({skipped} skipped by prefilter)" , 1.0 , p_mid , p_end )
 		return pairs
 
 	def _extract_text( self , f: Path , max_chars=8000 ) -> str :
@@ -539,7 +735,9 @@ class DetectionEngine :
 		try :
 			if ext == ".pdf" :
 				doc = fitz.open( f )
-				return " ".join( p.get_text( ) for p in doc )[ :max_chars ]
+				txt = " ".join( p.get_text( ) for p in doc )[ :max_chars ]
+				doc.close( )
+				return txt
 			if ext in { ".txt" , ".md" , ".csv" , ".log" } :
 				return f.read_text( errors="ignore" )[ :max_chars ]
 			return _tika_text( str( f ) )[ :max_chars ]
@@ -570,31 +768,23 @@ class DetectionEngine :
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PREVIEW PANE  — stable widget tree, cache-backed, async loading
+# PREVIEW PANE
 # ══════════════════════════════════════════════════════════════════════════════
 
 class PreviewPane :
-	"""
-    Displays a file preview (image / PDF / text / video thumb / metadata).
-    Widgets are created ONCE; content is swapped via canvas itemconfig.
-    All heavy I/O goes through PreviewCache.
-    """
-
 	def __init__( self , parent , side_label: str ) :
 		self._fp: str | None = None
 		self._zoom = 1.0
 		self._fit_scale = 1.0
 		self._mode = "preview"
-		self._photo_refs: list = [ ]  # prevent GC of PhotoImage
+		self._photo_refs: list = [ ]
 		self._raw_img: Image.Image | None = None
 		self._meta_text: str | None = None
-		self._loading = False
 
 		self.frame = ctk.CTkFrame( parent , fg_color=BG_CARD , corner_radius=RADIUS )
 		self.frame.rowconfigure( 2 , weight=1 )
 		self.frame.columnconfigure( 0 , weight=1 )
 
-		# ── header row ──────────────────────────────────────────────────
 		hdr = ctk.CTkFrame( self.frame , fg_color=BG_CARD , corner_radius=0 , height=30 )
 		hdr.grid( row=0 , column=0 , sticky="ew" , padx=8 , pady=(8 , 2) )
 		ctk.CTkLabel( hdr , text=side_label , font=FONT_B , text_color=SALMON ).pack( side="left" , padx=6 )
@@ -603,22 +793,18 @@ class PreviewPane :
 		self._size_lbl = ctk.CTkLabel( hdr , text="" , font=FONT_S , text_color=FG_DIM )
 		self._size_lbl.pack( side="right" , padx=6 )
 
-		# ── tab bar ─────────────────────────────────────────────────────
 		tabs = ctk.CTkFrame( self.frame , fg_color=BG_CARD , corner_radius=0 , height=30 )
 		tabs.grid( row=1 , column=0 , sticky="ew" , padx=8 , pady=(0 , 4) )
-
 		self._tb_prev = ctk.CTkButton(
 				tabs , text="Preview" , command=self._show_preview ,
 				fg_color=SALMON , hover_color=SALMON_HV ,
 				text_color="white" , width=88 , height=24 , corner_radius=6 , font=FONT_S )
 		self._tb_prev.pack( side="left" , padx=(0 , 4) )
-
 		self._tb_meta = ctk.CTkButton(
 				tabs , text="Metadata" , command=self._show_metadata ,
 				fg_color=BG_TAB , hover_color=BG_PANEL ,
 				text_color=FG_DIM , width=88 , height=24 , corner_radius=6 , font=FONT_S )
 		self._tb_meta.pack( side="left" )
-
 		self._zoom_lbl = ctk.CTkLabel( tabs , text="Fit" , font=FONT_S , text_color=FG_DIM , width=40 )
 		self._zoom_lbl.pack( side="right" , padx=2 )
 		_btn( tabs , "+" , self._zoom_in , width=26 , color=BG_TAB , hover=BG_PANEL ).pack( side="right" , padx=2 )
@@ -626,12 +812,10 @@ class PreviewPane :
 		_btn( tabs , "↗ Open" , self._open_external , width=76 , color=BG_TAB , hover=BG_PANEL ).pack( side="right" ,
 																																																	 padx=(8 , 4) )
 
-		# ── canvas (stable — never destroyed) ───────────────────────────
 		wrap = tk.Frame( self.frame , bg=BG_APP )
 		wrap.grid( row=2 , column=0 , sticky="nsew" , padx=8 , pady=(0 , 8) )
 		wrap.rowconfigure( 0 , weight=1 )
 		wrap.columnconfigure( 0 , weight=1 )
-
 		self._canvas = tk.Canvas( wrap , bg=BG_APP , highlightthickness=0 , cursor="fleur" )
 		vsb = tk.Scrollbar( wrap , orient="vertical" , command=self._canvas.yview )
 		hsb = tk.Scrollbar( wrap , orient="horizontal" , command=self._canvas.xview )
@@ -640,21 +824,16 @@ class PreviewPane :
 		vsb.grid( row=0 , column=1 , sticky="ns" )
 		hsb.grid( row=1 , column=0 , sticky="ew" )
 
-		# Create persistent canvas items — we'll update them, not recreate
 		self._img_item = self._canvas.create_image( 0 , 0 , anchor="nw" )
-		self._txt_item = self._canvas.create_text(
-				10 , 10 , anchor="nw" , text="" , fill=FG_TEXT , font=FONT_S , width=430 )
-		self._overlay_item = self._canvas.create_text(
-				10 , 10 , anchor="nw" , text="" , fill=FG_WARN , font=FONT_S , width=430 )
+		self._txt_item = self._canvas.create_text( 10 , 10 , anchor="nw" , text="" , fill=FG_TEXT , font=FONT_S ,
+																							 width=430 )
+		self._overlay_item = self._canvas.create_text( 10 , 10 , anchor="nw" , text="" , fill=FG_WARN , font=FONT_S ,
+																									 width=430 )
 
-		# Wheel scroll
 		for seq in ("<MouseWheel>" , "<Button-4>" , "<Button-5>") :
 			self._canvas.bind( seq , self._on_wheel )
 
-	# ── public API ───────────────────────────────────────────────────────
-
 	def load( self , fp: str | None ) :
-		"""Switch to a new file.  Tries cache first, falls back to async."""
 		self._fp = fp
 		self._zoom = 1.0
 		self._fit_scale = 1.0
@@ -664,7 +843,6 @@ class PreviewPane :
 		self._update_tabs( )
 		self._zoom_lbl.configure( text="Fit" )
 		self._clear_canvas( )
-
 		if fp and Path( fp ).exists( ) :
 			p = Path( fp )
 			self._name_lbl.configure( text=p.name )
@@ -672,19 +850,16 @@ class PreviewPane :
 		else :
 			self._name_lbl.configure( text="—" )
 			self._size_lbl.configure( text="" )
-
 		self._render( )
 
-	# ── tab switching ────────────────────────────────────────────────────
-
 	def _show_preview( self ) :
-		self._mode = "preview"
-		self._update_tabs( )
+		self._mode = "preview";
+		self._update_tabs( );
 		self._render( )
 
 	def _show_metadata( self ) :
-		self._mode = "metadata"
-		self._update_tabs( )
+		self._mode = "metadata";
+		self._update_tabs( );
 		self._render( )
 
 	def _update_tabs( self ) :
@@ -695,10 +870,7 @@ class PreviewPane :
 			self._tb_prev.configure( fg_color=BG_TAB , text_color=FG_DIM )
 			self._tb_meta.configure( fg_color=SALMON , text_color="white" )
 
-	# ── canvas helpers ───────────────────────────────────────────────────
-
 	def _clear_canvas( self ) :
-		"""Hide all persistent items (cheaper than delete+recreate)."""
 		self._canvas.itemconfigure( self._img_item , image="" )
 		self._canvas.itemconfigure( self._txt_item , text="" )
 		self._canvas.itemconfigure( self._overlay_item , text="" )
@@ -710,14 +882,12 @@ class PreviewPane :
 		return max( self._canvas.winfo_width( ) , 100 ) , max( self._canvas.winfo_height( ) , 100 )
 
 	def _show_text( self , text: str , color: str = FG_TEXT , font=None ) :
-		"""Display text in the text item."""
 		self._canvas.itemconfigure( self._img_item , image="" )
 		self._canvas.itemconfigure( self._overlay_item , text="" )
 		self._canvas.itemconfigure( self._txt_item , text=text , fill=color , font=font or FONT_S )
 		self._canvas.configure( scrollregion=(0 , 0 , 460 , text.count( "\n" ) * 15 + 40) )
 
 	def _show_image( self , photo: ImageTk.PhotoImage , w: int , h: int ) :
-		"""Display a PhotoImage in the image item."""
 		self._photo_refs.append( photo )
 		self._canvas.itemconfigure( self._img_item , image=photo )
 		self._canvas.coords( self._img_item , 0 , 0 )
@@ -725,20 +895,13 @@ class PreviewPane :
 		self._canvas.itemconfigure( self._overlay_item , text="" )
 		self._canvas.configure( scrollregion=(0 , 0 , w , h) )
 
-	def _show_loading( self ) :
-		self._show_text( "Loading…" , FG_WARN )
-
-	# ── main render dispatch ─────────────────────────────────────────────
-
 	def _render( self ) :
 		if not self._fp or not Path( self._fp ).exists( ) :
 			self._show_text( "No file loaded." , FG_DIM )
 			return
-
 		if self._mode == "metadata" :
 			self._render_metadata( )
 			return
-
 		ext = Path( self._fp ).suffix.lower( )
 		if ext in _IMG_EXTS :       self._render_image( )
 		elif ext == ".pdf" :        self._render_pdf( )
@@ -746,16 +909,12 @@ class PreviewPane :
 		elif ext in _VID_EXTS :     self._render_video( )
 		else :                      self._render_metadata( )
 
-	# ── image ────────────────────────────────────────────────────────────
-
 	def _render_image( self ) :
-		# Try cache first
 		if self._raw_img is None :
 			cached = _preview_cache.get( self._fp , "image" ) if _preview_cache else None
 			if cached :
 				self._raw_img = cached
 			else :
-				# Load synchronously but it's likely already cached from prefetch
 				try :
 					self._raw_img = Image.open( self._fp )
 					self._raw_img.load( )
@@ -764,7 +923,6 @@ class PreviewPane :
 				except Exception as e :
 					self._show_text( f"Image error: {e}" , FG_DIM )
 					return
-
 		img = self._raw_img
 		cw , ch = self._canvas_size( )
 		self._fit_scale = min( cw / max( img.width , 1 ) , ch / max( img.height , 1 ) , 1.0 )
@@ -774,8 +932,6 @@ class PreviewPane :
 		display = img.resize( (w , h) , Image.LANCZOS )
 		ph = ImageTk.PhotoImage( display )
 		self._show_image( ph , w , h )
-
-	# ── pdf ──────────────────────────────────────────────────────────────
 
 	def _render_pdf( self ) :
 		pages = _preview_cache.get( self._fp , "pdf" ) if _preview_cache else None
@@ -792,20 +948,14 @@ class PreviewPane :
 			except Exception as e :
 				self._show_text( f"PDF error: {e}" , FG_DIM )
 				return
-
 		if not pages :
 			self._show_text( "Empty PDF." , FG_DIM )
 			return
-
-		# Composite all pages into a vertical strip
 		cw , _ = self._canvas_size( )
 		base_scale = min( cw / max( pages[ 0 ].width , 1 ) , 1.4 )
 		scale = base_scale * self._zoom
-		gap = 8
-
-		# Clear old images, rebuild composite
 		self._clear_canvas( )
-		y , max_w = 0 , 0
+		y , max_w , gap = 0 , 0 , 8
 		for page_img in pages :
 			w = max( 1 , int( page_img.width * scale ) )
 			h = max( 1 , int( page_img.height * scale ) )
@@ -816,8 +966,6 @@ class PreviewPane :
 			y += h + gap
 			max_w = max( max_w , w )
 		self._canvas.configure( scrollregion=(0 , 0 , max_w , y) )
-
-	# ── text ─────────────────────────────────────────────────────────────
 
 	def _render_text_file( self ) :
 		cached = _preview_cache.get( self._fp , "text" ) if _preview_cache else None
@@ -830,8 +978,6 @@ class PreviewPane :
 				self._show_text( f"Read error: {e}" , FG_DIM )
 				return
 		self._show_text( cached , FG_TEXT , FONT_MONO )
-
-	# ── video ────────────────────────────────────────────────────────────
 
 	def _render_video( self ) :
 		frame_img = _preview_cache.get( self._fp , "video" ) if _preview_cache else None
@@ -850,7 +996,6 @@ class PreviewPane :
 			except Exception as e :
 				self._show_text( f"Video error: {e}" , FG_DIM )
 				return
-
 		cw , ch = self._canvas_size( )
 		fit = min( cw / max( frame_img.width , 1 ) , (ch - 30) / max( frame_img.height , 1 ) , 1.0 )
 		w = max( 1 , int( frame_img.width * fit * self._zoom ) )
@@ -861,14 +1006,10 @@ class PreviewPane :
 		self._canvas.itemconfigure( self._img_item , image=ph )
 		self._canvas.coords( self._img_item , 0 , 0 )
 		self._canvas.itemconfigure( self._txt_item , text="" )
-		self._canvas.itemconfigure(
-				self._overlay_item ,
-				text="▶ Video — thumbnail only. Use ↗ Open for playback." ,
-				fill=FG_WARN )
+		self._canvas.itemconfigure( self._overlay_item ,
+																text="▶ Video — thumbnail only. Use ↗ Open for playback." , fill=FG_WARN )
 		self._canvas.coords( self._overlay_item , 8 , h + 10 )
 		self._canvas.configure( scrollregion=(0 , 0 , w , h + 30) )
-
-	# ── metadata ─────────────────────────────────────────────────────────
 
 	def _render_metadata( self ) :
 		if self._meta_text is None :
@@ -877,47 +1018,36 @@ class PreviewPane :
 				self._meta_text = cached
 			else :
 				self._show_text( "Extracting metadata…" , FG_WARN )
-				# Do the extraction in a thread, then call back
-				threading.Thread(
-						target=self._load_meta_bg , args=(self._fp ,) , daemon=True ,
-				).start( )
+				threading.Thread( target=self._load_meta_bg , args=(self._fp ,) , daemon=True ).start( )
 				return
-
 		self._show_text( self._meta_text , FG_TEXT , FONT_MONO )
 
 	def _load_meta_bg( self , fp: str ) :
-		"""Called from a background thread — loads meta then schedules UI update."""
 		stats = _file_stats( fp )
 		tika = _tika_meta( fp )
 		result = f"{stats}\n\n── Tika Metadata (--json) ──\n{tika}"
 		if _preview_cache :
 			_preview_cache.put( fp , "meta" , result )
-		# Schedule UI update on main thread
 		try :
 			self.frame.after( 0 , self._on_meta_ready , fp , result )
 		except Exception :
 			pass
 
 	def _on_meta_ready( self , fp: str , text: str ) :
-		"""Callback on main thread after metadata extraction completes."""
-		if self._fp == fp :  # still viewing the same file
+		if self._fp == fp :
 			self._meta_text = text
 			if self._mode == "metadata" :
 				self._show_text( text , FG_TEXT , FONT_MONO )
 
-	# ── zoom ─────────────────────────────────────────────────────────────
-
 	def _zoom_in( self ) :
 		self._zoom = min( self._zoom + 0.25 , 6.0 )
 		self._zoom_lbl.configure( text=f"{int( self._fit_scale * self._zoom * 100 )}%" )
-		if self._mode == "preview" :
-			self._render( )
+		if self._mode == "preview" : self._render( )
 
 	def _zoom_out( self ) :
 		self._zoom = max( self._zoom - 0.25 , 0.25 )
 		self._zoom_lbl.configure( text=f"{int( self._fit_scale * self._zoom * 100 )}%" )
-		if self._mode == "preview" :
-			self._render( )
+		if self._mode == "preview" : self._render( )
 
 	def _on_wheel( self , event ) :
 		if event.num == 4 :       self._canvas.yview_scroll( -1 , "units" )
@@ -925,8 +1055,7 @@ class PreviewPane :
 		else :                    self._canvas.yview_scroll( int( -event.delta / 120 ) , "units" )
 
 	def _open_external( self ) :
-		if not self._fp :
-			return
+		if not self._fp : return
 		try :
 			if os.name == "nt" :  os.startfile( self._fp )
 			else :                subprocess.Popen( [ "xdg-open" , self._fp ] )
@@ -935,18 +1064,19 @@ class PreviewPane :
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SCAN FRAME
+# SCAN FRAME  (v3 — per-category streaming)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class ScanFrame( ctk.CTkFrame ) :
-	def __init__( self , parent , on_groups_ready , default_folder="" ) :
+	def __init__( self , parent , on_category_done , on_all_done , default_folder="" ) :
 		super( ).__init__( parent , fg_color="transparent" )
-		self._on_groups_ready = on_groups_ready
+		self._on_category_done = on_category_done
+		self._on_all_done = on_all_done
 		self._default_folder = default_folder
-		self._engine: DetectionEngine | None = None
+		self._cancel_flag = False
+		self._active_engine: DetectionEngine | None = None
 		self._thread: threading.Thread | None = None
 		self._q: queue.Queue = queue.Queue( )
-		self._groups = [ ]
 		self._build( )
 
 	def _build( self ) :
@@ -955,12 +1085,11 @@ class ScanFrame( ctk.CTkFrame ) :
 		outer.columnconfigure( 0 , weight=1 )
 		row = 0
 
-		# ── Section 1: Folder ───────────────────────────────────────────
+		# ── Section 1: Folder ────────────────────────────────────────
 		sec1 = ctk.CTkFrame( outer , fg_color=BG_PANEL , corner_radius=RADIUS )
 		sec1.grid( row=row , column=0 , sticky="ew" , pady=(0 , 8) );
 		row += 1
 		_section_label( sec1 , "📁  Source Folder" ).pack( anchor="w" , padx=14 , pady=(12 , 6) )
-
 		fr = ctk.CTkFrame( sec1 , fg_color="transparent" )
 		fr.pack( fill="x" , padx=14 , pady=(0 , 12) )
 		self._folder_var = tk.StringVar( value=self._default_folder )
@@ -973,48 +1102,42 @@ class ScanFrame( ctk.CTkFrame ) :
 		ctk.CTkCheckBox( fr , text="Include subfolders" , variable=self._recursive , font=FONT , text_color=FG_TEXT ).pack(
 				side="left" , padx=(16 , 0) )
 
-		# ── Section 2: Detection Modes ──────────────────────────────────
+		# ── Section 2: Detection Modes ───────────────────────────────
 		sec2 = ctk.CTkFrame( outer , fg_color=BG_PANEL , corner_radius=RADIUS )
 		sec2.grid( row=row , column=0 , sticky="ew" , pady=(0 , 8) );
 		row += 1
 		_section_label( sec2 , "🔎  Detection Modes" ).pack( anchor="w" , padx=14 , pady=(12 , 8) )
-
 		modes = ctk.CTkFrame( sec2 , fg_color="transparent" )
 		modes.pack( fill="x" , padx=14 , pady=(0 , 12) )
 		modes.columnconfigure( (0 , 1) , weight=1 )
-
 		self._do_exact = tk.BooleanVar( value=True )
 		self._do_names = tk.BooleanVar( value=True )
 		self._do_names_cross_ext = tk.BooleanVar( value=False )
 		self._do_img = tk.BooleanVar( value=True )
 		self._do_doc = tk.BooleanVar( value=True )
-
 		mode_defs = [
-			("Exact duplicates" , self._do_exact , "SHA-256 byte match · fast") ,
+			("Exact duplicates" , self._do_exact , "SHA-256 byte match · size prefilter · parallel") ,
 			("Filename match" , self._do_names , "Sanitized name + same extension") ,
 			("Cross-ext filename" , self._do_names_cross_ext , "Sanitized name · any extension") ,
-			("Images  (pHash)" , self._do_img , "Perceptual hash · requires imagehash") ,
-			("Documents  (text)" , self._do_doc , "Text similarity · PyMuPDF / Tika") ,
+			("Images  (pHash)" , self._do_img , "Parallel pHash + BK-tree · O(n log n)") ,
+			("Documents  (text)" , self._do_doc , "Text similarity · size + length prefilter") ,
 		]
 		for i , (label , var , hint) in enumerate( mode_defs ) :
 			card = ctk.CTkFrame( modes , fg_color=BG_CARD , corner_radius=8 )
 			card.grid( row=i // 2 , column=i % 2 , sticky="ew" , padx=4 , pady=3 )
-			ctk.CTkCheckBox( card , text=label , variable=var , font=FONT_B , text_color=FG_TEXT ).pack( anchor="w" ,
-																																																	 padx=10 ,
-																																																	 pady=(8 , 2) )
+			ctk.CTkCheckBox( card , text=label , variable=var , font=FONT_B , text_color=FG_TEXT ).pack(
+					anchor="w" , padx=10 , pady=(8 , 2) )
 			ctk.CTkLabel( card , text=hint , font=FONT_S , text_color=FG_DIM ).pack( anchor="w" , padx=30 , pady=(0 , 8) )
 
-		# ── Section 3: Thresholds ───────────────────────────────────────
+		# ── Section 3: Thresholds ────────────────────────────────────
 		sec3 = ctk.CTkFrame( outer , fg_color=BG_PANEL , corner_radius=RADIUS )
 		sec3.grid( row=row , column=0 , sticky="ew" , pady=(0 , 8) );
 		row += 1
 		_section_label( sec3 , "⚙  Thresholds" ).pack( anchor="w" , padx=14 , pady=(12 , 8) )
-
 		thr = ctk.CTkFrame( sec3 , fg_color="transparent" )
 		thr.pack( fill="x" , padx=14 , pady=(0 , 12) )
 		thr.columnconfigure( (0 , 1 , 2) , weight=1 )
 
-		# Image threshold
 		ic = ctk.CTkFrame( thr , fg_color=BG_CARD , corner_radius=8 )
 		ic.grid( row=0 , column=0 , sticky="ew" , padx=4 , pady=3 )
 		ctk.CTkLabel( ic , text="Image pHash distance" , font=FONT , text_color=FG_TEXT ).pack( anchor="w" , padx=10 ,
@@ -1033,7 +1156,6 @@ class ScanFrame( ctk.CTkFrame ) :
 		sl_img.pack( side="left" , padx=4 )
 		ctk.CTkLabel( isr , text="0 = exact · 20 = loose" , font=FONT_S , text_color=FG_DIM ).pack( side="left" , padx=4 )
 
-		# Doc threshold
 		dc = ctk.CTkFrame( thr , fg_color=BG_CARD , corner_radius=8 )
 		dc.grid( row=0 , column=1 , sticky="ew" , padx=4 , pady=3 )
 		ctk.CTkLabel( dc , text="Document similarity" , font=FONT , text_color=FG_TEXT ).pack( anchor="w" , padx=10 ,
@@ -1051,7 +1173,6 @@ class ScanFrame( ctk.CTkFrame ) :
 		sl_doc.set( 0.85 )
 		sl_doc.pack( side="left" , padx=4 )
 
-		# Min size
 		mc = ctk.CTkFrame( thr , fg_color=BG_CARD , corner_radius=8 )
 		mc.grid( row=0 , column=2 , sticky="ew" , padx=4 , pady=3 )
 		ctk.CTkLabel( mc , text="Min file size" , font=FONT , text_color=FG_TEXT ).pack( anchor="w" , padx=10 ,
@@ -1065,12 +1186,11 @@ class ScanFrame( ctk.CTkFrame ) :
 		self._min_kb.pack( side="left" )
 		ctk.CTkLabel( msr , text="KB" , font=FONT , text_color=FG_DIM ).pack( side="left" , padx=6 )
 
-		# ── Section 4: Scan & Results ───────────────────────────────────
+		# ── Section 4: Scan & Category Status ────────────────────────
 		sec4 = ctk.CTkFrame( outer , fg_color=BG_PANEL , corner_radius=RADIUS )
 		sec4.grid( row=row , column=0 , sticky="nsew" , pady=(0 , 0) );
 		row += 1
 		outer.rowconfigure( row - 1 , weight=1 )
-
 		ctrl = ctk.CTkFrame( sec4 , fg_color="transparent" )
 		ctrl.pack( fill="x" , padx=14 , pady=(12 , 6) )
 		self._scan_btn = _btn( ctrl , "▶  Start Scan" , self._start , width=150 )
@@ -1086,17 +1206,21 @@ class ScanFrame( ctk.CTkFrame ) :
 		self._pbar.set( 0 )
 		self._pbar.pack( fill="x" , padx=14 , pady=(0 , 8) )
 
+		# Per-category status labels
+		self._cat_frame = ctk.CTkFrame( sec4 , fg_color="transparent" )
+		self._cat_frame.pack( fill="x" , padx=14 , pady=(0 , 8) )
+		self._cat_labels: dict[ str , ctk.CTkLabel ] = { }
+		for cat in CATEGORY_ORDER :
+			lbl = ctk.CTkLabel( self._cat_frame , text=f"⬚ {cat}" , font=FONT_S , text_color=FG_DIM )
+			lbl.pack( side="left" , padx=(0 , 16) )
+			self._cat_labels[ cat ] = lbl
+
 		self._res_lbl = ctk.CTkLabel( sec4 , text="" , font=FONT , text_color=FG_DIM )
-		self._res_lbl.pack( padx=14 , pady=(0 , 4) )
-		self._proceed_btn = _btn( sec4 , "▶  Proceed to Review →" , self._proceed , width=240 , color=FG_GOOD ,
-															hover="#4DAD62" )
-		self._proceed_btn.pack( padx=14 , pady=(0 , 14) )
-		self._proceed_btn.pack_forget( )
+		self._res_lbl.pack( padx=14 , pady=(0 , 14) )
 
 	def _browse( self ) :
 		d = filedialog.askdirectory( title="Select folder to scan" )
-		if d :
-			self._folder_var.set( d )
+		if d : self._folder_var.set( d )
 
 	def _start( self ) :
 		folder = self._folder_var.get( ).strip( )
@@ -1111,27 +1235,106 @@ class ScanFrame( ctk.CTkFrame ) :
 		self._scan_btn.configure( state="disabled" )
 		self._cancel_btn.configure( state="normal" )
 		self._pbar.set( 0 )
-		self._proceed_btn.pack_forget( )
 		self._res_lbl.configure( text="" )
-		self._groups = [ ]
+		self._cancel_flag = False
 
-		self._engine = DetectionEngine(
-				folder=folder , recursive=self._recursive.get( ) ,
-				img_thresh=self._img_thresh_val.get( ) , doc_thresh=self._doc_thresh_val.get( ) ,
-				do_images=self._do_img.get( ) , do_docs=self._do_doc.get( ) ,
-				do_exact=self._do_exact.get( ) , do_names=self._do_names.get( ) ,
-				do_names_cross_ext=self._do_names_cross_ext.get( ) , min_kb=min_kb ,
-				on_progress=lambda m , p : self._q.put( ("progress" , m , p) ) ,
-				on_done=lambda g : self._q.put( ("done" , g) ) ,
-				on_error=lambda e : self._q.put( ("error" , e) ) ,
+		# Reset category labels
+		for cat in CATEGORY_ORDER :
+			self._cat_labels[ cat ].configure( text=f"⬚ {cat}" , text_color=FG_DIM )
+
+		# Capture settings for the background thread
+		settings = dict(
+				folder=folder ,
+				recursive=self._recursive.get( ) ,
+				img_thresh=self._img_thresh_val.get( ) ,
+				doc_thresh=self._doc_thresh_val.get( ) ,
+				do_images=self._do_img.get( ) ,
+				do_docs=self._do_doc.get( ) ,
+				do_exact=self._do_exact.get( ) ,
+				do_names=self._do_names.get( ) ,
+				do_names_cross_ext=self._do_names_cross_ext.get( ) ,
+				min_kb=min_kb ,
 		)
-		self._thread = threading.Thread( target=self._engine.run , daemon=True )
+
+		self._thread = threading.Thread(
+				target=self._run_categories , args=(settings ,) , daemon=True )
 		self._thread.start( )
 		self._poll( )
 
+	def _run_categories( self , s: dict ) :
+		"""Background thread: collect files, bucket by category, scan each."""
+		try :
+			self._q.put( ("progress" , "Collecting files…" , 0.0) )
+			folder = Path( s[ "folder" ] )
+			it = folder.rglob( "*" ) if s[ "recursive" ] else folder.iterdir( )
+			min_bytes = s[ "min_kb" ] * 1024
+			all_files = [ ]
+			for p in it :
+				if self._cancel_flag :
+					return
+				try :
+					if p.is_file( ) and p.stat( ).st_size >= min_bytes :
+						all_files.append( p )
+				except OSError :
+					pass
+
+			buckets = _categorize_files( all_files )
+			cat_names = [ c for c in CATEGORY_ORDER if c in buckets ]
+			total_files = sum( len( v ) for v in buckets.values( ) )
+			self._q.put( ("progress" , f"Found {total_files} files in {len( cat_names )} categories." , 0.01) )
+
+			total_cats = len( cat_names )
+			total_pairs = 0
+
+			for ci , cat in enumerate( cat_names ) :
+				if self._cancel_flag :
+					return
+				cat_files = buckets[ cat ]
+				self._q.put( ("cat_start" , cat , len( cat_files )) )
+
+				# Determine which content-similarity modes apply
+				cat_do_images = s[ "do_images" ] and cat == "Images"
+				cat_do_docs = s[ "do_docs" ] and cat == "Documents"
+
+				# Progress for this category maps to a slice of the bar
+				cat_start = ci / total_cats
+				cat_end = (ci + 1) / total_cats
+
+				engine = DetectionEngine(
+						files=cat_files ,
+						img_thresh=s[ "img_thresh" ] ,
+						doc_thresh=s[ "doc_thresh" ] ,
+						do_images=cat_do_images ,
+						do_docs=cat_do_docs ,
+						do_exact=s[ "do_exact" ] ,
+						do_names=s[ "do_names" ] ,
+						do_names_cross_ext=s[ "do_names_cross_ext" ] ,
+						min_kb=0 ,  # already filtered
+						on_progress=lambda m , p , _s=cat_start , _e=cat_end , _c=cat :
+						self._q.put( ("progress" , f"[{_c}] {m}" , _s + p * (_e - _s)) ) ,
+						on_done=lambda g : None ,
+						on_error=lambda e : self._q.put( ("error" , e) ) ,
+				)
+				self._active_engine = engine
+				groups = engine.run( )
+				self._active_engine = None
+
+				if self._cancel_flag :
+					return
+
+				n_pairs = sum( len( list( itertools.combinations( g , 2 ) ) ) for g in groups ) if groups else 0
+				total_pairs += n_pairs
+				self._q.put( ("cat_done" , cat , groups , n_pairs) )
+
+			self._q.put( ("all_done" , total_pairs) )
+
+		except Exception as e :
+			self._q.put( ("error" , str( e )) )
+
 	def _cancel( self ) :
-		if self._engine :
-			self._engine.cancel( )
+		self._cancel_flag = True
+		if self._active_engine :
+			self._active_engine.cancel( )
 		self._scan_btn.configure( state="normal" )
 		self._cancel_btn.configure( state="disabled" )
 		self._status_lbl.configure( text="Cancelled." , text_color=FG_WARN )
@@ -1144,10 +1347,46 @@ class ScanFrame( ctk.CTkFrame ) :
 				if kind == "progress" :
 					_ , msg , pct = item
 					self._status_lbl.configure( text=msg , text_color=FG_DIM )
-					self._pbar.set( pct )
-				elif kind == "done" :
-					self._on_done( item[ 1 ] )
+					self._pbar.set( max( 0.0 , min( 1.0 , pct ) ) )
+
+				elif kind == "cat_start" :
+					_ , cat , n_files = item
+					self._cat_labels[ cat ].configure(
+							text=f"⏳ {cat} ({n_files})" , text_color=FG_WARN )
+
+				elif kind == "cat_done" :
+					_ , cat , groups , n_pairs = item
+					if n_pairs > 0 :
+						self._cat_labels[ cat ].configure(
+								text=f"✓ {cat} ({n_pairs} pairs)" , text_color=FG_GOOD )
+					else :
+						self._cat_labels[ cat ].configure(
+								text=f"✓ {cat} (clean)" , text_color=FG_DIM )
+					if groups :
+						self._on_category_done( cat , groups )
+
+				elif kind == "all_done" :
+					_ , total_pairs = item
+					self._scan_btn.configure( state="normal" )
+					self._cancel_btn.configure( state="disabled" )
+					self._pbar.set( 1.0 )
+					if total_pairs > 0 :
+						self._status_lbl.configure(
+								text=f"✓ All categories scanned — {total_pairs} total pair(s)." ,
+								text_color=FG_GOOD )
+						self._res_lbl.configure(
+								text=f"Scanning complete. {total_pairs} pair(s) queued for review." ,
+								text_color=FG_TEXT )
+					else :
+						self._status_lbl.configure(
+								text="✓ All categories scanned — no duplicates found." ,
+								text_color=FG_WARN )
+						self._res_lbl.configure(
+								text="No duplicates found. Try loosening thresholds or enabling more modes." ,
+								text_color=FG_WARN )
+					self._on_all_done( )
 					return
+
 				elif kind == "error" :
 					self._scan_btn.configure( state="normal" )
 					self._cancel_btn.configure( state="disabled" )
@@ -1158,35 +1397,9 @@ class ScanFrame( ctk.CTkFrame ) :
 		if self._thread and self._thread.is_alive( ) :
 			self.after( 100 , self._poll )
 
-	def _on_done( self , groups ) :
-		self._groups = groups
-		self._scan_btn.configure( state="normal" )
-		self._cancel_btn.configure( state="disabled" )
-		self._pbar.set( 1.0 )
-		n_g = len( groups )
-		n_f = sum( len( g ) for g in groups )
-		n_p = sum( len( list( itertools.combinations( g , 2 ) ) ) for g in groups )
-		if n_g :
-			self._status_lbl.configure(
-					text=f"✓ Done — {n_g} groups · {n_f} files · {n_p} pairs to review" ,
-					text_color=FG_GOOD )
-			self._res_lbl.configure(
-					text=f"Found {n_g} duplicate group(s) across {n_f} files → {n_p} pair(s) to review." ,
-					text_color=FG_TEXT )
-			self._proceed_btn.pack( padx=14 , pady=(0 , 14) )
-		else :
-			self._status_lbl.configure( text="✓ Scan complete — no duplicates found." , text_color=FG_WARN )
-			self._res_lbl.configure(
-					text="No duplicates found. Try loosening thresholds or enabling more modes." ,
-					text_color=FG_WARN )
-
-	def _proceed( self ) :
-		if self._groups :
-			self._on_groups_ready( self._groups )
-
 
 # ══════════════════════════════════════════════════════════════════════════════
-# REVIEW FRAME
+# REVIEW FRAME  (v3 — incremental loading + alterations button)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class ReviewFrame( ctk.CTkFrame ) :
@@ -1201,27 +1414,58 @@ class ReviewFrame( ctk.CTkFrame ) :
 		self._stats = Counter( )
 		self._lf = self._rf = ""
 		self._t0 = time.time( )
+		self._scan_complete = False
+		self._known_pair_keys: set[ tuple[ str , str ] ] = set( )
 		self._build( )
 
-	def load_groups( self , groups ) :
-		self._pairs = _groups_to_pairs( groups )
-		self._skipped = [ ]
-		self._idx , self._log = 0 , [ ]
-		self._stats = Counter( loaded=len( self._pairs ) )
+	def reset( self ) :
+		"""Reset state for a new scan."""
+		self._pairs.clear( )
+		self._skipped.clear( )
+		self._known_pair_keys.clear( )
+		self._idx = 0
+		self._log.clear( )
+		self._stats = Counter( )
 		self._t0 = time.time( )
+		self._scan_complete = False
+		self._lf = self._rf = ""
+		self._update_header( )
+		self._lp.load( None )
+		self._rp.load( None )
+
+	def add_groups( self , groups ) :
+		"""Append newly discovered duplicate groups (called per category)."""
+		new_pairs = _groups_to_pairs( groups )
+		added = 0
+		for p in new_pairs :
+			key = (min( p[ 0 ] , p[ 1 ] ) , max( p[ 0 ] , p[ 1 ] ))
+			if key not in self._known_pair_keys :
+				self._known_pair_keys.add( key )
+				self._pairs.append( p )
+				added += 1
+		self._stats[ "loaded" ] = len( self._pairs ) + len( self._skipped )
+		self.logger.info( f"ReviewFrame.add_groups: +{added} pairs (total {len( self._pairs )})" )
 		self._prefetch_upcoming( )
-		self._show( )
+
+		# If we're sitting at "no pairs" or past the end, show the first new pair
+		if self._lf == "" and self._rf == "" and self._pairs :
+			self._idx = 0
+			self._show( )
+		else :
+			self._update_header( )
+
+	def mark_scan_complete( self ) :
+		self._scan_complete = True
+		self._update_header( )
 
 	def _prefetch_upcoming( self ) :
-		"""Warm the preview cache for the next N pairs."""
-		if not _preview_cache :
-			return
+		if not _preview_cache : return
 		active = self._active( )
 		for i in range( self._idx , min( self._idx + PREFETCH_AHEAD , len( active ) ) ) :
 			_preview_cache.prefetch_pair( active[ i ] )
 
 	def _build( self ) :
-		# ── top bar ─────────────────────────────────────────────────────
+		# ── Top bar ──────────────────────────────────────────────────
 		top = ctk.CTkFrame( self , fg_color=BG_PANEL , corner_radius=RADIUS , height=46 )
 		top.pack( fill="x" , padx=12 , pady=(12 , 6) )
 		top.pack_propagate( False )
@@ -1230,37 +1474,48 @@ class ReviewFrame( ctk.CTkFrame ) :
 		self._prog_lbl.pack( side="left" , padx=10 )
 		self._stats_lbl = ctk.CTkLabel( top , text="" , font=FONT_S , text_color=FG_DIM )
 		self._stats_lbl.pack( side="left" , padx=6 )
+		self._scan_status_lbl = ctk.CTkLabel( top , text="" , font=FONT_S , text_color=FG_WARN )
+		self._scan_status_lbl.pack( side="right" , padx=12 )
 
-		# ── preview panes ───────────────────────────────────────────────
+		# ── Preview panes ────────────────────────────────────────────
 		cmp = ctk.CTkFrame( self , fg_color=BG_APP , corner_radius=0 )
 		cmp.pack( fill="both" , expand=True , padx=12 , pady=4 )
 		cmp.columnconfigure( 0 , weight=1 )
 		cmp.columnconfigure( 1 , weight=1 )
 		cmp.rowconfigure( 0 , weight=1 )
-
 		self._lp = PreviewPane( cmp , "← LEFT" )
 		self._rp = PreviewPane( cmp , "RIGHT →" )
 		self._lp.frame.grid( row=0 , column=0 , sticky="nsew" , padx=(0 , 4) )
 		self._rp.frame.grid( row=0 , column=1 , sticky="nsew" , padx=(4 , 0) )
 
-		# ── action bar ──────────────────────────────────────────────────
+		# ── Action bar ───────────────────────────────────────────────
 		acts = ctk.CTkFrame( self , fg_color=BG_PANEL , corner_radius=RADIUS , height=56 )
 		acts.pack( fill="x" , padx=12 , pady=(4 , 12) )
 		acts.pack_propagate( False )
 
-		_btn( acts , "←  Keep Left" , self._keep_left , width=210 , color="#2A5A8A" , hover="#3A6A9A" ).pack( side="left" ,
-																																																					padx=12 ,
-																																																					pady=10 )
+		_btn( acts , "←  Keep Left" , self._keep_left , width=180 ,
+					color="#2A5A8A" , hover="#3A6A9A" ).pack( side="left" , padx=(12 , 4) , pady=10 )
 		ctk.CTkLabel( acts , text="[←]" , font=FONT_S , text_color=FG_DIM ).pack( side="left" )
-		_btn( acts , "↑  Keep Both  (UUID4)" , self._keep_both , width=220 , color="#3A7A5A" , hover="#4A8A6A" ).pack(
-				side="left" , padx=12 , pady=10 )
+
+		_btn( acts , "↑  Keep Both  (UUID4)" , self._keep_both , width=190 ,
+					color="#3A7A5A" , hover="#4A8A6A" ).pack( side="left" , padx=(8 , 4) , pady=10 )
 		ctk.CTkLabel( acts , text="[↑]" , font=FONT_S , text_color=FG_DIM ).pack( side="left" )
-		_btn( acts , "↓  Skip" , self._skip , width=100 , color=BG_TAB , hover=BG_PANEL ).pack( side="left" , padx=8 ,
-																																														pady=10 )
+
+		_btn( acts , "↓  Skip" , self._skip , width=80 ,
+					color=BG_TAB , hover=BG_PANEL ).pack( side="left" , padx=(8 , 4) , pady=10 )
 		ctk.CTkLabel( acts , text="[↓]" , font=FONT_S , text_color=FG_DIM ).pack( side="left" )
+
+		_btn( acts , "⚠  Needs Alteration" , self._needs_alteration , width=170 ,
+					color="#8B6914" , hover="#A07A1E" ).pack( side="left" , padx=(8 , 4) , pady=10 )
+		ctk.CTkLabel( acts , text="[A]" , font=FONT_S , text_color=FG_DIM ).pack( side="left" )
+
+		_btn( acts , "🗑  Delete Both" , self._delete_both , width=140 ,
+					color="#8B2020" , hover="#A03030" ).pack( side="left" , padx=(8 , 4) , pady=10 )
+		ctk.CTkLabel( acts , text="[Del]" , font=FONT_S , text_color=FG_DIM ).pack( side="left" )
+
 		ctk.CTkLabel( acts , text="[→]" , font=FONT_S , text_color=FG_DIM ).pack( side="right" , padx=(0 , 8) )
-		_btn( acts , "Keep Right  →" , self._keep_right , width=210 , color="#2A5A8A" , hover="#3A6A9A" ).pack(
-				side="right" , padx=12 , pady=10 )
+		_btn( acts , "Keep Right  →" , self._keep_right , width=180 ,
+					color="#2A5A8A" , hover="#3A6A9A" ).pack( side="right" , padx=(4 , 12) , pady=10 )
 
 		self.after( 200 , self._bind_keys )
 
@@ -1270,8 +1525,9 @@ class ReviewFrame( ctk.CTkFrame ) :
 		root.bind( "<Right>" , lambda _ : self._keep_right( ) )
 		root.bind( "<Up>" , lambda _ : self._keep_both( ) )
 		root.bind( "<Down>" , lambda _ : self._skip( ) )
-
-	# ── display ──────────────────────────────────────────────────────────
+		root.bind( "<Delete>" , lambda _ : self._delete_both( ) )
+		root.bind( "a" , lambda _ : self._needs_alteration( ) )
+		root.bind( "A" , lambda _ : self._needs_alteration( ) )
 
 	def _active( self ) :
 		return self._pairs + self._skipped
@@ -1280,28 +1536,47 @@ class ReviewFrame( ctk.CTkFrame ) :
 		p = self._active( )
 		return p[ self._idx ] if self._idx < len( p ) else None
 
+	def _update_header( self ) :
+		total = len( self._active( ) )
+		if total == 0 :
+			self._prog_lbl.configure( text="No pairs loaded." )
+			self._stats_lbl.configure( text="" )
+		else :
+			pos = min( self._idx + 1 , total )
+			self._prog_lbl.configure( text=f"Pair {pos} / {total}" )
+			self._stats_lbl.configure( text=(
+				f"L:{self._stats.get( 'left' , 0 )}  R:{self._stats.get( 'right' , 0 )}  "
+				f"Both:{self._stats.get( 'both' , 0 )}  Alt:{self._stats.get( 'alteration' , 0 )}  "
+				f"Del:{self._stats.get( 'deleted' , 0 )}  Skip:{len( self._skipped )}") )
+		if self._scan_complete :
+			self._scan_status_lbl.configure( text="Scan complete" , text_color=FG_GOOD )
+		else :
+			self._scan_status_lbl.configure( text="⏳ Scanning…" , text_color=FG_WARN )
+
 	def _show( self ) :
 		while True :
 			pair = self._current( )
 			if pair is None :
-				self._finish( )
+				self._lf = self._rf = ""
+				self._lp.load( None )
+				self._rp.load( None )
+				if self._scan_complete :
+					self._finish( )
+				else :
+					self._update_header( )
+					self._prog_lbl.configure( text="Waiting for more results…" )
 				return
 			lf , rf = pair
 			if Path( lf ).exists( ) and Path( rf ).exists( ) :
 				break
 			self._idx += 1
-
 		self._lf , self._rf = pair
-		total = len( self._active( ) )
-		self._prog_lbl.configure( text=f"Pair {self._idx + 1} / {total}" )
-		self._stats_lbl.configure( text=(
-			f"L:{self._stats.get( 'left' , 0 )}  R:{self._stats.get( 'right' , 0 )}  "
-			f"Both:{self._stats.get( 'both' , 0 )}  Skip:{len( self._skipped )}") )
+		self._update_header( )
 		self._lp.load( self._lf )
 		self._rp.load( self._rf )
 		self._prefetch_upcoming( )
 
-	# ── decisions ────────────────────────────────────────────────────────
+	# ── Actions ──────────────────────────────────────────────────────
 
 	def _keep_left( self ) :
 		if not self._lf : return
@@ -1357,7 +1632,35 @@ class ReviewFrame( ctk.CTkFrame ) :
 			self._idx += 1
 		self._show( )
 
-	# ── helpers ──────────────────────────────────────────────────────────
+	def _delete_both( self ) :
+		if not self._lf or not self._rf : return
+		try :
+			del_l = self._mv( self._lf , DELETE_DIR )
+			del_r = self._mv( self._rf , DELETE_DIR )
+			self._rec( { "action" : "delete_both" , "deleted_left" : del_l , "deleted_right" : del_r } )
+			self._stats[ "deleted" ] += 1
+			self.logger.info( f"delete_both | {Path( self._lf ).name}  +  {Path( self._rf ).name}" )
+			self._advance( )
+		except Exception as e :
+			messagebox.showerror( "Error" , str( e ) )
+
+	def _needs_alteration( self ) :
+		if not self._lf or not self._rf : return
+		try :
+			alt_l = self._mv( self._lf , ALTERATIONS_REQUIRED_DIR )
+			alt_r = self._mv( self._rf , ALTERATIONS_REQUIRED_DIR )
+			self._rec( {
+				"action"      : "needs_alteration" ,
+				"moved_left"  : alt_l ,
+				"moved_right" : alt_r ,
+			} )
+			self._stats[ "alteration" ] += 1
+			self.logger.info(
+					f"needs_alteration | {Path( self._lf ).name}  +  {Path( self._rf ).name} "
+					f"→ {ALTERATIONS_REQUIRED_DIR}" )
+			self._advance( )
+		except Exception as e :
+			messagebox.showerror( "Error" , str( e ) )
 
 	def _mv( self , src , dest ) :
 		dest.mkdir( parents=True , exist_ok=True )
@@ -1382,7 +1685,7 @@ class ReviewFrame( ctk.CTkFrame ) :
 				data = json.load( f )
 			if not isinstance( data , list ) or not all( isinstance( g , list ) for g in data ) :
 				raise ValueError( "JSON must be a list of lists." )
-			self.load_groups( data )
+			self.add_groups( data )
 		except Exception as e :
 			messagebox.showerror( "Load Error" , str( e ) )
 
@@ -1395,7 +1698,8 @@ class ReviewFrame( ctk.CTkFrame ) :
 		self.logger.info(
 				f"Review complete | {self._stats[ 'reviewed' ]} pairs | "
 				f"L:{self._stats.get( 'left' , 0 )} R:{self._stats.get( 'right' , 0 )} "
-				f"Both:{self._stats.get( 'both' , 0 )} | {elapsed}s | log: {log_path}" )
+				f"Both:{self._stats.get( 'both' , 0 )} Alt:{self._stats.get( 'alteration' , 0 )} "
+				f"Del:{self._stats.get( 'deleted' , 0 )} | {elapsed}s | log: {log_path}" )
 		if _preview_cache :
 			_preview_cache.shutdown( )
 		self.winfo_toplevel( ).destroy( )
@@ -1410,7 +1714,6 @@ class DuplicateReviewer :
 		global _preview_cache
 		self.logger = logger
 		self.source_dir = source_dir
-
 		_preview_cache = PreviewCache( maxsize=CACHE_MAX_ITEMS )
 		_preview_cache.set_logger( logger )
 
@@ -1432,7 +1735,8 @@ class DuplicateReviewer :
 
 		self._scan = ScanFrame(
 				self._tabs.tab( "🔍  Scan" ) ,
-				on_groups_ready=self._on_scan_done ,
+				on_category_done=self._on_category_done ,
+				on_all_done=self._on_all_done ,
 				default_folder=str( source_dir ) if source_dir else "" ,
 		)
 		self._scan.pack( fill="both" , expand=True )
@@ -1443,11 +1747,22 @@ class DuplicateReviewer :
 				logger=self.logger ,
 		)
 		self._review.pack( fill="both" , expand=True )
+
+		self._first_results = True
 		self.logger.info( f"App started | source_dir={source_dir}" )
 
-	def _on_scan_done( self , groups ) :
-		self._review.load_groups( groups )
-		self._tabs.set( "👁  Review" )
+	def _on_category_done( self , cat_name: str , groups: list ) :
+		"""Called per category as results stream in."""
+		self.logger.info( f"Category '{cat_name}' done — {len( groups )} group(s)" )
+		self._review.add_groups( groups )
+		# Switch to Review tab on first results so user can start immediately
+		if self._first_results :
+			self._first_results = False
+			self._tabs.set( "👁  Review" )
+
+	def _on_all_done( self ) :
+		"""Called when all categories have finished scanning."""
+		self._review.mark_scan_complete( )
 
 	def run( self ) :
 		if any( item.is_file( ) for item in self.source_dir.iterdir( ) ) :
