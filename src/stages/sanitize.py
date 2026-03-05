@@ -33,7 +33,6 @@ from config import (
 	PASSWORD_PROTECTED_ARTIFACTS_DIR ,
 	UNSUPPORTED_ARTIFACTS_DIR
 )
-from utilities.artifact_data_manipulation import stop_apache_tika_server
 from utilities.checksum import generate_checksum , load_checksum_history , save_checksum
 from utilities.dependancy_ensurance import ensure_apache_tika , ensure_ffmpeg
 from utilities.sanitization import is_corrupted , is_password_protected , is_supported_type
@@ -160,5 +159,4 @@ def sanitizing(
 			logger.error( f"Error processing artifact {artifact.name}: {str( e )}" )
 			continue
 
-	stop_apache_tika_server( logger=logger , tika_server_process=tika_server_process )
 	return None

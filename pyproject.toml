@@ -1,289 +1,74 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "papertrail"
-version = "1.3.1"
-description = "A local LLM based, secure, document tabulating and organising system using SQLite, Ollama, and Python"
+version = "1.4.0"
 authors = [{ name = "Ashiq Arib Gazi", email = "ashiqarib@gmail.com" }]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["llm", "document-processing", "ocr", "sqlite", "ollama", "ml"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
 
 dependencies = [
-    # ============================================================================
-    # Email Processing & OAuth2 Authentication
-    # ============================================================================
-    "icalendar>=5.0.0", # Calendar extraction from emails (.ics files)
-    # 👉 icalendar AUTO-INSTALLS:
-    #    - python-dateutil ✓ (already from pandas!)
-    #    - pytz ✓ (already from pandas!)
-    "filetype",
-
-    "weasyprint>=60.0", # Email → PDF conversion (modern HTML renderer)
-    # 👉 weasyprint AUTO-INSTALLS:
-    #    - Pillow ✓ (already installed)
-    #    - cffi, cssselect2, tinycss2, pydyf, brotli, fonttools, html5lib
-
-    "chardet>=5.0.0", # Character encoding detection for emails
-    # 👉 chardet AUTO-INSTALLS: (standalone library)
-
-    "google-auth-httplib2>=0.2.0", # Google API HTTP client
-    # 👉 google-auth-httplib2 AUTO-INSTALLS:
-    #    - google-auth ✓
-    #    - httplib2
-
-    "google-api-python-client>=2.116.0", # Gmail API client
-    # 👉 google-api-python-client AUTO-INSTALLS:
-    #    - google-auth ✓
-    #    - google-auth-httplib2 ✓
-    #    - httplib2, uritemplate
-
-    # === Microsoft OAuth2 (for Outlook/Office365) ===
-    "msal>=1.26.0", # Microsoft Authentication Library
-    # 👉 msal AUTO-INSTALLS:
-    #    - requests ✓
-    #    - PyJWT, cryptography
-
-    # === Optional: Packaged OAuth2 helper (alternative to manual scripts) ===
-    "mutt-oauth2>=0.0.1", # Packaged version of mutt_oauth2.py (uses keyring instead of GPG)
-    # 👉 mutt-oauth2 AUTO-INSTALLS:
-    #    - keyring, click
-    # ⚠️ NOTE: This is optional - can also use manual mutt_oauth2.py script
-
-    # === Environment variable management ===
-    "python-dotenv>=1.0.1", # Environment variable management
-    # 👉 python-dotenv AUTO-INSTALLS: (standalone library)
-
-    # ❌ REMOVED: oauth2ms (NOT a PyPI package - install from GitHub separately)
-    # ❌ REMOVED: M2Crypto (optional, only if you want email encryption)
-    # ❌ REMOVED: python-gnupg (optional, only if you want GPG encryption)
-
-    # ============================================================================
-    # Core Utilities
-    # ============================================================================
-    "cryptography>=41.0.0", # Encryption - NOT auto-installed, keep this
-
-    # ============================================================================
-    # Deep Learning Framework
-    # ============================================================================
-    # 🔥 PyTorch - Install this to avoid manual installation
-    "torch>=2.0.0",
-    # 👉 torch AUTO-INSTALLS: numpy, sympy, networkx, jinja2, fsspec, filelock
-
-    "torchvision>=0.15.0", # Vision models for torch
-    # 👉 torchvision AUTO-INSTALLS: torch, numpy, pillow
-
-    # ============================================================================
-    # Deep Learning - HuggingFace Ecosystem
-    # ============================================================================
-    "transformers>=4.35.0",
-    # 👉 transformers AUTO-INSTALLS:
-    #    - numpy ✓
-    #    - tqdm ✓ (DON'T list separately!)
-    #    - requests ✓ (DON'T list separately!)
-    #    - filelock, huggingface-hub, packaging, pyyaml, regex, tokenizers, safetensors
-
-    "accelerate>=0.25.0",
-    # 👉 accelerate AUTO-INSTALLS:
-    #    - numpy ✓
-    #    - torch ✓
-    #    - psutil ✓ (DON'T list separately!)
-    #    - pyyaml, huggingface-hub
-
-    "hf-xet>=0.1.0", # HuggingFace optimization
-
-    # ============================================================================
-    # Document Processing - PDF & Images
-    # ============================================================================
-    "PyMuPDF>=1.23.0", # Fast PDF parsing (fitz)
-    "python-docx>=1.0.0",
+    # ── Deep Learning ────────────────────────────────────────────────
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "transformers>=5.2.0",
+    "accelerate>=1.6.0",
+    "bitsandbytes>=0.45.0",
+    "hf-xet>=1.1.0",
+    # ── LLM Integration ──────────────────────────────────────────────
+    "ollama>=0.6.1",
+    # ── PDF & Document Processing ────────────────────────────────────
+    "PyMuPDF>=1.27.1",
+    "pypdf>=5.4.0",
+    "pdf2image>=1.17.0",
+    "img2pdf>=0.6.0",
+    "ocrmypdf>=16.10.0",
+    "python-docx>=1.1.2",
     "EbookLib>=0.18",
-    "beautifulsoup4>=4.12.0",
-    # 👉 PyMuPDF AUTO-INSTALLS: (minimal - mostly self-contained)
-
-    "pdf2image>=1.16.3", # Convert PDF to images (requires poppler-utils system package)
-    # 👉 pdf2image AUTO-INSTALLS: pillow ✓
-    # ⚠️ SYSTEM REQUIREMENT: Needs 'poppler-utils' installed on system!
-
-    "opencv-python>=4.8.0", # Computer vision
-    # 👉 opencv-python AUTO-INSTALLS:
-    #    - numpy ✓ (CRITICAL dependency)
-
-    "pypdf>=3.0.0", # Alternative PDF parser
-    # 👉 pypdf AUTO-INSTALLS: (minimal dependencies)
-
-    "pyexiftool>=0.5.0",
-    # ============================================================================
-    # Document Scanning & OCR - IMPORTANT: ocrmypdf installs img2pdf!
-    # ============================================================================
-    "ocrmypdf>=16.0.0", # PDF enhancement and OCR
-    # 👉 ocrmypdf AUTO-INSTALLS:
-    #    - Pillow ✓ (DON'T list separately!)
-    #    - img2pdf ✓ (DON'T list separately!)
-    #    - pikepdf, pluggy, packaging, pdfminer.six, charset-normalizer
-    #    - deprecation, coloredlogs
-
-    # ❌ REMOVED: img2pdf (already installed by ocrmypdf above)
-    # ❌ REMOVED: Pillow (already installed by ocrmypdf and torchvision)
-    # ❌ REMOVED: numpy (already installed by torch, opencv, transformers, etc.)
-
-    # ============================================================================
-    # System Monitoring
-    # ============================================================================
-    # ❌ REMOVED: psutil (already installed by accelerate)
-    "GPUtil>=1.4.0", # GPU tracking - NOT auto-installed
-
-    # ============================================================================
-    # LLM Integration - Local Inference
-    # ============================================================================
-    "ollama>=0.1.0", # Ollama API client
-    # 👉 ollama AUTO-INSTALLS:
-    #    - httpx, certifi, h11, anyio, idna
-    #    - requests ✓ (already from transformers)
-
-    "pandas>=2.3.3", # Tabular data
-    # 👉 pandas AUTO-INSTALLS:
-    #    - numpy ✓
-    #    - openpyxl ✓ (when using Excel - DON'T list separately!)
-    #    - python-dateutil, pytz, tzdata
-
-    # ❌ REMOVED: openpyxl (already installed by pandas for Excel support)
-    # ❌ REMOVED: requests (already installed by transformers)
-    # ❌ REMOVED: tqdm (already installed by transformers)
-
-    # ============================================================================
-    # Media Processing - Video & Advanced Images
-    # ============================================================================
-    "ffmpeg-python>=0.2.0", # Video processing
-    # 👉 ffmpeg-python AUTO-INSTALLS: future
-    # ⚠️ SYSTEM REQUIREMENT: Needs 'ffmpeg' binary installed on system!
-
-    "Wand>=0.6.0", # ImageMagick wrapper
-    # 👉 Wand AUTO-INSTALLS: (minimal Python deps)
-    # ⚠️ SYSTEM REQUIREMENT: Needs 'ImageMagick' installed on system!
-
-    "pypandoc>=1.11", # Universal document converter
-    # 👉 pypandoc AUTO-INSTALLS: (minimal Python deps)
-    # ⚠️ SYSTEM REQUIREMENT: Needs 'pandoc' binary installed on system!
-
-    # ============================================================================
-    # Archive and Email Formats
-    # ============================================================================
-    "py7zr>=0.20.0", # 7-Zip archives
-    # 👉 py7zr AUTO-INSTALLS:
-    #    - pycryptodomex, pyppmd, pyzstd, brotli, multivolumefile, inflate64, bcj-cffi
-
-    "rarfile>=4.0", # RAR archive support for password detection
-    # 👉 rarfile AUTO-INSTALLS: (standalone library)
-    # ⚠️ SYSTEM REQUIREMENT: Needs 'unrar' binary installed on system for extraction!
-    #    Note: Only used for password detection, not extraction in this use case
-
-    "extract-msg>=0.45.0", # Outlook MSG files
-
-    "extract-msg>=0.45.0", # Outlook MSG files
-    # 👉 extract-msg AUTO-INSTALLS:
-    #    - compressed-rtf, ebcdic, olefile, red-black-tree-mod, RTFDE, tzlocal
-
-    "libpff-python>=20211114", # Outlook PST/OST files
-    # 👉 libpff-python AUTO-INSTALLS: (C extension - minimal deps)
-
-    # ============================================================================
-    # Document Conversion & Translation
-    # ============================================================================
-    "pdf2zh", # PDF translation
-    # 👉 pdf2zh AUTO-INSTALLS: various deps (check with pipdeptree if issues arise)
-
-    # ============================================================================
-    # Audio Processing
-    # ============================================================================
-    "librosa>=0.10.0", # Audio analysis
-    # 👉 librosa AUTO-INSTALLS:
-    #    - numpy ✓
-    #    - scipy, scikit-learn, joblib, decorator, numba, soundfile
-    #    - pooch, soxr, typing-extensions, msgpack, lazy-loader
-
-    "faster-whisper>=0.10.0", # Speech-to-text
-    # 👉 faster-whisper AUTO-INSTALLS:
-    #    - numpy ✓
-    #    - onnxruntime, huggingface-hub, tokenizers, ctranslate2
-
-    # ============================================================================
-    # File Type Detection
-    # ============================================================================
-    "magika>=0.6.0", # AI-powered file type detection
-    # 👉 magika AUTO-INSTALLS:
-    #    - numpy ✓
-    #    - python-magic, onnxruntime, click
-    "pygame>=2.5.0", # Audio playback for manual review UI
-    "preview-generator",
-    "python-vlc"
-]
-
-[project.optional-dependencies]
-# ============================================================================
-# Development Tools - Install with: pip install papertrail[dev]
-# ============================================================================
-dev = [
-    "pytest>=7.4.0",
-    # 👉 pytest AUTO-INSTALLS: iniconfig, packaging, pluggy, colorama
-
-    "black>=23.0.0",
-    # 👉 black AUTO-INSTALLS: click, mypy-extensions, packaging, pathspec, platformdirs, tomli
-
-    "mypy>=1.6.0",
-    # 👉 mypy AUTO-INSTALLS: mypy-extensions, typing-extensions, tomli
-
-    "types-pytz>=2022.1.1", # Type stubs for pandas
-
-    "flake8>=6.0.0",
-    # 👉 flake8 AUTO-INSTALLS: mccabe, pycodestyle, pyflakes
-
-    "isort>=5.12.0", # Import organizer
-]
-
-# ============================================================================
-# Vision Models - Install with: pip install papertrail[vision]
-# ============================================================================
-# ============================================================================
-# Vision Models - Install with: pip install papertrail[vision]
-# ============================================================================
-vision = [
-    "qwen-vl-utils>=0.0.8", # Qwen Vision-Language model utilities
-    # 👉 qwen-vl-utils AUTO-INSTALLS:
-    #    - Pillow ✓
-    #    - numpy ✓
-    #    - torch ✓
-    #    - transformers ✓
-    # ⚠️ NOTE: Package name has hyphens, import as: from qwen_vl_utils import ...
-
-    "rawpy>=0.18.0", # RAW camera formats
-    # 👉 rawpy AUTO-INSTALLS:
-    #    - numpy ✓
-
-    "pillow-heif>=0.13.0", # HEIF/HEIC (Apple photos)
-    # 👉 pillow-heif AUTO-INSTALLS:
-    #    - Pillow ✓ (extends it)
-    #    - pillow-heif-cffi
-]
-
-# ============================================================================
-# All Extras - Install with: pip install papertrail[all]
-# ============================================================================
-all = [
-    "papertrail[dev,vision]",
+    "beautifulsoup4>=4.13.0",
+    "reportlab>=4.4.10",
+    "weasyprint>=63.1",
+    # ── Image Processing ─────────────────────────────────────────────
+    "opencv-python>=4.11.0",
+    "rawpy>=0.23.0",
+    "pillow-heif>=0.22.0",
+    "imagehash>=4.3.2",
+    # ── File Type Detection & Metadata ───────────────────────────────
+    "filetype>=1.2.0",
+    "pyexiftool>=0.5.6",
+    "magika>=0.6.1",
+    # ── Archive & Email Formats ──────────────────────────────────────
+    "py7zr>=0.22.0",
+    "rarfile>=4.2",
+    "extract-msg>=0.52.0",
+    "libpff-python>=20211114",
+    # ── Encryption & Security ────────────────────────────────────────
+    "cryptography>=44.0.0",
+    "msoffcrypto-tool>=6.0.0",
+    # ── Audio Processing ─────────────────────────────────────────────
+    "librosa>=0.10.2",
+    "faster-whisper>=1.1.0",
+    # ── Video & Media ────────────────────────────────────────────────
+    "ffmpeg-python>=0.2.0",
+    "Wand>=0.6.13",
+    # ── GUI ──────────────────────────────────────────────────────────
+    "customtkinter>=5.2.2",
+    "pygame>=2.6.1",
+    "tkinterweb>=3.24.8",
+    # ── Document Conversion ──────────────────────────────────────────
+    "pypandoc>=1.15",
+    # ── Data & Tabular ───────────────────────────────────────────────
+    "pandas>=2.3.3",
+    "tqdm>=4.67.0",
+    # ── System Monitoring ────────────────────────────────────────────
+    "GPUtil>=1.4.0",
+    # ── Misc Utilities ───────────────────────────────────────────────
+    "requests>=2.32.0",
+    "preview-generator>=0.29",
+    "python-dotenv>=1.1.0",
 ]
 
 [project.urls]
@@ -299,44 +84,17 @@ include = ["papertrail*", "processors*", "utilities*"]
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.json", "*.yaml", "*.yml"]
 
-# ============================================================================
-# Code Formatter Configuration - Black
-# ============================================================================
-[tool.black]
-line-length = 88
-target-version = ['py38', 'py39', 'py310', 'py311']
-extend-exclude = '''
-/(
-  | build
-  | dist
-  | .eggs
-)/
-'''
-
-# ============================================================================
-# Import Sorter Configuration - isort
-# ============================================================================
 [tool.isort]
 profile = "black"
 line_length = 88
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
 
-# ============================================================================
-# Type Checker Configuration - mypy
-# ============================================================================
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 
-# ============================================================================
-# Testing Configuration - pytest
-# ============================================================================
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

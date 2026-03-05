@@ -14,13 +14,13 @@ from typing import List , Set
 
 # ── Root Directories ──────────────────────────────────────────────────────────
 TARGET_DRIVE: Path = Path( "E:" )
-# TARGET_DRIVE: Path = Path( r"C:\Users\UserX\Desktop\\" )
-UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:\PAPERTRAIL-LOAD" )
-# UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:\Users\UserX\Desktop\PAPERTRAIL-PROCESSING" )
+# TARGET_DRIVE: Path = Path( r"C:/Users/UserX/Desktop//" )
+UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"E:/PAPERTRAIL-LOAD" )
+# UNPROCESSED_ARTIFACTS_DIR: Path = Path( r"C:/Users/UserX/Desktop/PAPERTRAIL-PROCESSING" )
 
 BASE_DIR: Path = Path( TARGET_DRIVE / "PAPERTRAIL-PROCESSING" )
 RECURSIVE_SORT_DIR = Path( UNPROCESSED_ARTIFACTS_DIR / "RECURSIVE_SORT" )
-PROGRAM_ASSETS_DIR = Path( r"C:\Users\UserX\Desktop\Github-Workspace\PaperTrail\assets" )
+PROGRAM_ASSETS_DIR = Path( r"C:/Users/UserX/Desktop/Github-Workspace/PaperTrail/assets" )
 
 # ── Processing Directories ─────────────────────────────────────────────────────
 ARCHIVAL_DIR: Path = Path( BASE_DIR / "ARCHIVE" )
@@ -50,13 +50,13 @@ ALTERATIONS_CSV: Path = ALTERATIONS_REQUIRED_DIR / "alterations_log.csv"
 AFFINE_DIR: Path = Path(
 		TARGET_DRIVE / "AFFINE" )  # https://affine.pro/
 PERSONAL_LIBRARY_DIR: Path = Path(
-		TARGET_DRIVE / "PERSONAL_LIBRARY\BOOKDROP" )  # https://github.com/booklore-app/booklore
+		TARGET_DRIVE / "PERSONAL_LIBRARY/BOOKDROP" )  # https://github.com/booklore-app/booklore
 DIGITAL_ASSET_MANAGEMENT_DIR: Path = Path(
 		TARGET_DRIVE / "DIGITAL_ASSET_MANAGEMENT" )  # https://www.pydio.com/
 FIREFLYIII_DIR: Path = Path(
 		TARGET_DRIVE / "FIREFLY-III" )  # https://www.firefly-iii.org/
 JELLYFIN_DIR: Path = Path(
-		TARGET_DRIVE / "JELLYFIN\SELF-HOSTED-APP\media" )  # https://jellyfin.org/
+		TARGET_DRIVE / "JELLYFIN/SELF-HOSTED-APP/media" )  # https://jellyfin.org/
 GITLAB_DIR: Path = Path(
 		TARGET_DRIVE / "GITLAB" )  # https://about.gitlab.com/
 IMMICH_DIR: Path = Path(
@@ -521,12 +521,12 @@ FILETYPE_TRUSTED_EXTENSIONS.update( EXECUTABLE_EXTENSIONS )
 FILETYPE_TRUSTED_EXTENSIONS.update( ext.lstrip( "." ) for ext in ARCHIVE_TYPES )
 
 TIKA_SERVER_PORT: int = 9998
-JAVA_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"jdk-25.0.2+10-jre\bin\java.exe" )
+JAVA_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"jdk-25.0.2+10-jre/bin/java.exe" )
 TIKA_APP_JAR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"tika-app-3.2.3.jar" )
 TIKA_SERVER_JAR_PATH = Path( PROGRAM_ASSETS_DIR / r"tika-server-standard-3.2.3.jar" )
 PDF_ARRANGER_EXE_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"pdfarranger.exe" )
-OUCH_DECOMPRESSOR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"ouch-x86_64-pc-windows-msvc\ouch.exe" )
-NOTESHRINK_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"noteshrink\noteshrink.py" )
+OUCH_DECOMPRESSOR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"ouch-x86_64-pc-windows-msvc/ouch.exe" )
+NOTESHRINK_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"noteshrink/noteshrink.py" )
 
 # Apache Tika MIME Type → File Extension Mapping
 # Covers: Documents, Spreadsheets, Presentations, Images, Audio, Video,
@@ -1098,7 +1098,7 @@ MIME_TO_EXT_MAP: dict[ str , List[ str ] ] = {
 	"application/x-font-snf"                                                    : [ ".snf" ] ,
 	# ─────────────────────────────────────────────────────────────────────
 	# EXECUTABLES & BINARIES
-	# ─────────────────────────────────────────────────────────────────────\
+	# ─────────────────────────────────────────────────────────────────────/
 	"application/x-msdownload"                                                  : [ ".exe" ] ,
 	"application/vnd.microsoft.portable-executable"                             : [ ".exe" ] ,
 	"application/x-dosexec"                                                     : [ ".exe" ] ,

@@ -32,6 +32,7 @@ from stages.auto_sort import automatically_sorting
 from stages.file_conversion import converting_files
 from stages.folder_decompression import decompressing_artifacts
 from stages.sanitize import sanitizing
+from utilities.artifact_data_manipulation import stop_apache_tika_server
 from utilities.dependancy_ensurance import ensure_apache_tika_server
 from utilities.visual_processor import VisualProcessor
 
@@ -135,6 +136,8 @@ automatically_sorting(
 
 # manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
 # manual_artifact_triage.run( )
+
+stop_apache_tika_server( logger=logger , tika_server_process=tika_server_process )
 
 # ============================================================================
 # PIPELINE COMPLETION

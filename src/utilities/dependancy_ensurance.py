@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Tuple
 
+import ollama
 import requests
 
 from config import JAVA_PATH , LOG_DIR , TIKA_SERVER_JAR_PATH
@@ -3150,3 +3151,41 @@ def ensure_apache_tika_server(
 	log_file.close( )
 	proc.kill( )
 	raise RuntimeError( f"Tika server did not respond within 90s. Check log: {log_path}" )
+
+
+def ensure_ollama_model(
+		model: str ,
+		logger: logging.Logger | None = None ,
+) -> None :
+	"""
+	Ensure an Ollama model is available locally, pulling it if necessary.
+
+	Raises RuntimeError if the model cannot be pulled.
+	"""
+	client = ollama.Client( )
+
+	# Check if the model already exists locally
+	try :
+		existing = client.list( )
+		installed = { m.model for m in existing.models }
+		if model in installed :
+			if logger :
+				logger.info( f"[MODEL] '{model}' already available" )
+			return
+	except Exception as e :
+		if logger :
+			logger.warning( f"[MODEL] Could not list models — {type( e ).__name__}: {e}" )
+
+	# Pull the model
+	if logger :
+		logger.info( f"[MODEL] '{model}' not found locally — pulling..." )
+
+	try :
+		client.pull( model )
+		if logger :
+			logger.info( f"[MODEL] '{model}' pulled successfully" )
+	except Exception as e :
+		msg = f"Failed to pull model '{model}' — {type( e ).__name__}: {e}"
+		if logger :
+			logger.error( f"[MODEL] {msg}" )
+		raise RuntimeError( msg ) from e

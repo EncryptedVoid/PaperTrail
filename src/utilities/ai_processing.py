@@ -214,11 +214,11 @@ def extract_visual_description(
 	logger.info( f"[VISUAL-DESC] Describing: {file_path.name}" )
 
 	result = _vision_generate(
-			logger=logger,
+			logger=logger ,
 			file_path=file_path ,
 			user_prompt=VISUAL_DESC_PROMPT ,
-			system=VISUAL_DESC_SYSTEM_PROMPT
-			)
+			system=VISUAL_DESC_SYSTEM_PROMPT ,
+	)
 
 	if result :
 		logger.info( f"[VISUAL-DESC] Description generated ({len( result )} chars)" )
