@@ -107,7 +107,7 @@ def automatically_sorting(
 				logger.info( f"[DISK_IMAGE] '{artifact.name}' matched ISO disk image extension, moving to {dest}" )
 				shutil.move( src=artifact , dst=dest )
 
-			elif artifact_ext in [ "onepkg" ] :
+			elif artifact_ext in [ "onepkg" , "one" , "onetoc2" ] :
 				dest = AFFINE_DIR / f"{sanitized_label}.{artifact_ext}"
 				logger.info( f"[ONENOTE_PACKAGE] '{artifact.name}' matched OneNote package extension, moving to {dest}" )
 				shutil.move( src=artifact , dst=dest )
