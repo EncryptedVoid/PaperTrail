@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple
+from typing import Optional , Tuple
 
 import ollama
 import requests
@@ -3086,101 +3086,219 @@ def find_libreoffice( ) -> str :
 	)
 
 
-def is_apache_tika_server_alive( ) -> bool :
+# ──────────────────────────────────────────────────────────────────────────────
+# Fixed: is_apache_tika_server_alive — catches all request exceptions
+# ──────────────────────────────────────────────────────────────────────────────
+
+def is_apache_tika_server_alive( logger: Optional[ logging.Logger ] = None ) -> bool :
+	"""Check if the Apache Tika server is responding on port 9998."""
 	try :
-		requests.get( f"http://localhost:9998/tika" , timeout=2 )
-		return True
+		resp = requests.get( "http://localhost:9998/tika" , timeout=2 )
+		if logger :
+			logger.debug( f"[TIKA-HEALTH] Response status: {resp.status_code}" )
+		return resp.status_code == 200
 	except requests.ConnectionError :
+		if logger :
+			logger.debug( "[TIKA-HEALTH] Connection refused — server not running" )
 		return False
+	except requests.Timeout :
+		if logger :
+			logger.debug( "[TIKA-HEALTH] Request timed out — server may be overloaded" )
+		return False
+	except requests.RequestException as e :
+		if logger :
+			logger.debug( f"[TIKA-HEALTH] Unexpected error: {type( e ).__name__}: {e}" )
+		return False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fixed: ensure_apache_tika_server — tracks log handle, better diagnostics
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TikaServerHandle :
+	"""Wrapper around the Tika server process + its log file for clean shutdown."""
+
+	def __init__( self , process: subprocess.Popen , log_file , log_path: Path ) :
+		self.process = process
+		self.log_file = log_file
+		self.log_path = log_path
+
+	@property
+	def pid( self ) -> int :
+		return self.process.pid
+
+	def poll( self ) -> Optional[ int ] :
+		return self.process.poll( )
+
+	def kill( self , logger: Optional[ logging.Logger ] = None ) :
+		if logger :
+			logger.info( f"[TIKA-SERVER] Killing server (PID {self.process.pid})" )
+		self.process.kill( )
+		self.process.wait( timeout=10 )
+		self._close_log( logger )
+
+	def _close_log( self , logger: Optional[ logging.Logger ] = None ) :
+		try :
+			if self.log_file and not self.log_file.closed :
+				self.log_file.close( )
+				if logger :
+					logger.debug( f"[TIKA-SERVER] Closed log file: {self.log_path}" )
+		except Exception as e :
+			if logger :
+				logger.warning( f"[TIKA-SERVER] Error closing log file: {e}" )
 
 
 def ensure_apache_tika_server(
 		logger: logging.Logger ,
-		tika_server_process: subprocess.Popen | None ,
-) -> subprocess.Popen :
+		tika_server_handle: Optional[ TikaServerHandle ] = None ,
+) -> TikaServerHandle :
 	"""
-	Ensure the Apache Tika server is running.
-
-	Args:
-			:param logger: Logger instance.
-			:param tika_server_process:
+	Ensure the Apache Tika server is running. Returns a TikaServerHandle
+	that wraps the process and its log file for clean lifecycle management.
 	"""
-
-	ensure_apache_tika( )
-
 	# Already running?
-	if tika_server_process is not None and tika_server_process.poll( ) is None :
-		if is_apache_tika_server_alive( ) :
-			logger.debug( "Tika server already running" )
-			return tika_server_process
+	if tika_server_handle is not None :
+		poll_result = tika_server_handle.poll( )
+		if poll_result is None :
+			if is_apache_tika_server_alive( logger ) :
+				logger.debug(
+						f"[TIKA-SERVER] Already running (PID {tika_server_handle.pid}), "
+						f"health check passed" ,
+				)
+				return tika_server_handle
+			else :
+				logger.warning(
+						f"[TIKA-SERVER] Process alive (PID {tika_server_handle.pid}) but "
+						f"health check failed — restarting" ,
+				)
+				tika_server_handle.kill( logger )
+		else :
+			logger.warning(
+					f"[TIKA-SERVER] Previous process exited with code {poll_result} — restarting" ,
+			)
+			tika_server_handle._close_log( logger )
 
+	# Validate paths before attempting to start
+	java_str = str( JAVA_PATH )
+	tika_jar_str = str( TIKA_SERVER_JAR_PATH )
+
+	logger.info( f"[TIKA-SERVER] Java path: {java_str} (exists: {Path( java_str ).exists( )})" )
+	logger.info( f"[TIKA-SERVER] Tika JAR: {tika_jar_str} (exists: {Path( tika_jar_str ).exists( )})" )
+
+	if not Path( java_str ).exists( ) :
+		raise RuntimeError( f"Java not found at: {java_str}" )
+	if not Path( tika_jar_str ).exists( ) :
+		raise RuntimeError( f"Tika server JAR not found at: {tika_jar_str}" )
+
+	# Open log file
 	log_path = LOG_DIR / f"APACHE-TIKA-SERVER-{datetime.now( ).strftime( '%Y-%m-%d_%H-%M-%S' )}.log"
-	log_file = open( log_path , "w" )
+	logger.info( f"[TIKA-SERVER] Log file: {log_path}" )
 
-	cmd = [
-		str( JAVA_PATH ) ,
-		"-jar" ,
-		str( TIKA_SERVER_JAR_PATH ) ,
-		"-p" ,
-		"9998" ,
-	]
+	try :
+		log_file = open( log_path , "w" )
+	except Exception as e :
+		raise RuntimeError( f"Cannot open Tika log file {log_path}: {e}" ) from e
 
-	logger.info( f"Java path: {JAVA_PATH}" )
-	logger.info( f"Java path exists: {Path( JAVA_PATH ).exists( )}" )
-	logger.info( f"Tika JAR path: {TIKA_SERVER_JAR_PATH}" )
-	logger.info( f"Tika JAR exists: {Path( TIKA_SERVER_JAR_PATH ).exists( )}" )
-	logger.info( f"Tika server command: {cmd}" )
-	logger.info( f"Tika server log: {log_path}" )
+	# Build and launch command
+	cmd = [ java_str , "-jar" , tika_jar_str , "-p" , "9998" ]
+	logger.info( f"[TIKA-SERVER] Starting: {' '.join( cmd )}" )
 
 	kwargs: dict = dict( stdout=log_file , stderr=subprocess.STDOUT )
 	if sys.platform == "win32" :
 		kwargs[ "creationflags" ] = subprocess.CREATE_NO_WINDOW
+		logger.debug( "[TIKA-SERVER] Using CREATE_NO_WINDOW flag (Windows)" )
 
-	proc = subprocess.Popen( cmd , **kwargs )
+	try :
+		proc = subprocess.Popen( cmd , **kwargs )
+	except Exception as e :
+		log_file.close( )
+		raise RuntimeError( f"Failed to start Tika server: {type( e ).__name__}: {e}" ) from e
 
+	logger.info( f"[TIKA-SERVER] Process started (PID {proc.pid}), waiting for ready..." )
+
+	# Wait for server to become healthy
 	for i in range( 90 ) :
-		if proc.poll( ) is not None :
+		exit_code = proc.poll( )
+		if exit_code is not None :
 			log_file.close( )
-			snippet = log_path.read_text( )[ -2000 : ]
+			snippet = ""
+			try :
+				snippet = log_path.read_text( )[ -2000 : ]
+			except Exception :
+				pass
 			raise RuntimeError(
-					f"Tika server exited with code {proc.returncode}:\n{snippet}" ,
+					f"Tika server exited with code {exit_code} after {i + 1}s.\n"
+					f"Log tail:\n{snippet}" ,
 			)
-		if is_apache_tika_server_alive( ) :
-			logger.info( f"Apache Tika server ready on port 9998 (took {i + 1}s)" )
-			return proc
+
+		if is_apache_tika_server_alive( logger ) :
+			logger.info( f"[TIKA-SERVER] Ready on port 9998 (took {i + 1}s, PID {proc.pid})" )
+			return TikaServerHandle( proc , log_file , log_path )
+
+		if i % 10 == 9 :
+			logger.debug( f"[TIKA-SERVER] Still waiting... ({i + 1}s elapsed)" )
+
 		time.sleep( 1 )
 
+	# Timed out
 	log_file.close( )
 	proc.kill( )
-	raise RuntimeError( f"Tika server did not respond within 90s. Check log: {log_path}" )
+	snippet = ""
+	try :
+		snippet = log_path.read_text( )[ -2000 : ]
+	except Exception :
+		pass
+	raise RuntimeError(
+			f"Tika server did not respond within 90s (PID {proc.pid}).\n"
+			f"Log tail:\n{snippet}\n"
+			f"Full log: {log_path}" ,
+	)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fixed: ensure_ollama_model — prefix matching + better logging
+# ──────────────────────────────────────────────────────────────────────────────
 
 def ensure_ollama_model(
 		model: str ,
-		logger: logging.Logger | None = None ,
+		logger: Optional[ logging.Logger ] = None ,
 ) -> None :
 	"""
 	Ensure an Ollama model is available locally, pulling it if necessary.
 
-	Raises RuntimeError if the model cannot be pulled.
+	Uses prefix matching so that requesting 'qwen2.5:7b' will match
+	'qwen2.5:7b', 'qwen2.5:7b-instruct-q4_K_M', etc.
 	"""
 	client = ollama.Client( )
 
-	# Check if the model already exists locally
+	# Check existing models
 	try :
 		existing = client.list( )
-		installed = { m.model for m in existing.models }
-		if model in installed :
-			if logger :
-				logger.info( f"[MODEL] '{model}' already available" )
-			return
+		installed = [ m.model for m in existing.models ]
+
+		if logger :
+			logger.debug( f"[MODEL] Installed models: {installed}" )
+
+		# Exact match first, then prefix match
+		for m in installed :
+			if m == model or m.startswith( model ) :
+				if logger :
+					logger.info( f"[MODEL] '{model}' matched installed model '{m}'" )
+				return
+
+		if logger :
+			logger.info( f"[MODEL] '{model}' not found among {len( installed )} installed models" )
+
 	except Exception as e :
 		if logger :
-			logger.warning( f"[MODEL] Could not list models — {type( e ).__name__}: {e}" )
+			logger.warning(
+					f"[MODEL] Could not list models (Ollama server may be down) — "
+					f"{type( e ).__name__}: {e}" ,
+			)
 
 	# Pull the model
 	if logger :
-		logger.info( f"[MODEL] '{model}' not found locally — pulling..." )
+		logger.info( f"[MODEL] Pulling '{model}'..." )
 
 	try :
 		client.pull( model )
@@ -3189,5 +3307,5 @@ def ensure_ollama_model(
 	except Exception as e :
 		msg = f"Failed to pull model '{model}' — {type( e ).__name__}: {e}"
 		if logger :
-			logger.error( f"[MODEL] {msg}" )
+			logger.error( f"[MODEL] {msg}" , exc_info=True )
 		raise RuntimeError( msg ) from e

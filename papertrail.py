@@ -14,22 +14,16 @@ Author: Ashiq Gazi
 import logging
 from datetime import datetime
 
-from applications.identify_duplicates import DuplicateReviewer
 from applications.manual_file_triage import FileTriage
 from config import (
 	COMPLETED_FORMAT_CONVERSION_DIR ,
-	COMPLETED_SANITIZATION_DIR , LOG_DIR ,
+	LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
-	RECURSIVE_SORT_DIR , SESSION_LOG_FILE_PREFIX ,
+	SESSION_LOG_FILE_PREFIX ,
 	SYSTEM_DIRECTORIES ,
-	SYSTEM_PROGRAM_TRACKING_FILES , UNPROCESSED_ARTIFACTS_DIR ,
-)
+	SYSTEM_PROGRAM_TRACKING_FILES , )
 from stages.auto_sort import automatically_sorting
-from stages.file_conversion import converting_files
-from stages.folder_decompression import decompressing_artifacts
-from stages.sanitize import sanitizing
-from utilities.artifact_data_manipulation import stop_apache_tika_server
 from utilities.dependancy_ensurance import ensure_apache_tika_server
 
 # ============================================================================
@@ -92,45 +86,51 @@ print( "Root handlers after basicConfig:" , logging.root.handlers )
 # This marks the beginning of a new processing session in the logs
 logger.info( "WELCOME TO PAPERTRAIL! AN AUTOMATED ARTIFACT ORGANISATION SYSTEM" )
 
-# app = FolderManagerApp( source_dir=RECURSIVE_SORT_DIR , dest_dir=UNPROCESSED_ARTIFACTS_DIR , logger=logger )
-# app.mainloop( )
+# ── Start Tika server (returns a TikaServerHandle) ────────────────────────
+# First call: no existing handle, so pass None (or omit the argument)
+tika_handle = ensure_apache_tika_server( logger=logger , tika_server_handle=None )
+logger.info( f"Tika server running (PID {tika_handle.pid}, log: {tika_handle.log_path})" )
 
-decompressing_artifacts(
-		logger=logger ,
-		source_dir=RECURSIVE_SORT_DIR ,
-		dest_dir=UNPROCESSED_ARTIFACTS_DIR ,
-)
+try :
+	# app = FolderManagerApp( source_dir=RECURSIVE_SORT_DIR , dest_dir=UNPROCESSED_ARTIFACTS_DIR , logger=logger )
+	# app.mainloop( )
 
-tika_server_process = ensure_apache_tika_server(
-		logger=logger , tika_server_process=None ,
-)
+	# decompressing_artifacts(
+	# 		logger=logger ,
+	# 		source_dir=RECURSIVE_SORT_DIR ,
+	# 		dest_dir=UNPROCESSED_ARTIFACTS_DIR ,
+	# )
 
-sanitizing(
-		logger=logger ,
-		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
-		dest_dir=COMPLETED_SANITIZATION_DIR ,
-		tika_server_process=tika_server_process ,
-)
+	# sanitizing(
+	# 		logger=logger ,
+	# 		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
+	# 		dest_dir=COMPLETED_SANITIZATION_DIR ,
+	# 		tika_server_process=tika_server_process ,
+	# )
 
-converting_files(
-		logger=logger ,
-		source_dir=COMPLETED_SANITIZATION_DIR ,
-		dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
-		tika_server_process=tika_server_process ,
-)
+	# converting_files(
+	# 		logger=logger ,
+	# 		source_dir=COMPLETED_SANITIZATION_DIR ,
+	# 		dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
+	# 		tika_server_process=tika_server_process ,
+	# )
 
-duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
-duplicate_reviewer.run( )
+	# duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
+	# duplicate_reviewer.run( )
 
-automatically_sorting(
-		logger=logger ,
-		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
-)
+	automatically_sorting(
+			logger=logger ,
+			source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
+	)
 
-manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
-manual_artifact_triage.run( )
+	manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
+	manual_artifact_triage.run( )
 
-stop_apache_tika_server( logger=logger , tika_server_process=tika_server_process )
+finally :
+	# ── Always clean up Tika, even if the pipeline crashes ────────────
+	logger.info( "Shutting down Tika server..." )
+	tika_handle.kill( logger )
+	logger.info( "Tika server stopped and log file closed" )
 
 # ============================================================================
 # PIPELINE COMPLETION

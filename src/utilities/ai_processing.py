@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 from typing import List , Optional
 
+import fitz  # pymupdf — pip install pymupdf
 import ollama
 import pypdf
 
@@ -35,7 +36,8 @@ from config import (
 	PDF_SUBSET_SIZE ,
 	SCAN_SYSTEM_PROMPT ,
 	TAGS_SYSTEM_PROMPT ,
-	TEMP_DIR , TEXT_MODEL ,
+	TEMP_DIR ,
+	TEXT_MODEL ,
 	TIKA_APP_JAR_PATH ,
 	VISION_MODEL ,
 	VISUAL_DESC_PROMPT ,
@@ -237,42 +239,6 @@ def _llm_generate(
 		return None
 
 
-def _vision_generate(
-		logger: logging.Logger ,
-		file_path: Path ,
-		user_prompt: str ,
-		system: str ,
-) -> Optional[ str ] :
-	"""Send an image + prompt to the vision model and return the response string."""
-	logger.debug( f"[VISION] Processing '{file_path.name}' with {VISION_MODEL}" )
-	start = time.perf_counter( )
-
-	try :
-		raw_bytes = file_path.read_bytes( )
-		b64_image = base64.b64encode( raw_bytes ).decode( "utf-8" )
-		file_size_mb = len( raw_bytes ) / (1024 * 1024)
-		logger.debug( f"[VISION] Image loaded: '{file_path.name}' ({file_size_mb:.2f} MB)" )
-
-		client = ollama.Client( )
-		response = client.generate(
-				model=VISION_MODEL ,
-				system=system ,
-				prompt=user_prompt ,
-				images=[ b64_image ] ,
-				stream=False ,
-		)
-		elapsed = time.perf_counter( ) - start
-		result = response[ "response" ].strip( )
-		logger.debug( f"[VISION] Response received for '{file_path.name}' in {elapsed:.2f}s ({len( result )} chars)" )
-		return result
-
-	except Exception as e :
-		elapsed = time.perf_counter( ) - start
-		logger.error( f"[VISION] Generation failed for '{file_path.name}' after {elapsed:.2f}s: {type( e ).__name__}: {e}" ,
-									exc_info=True )
-		return None
-
-
 def _parse_bool_response( response: Optional[ str ] ) -> bool :
 	"""
 	Parse an LLM response that should be 'True' or 'False'.
@@ -379,6 +345,142 @@ def generate_filename(
 	return None
 
 
+def _pdf_pages_to_png_bytes(
+		logger: logging.Logger ,
+		pdf_path: Path ,
+		max_pages: int = 3 ,
+		dpi: int = 200 ,
+) -> List[ bytes ] :
+	"""
+	Render the first N pages of a PDF as PNG byte arrays.
+
+	Returns a list of PNG byte buffers (one per page), or an empty list on failure.
+	Uses pymupdf (fitz) which has no external dependencies like poppler.
+	"""
+	logger.debug( f"[PDF→PNG] Opening '{pdf_path.name}' for rendering (max_pages={max_pages}, dpi={dpi})" )
+	png_buffers: List[ bytes ] = [ ]
+
+	try :
+		doc = fitz.open( str( pdf_path ) )
+		total = len( doc )
+		render_count = min( total , max_pages )
+		logger.debug( f"[PDF→PNG] '{pdf_path.name}' has {total} pages, rendering {render_count}" )
+
+		for i in range( render_count ) :
+			try :
+				page = doc[ i ]
+				pix = page.get_pixmap( dpi=dpi )
+				png_bytes = pix.tobytes( "png" )
+				png_buffers.append( png_bytes )
+				logger.debug(
+						f"[PDF→PNG] Page {i + 1}/{render_count} rendered: "
+						f"{pix.width}x{pix.height}px, {len( png_bytes ) / 1024:.1f} KB" ,
+				)
+			except Exception as e :
+				logger.warning(
+						f"[PDF→PNG] Failed to render page {i + 1} of '{pdf_path.name}': "
+						f"{type( e ).__name__}: {e}" ,
+				)
+
+		doc.close( )
+		logger.info(
+				f"[PDF→PNG] Rendered {len( png_buffers )}/{render_count} pages from '{pdf_path.name}'" ,
+		)
+
+	except Exception as e :
+		logger.error(
+				f"[PDF→PNG] Failed to open '{pdf_path.name}': {type( e ).__name__}: {e}" ,
+				exc_info=True ,
+		)
+
+	return png_buffers
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fixed: _vision_generate — now accepts optional raw bytes
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _vision_generate(
+		logger: logging.Logger ,
+		user_prompt: str ,
+		system: str ,
+		file_path: Optional[ Path ] = None ,
+		image_bytes: Optional[ bytes ] = None ,
+) -> Optional[ str ] :
+	"""
+	Send an image + prompt to the vision model and return the response string.
+
+	Accepts EITHER:
+		- file_path: reads raw bytes from disk (for actual image files)
+		- image_bytes: pre-rendered PNG/JPEG bytes (for PDF pages converted to images)
+
+	At least one must be provided. If both are given, image_bytes takes priority.
+	"""
+	source_label = file_path.name if file_path else "<raw bytes>"
+	logger.debug( f"[VISION] Processing '{source_label}' with {VISION_MODEL}" )
+	start = time.perf_counter( )
+
+	# ── Resolve image bytes ───────────────────────────────────────────────
+	if image_bytes is not None :
+		raw_bytes = image_bytes
+		logger.debug( f"[VISION] Using provided image bytes ({len( raw_bytes ) / 1024:.1f} KB)" )
+	elif file_path is not None :
+		try :
+			raw_bytes = file_path.read_bytes( )
+			logger.debug( f"[VISION] Read {len( raw_bytes ) / 1024:.1f} KB from '{file_path.name}'" )
+		except Exception as e :
+			elapsed = time.perf_counter( ) - start
+			logger.error(
+					f"[VISION] Failed to read '{file_path.name}' after {elapsed:.2f}s: "
+					f"{type( e ).__name__}: {e}" ,
+					exc_info=True ,
+			)
+			return None
+	else :
+		logger.error( "[VISION] Neither file_path nor image_bytes provided — nothing to process" )
+		return None
+
+	if len( raw_bytes ) == 0 :
+		logger.error( f"[VISION] Image data is empty (0 bytes) for '{source_label}' — aborting" )
+		return None
+
+	# ── Encode and send ───────────────────────────────────────────────────
+	b64_image = base64.b64encode( raw_bytes ).decode( "utf-8" )
+	file_size_mb = len( raw_bytes ) / (1024 * 1024)
+	logger.debug( f"[VISION] Base64 encoded '{source_label}' ({file_size_mb:.2f} MB, {len( b64_image )} b64 chars)" )
+
+	try :
+		client = ollama.Client( )
+		logger.debug( f"[VISION] Sending request to Ollama ({VISION_MODEL})..." )
+		response = client.generate(
+				model=VISION_MODEL ,
+				system=system ,
+				prompt=user_prompt ,
+				images=[ b64_image ] ,
+				stream=False ,
+		)
+		elapsed = time.perf_counter( ) - start
+		result = response[ "response" ].strip( )
+		logger.debug(
+				f"[VISION] Response received for '{source_label}' in {elapsed:.2f}s "
+				f"({len( result )} chars)" ,
+		)
+		logger.debug( f"[VISION] Response preview: {result[ :200 ]}" )
+		return result
+
+	except Exception as e :
+		elapsed = time.perf_counter( ) - start
+		logger.error(
+				f"[VISION] Generation failed for '{source_label}' after {elapsed:.2f}s: "
+				f"{type( e ).__name__}: {e}" ,
+				exc_info=True ,
+		)
+		return None
+
+
+IMAGE_EXTENSIONS = { "png" , "jpg" , "jpeg" , "bmp" , "tiff" , "tif" , "webp" , "heic" , "heif" }
+
+
 def extract_document_text(
 		logger: logging.Logger ,
 		file_path: Path ,
@@ -388,43 +490,133 @@ def extract_document_text(
 	Extract text content from a document file using Apache Tika.
 
 	Falls back to vision-based OCR if Tika fails or returns empty content.
-	Returns extracted text string or None on complete failure.
+	For PDFs, renders pages to images before sending to the vision model.
 	"""
 	logger.info( f"[SCAN-TEXT] Extracting text from '{file_path.name}'" )
+	logger.debug( f"[SCAN-TEXT] Full path: {file_path}" )
+	logger.debug( f"[SCAN-TEXT] File exists: {file_path.exists( )}" )
+	if file_path.exists( ) :
+		file_size = file_path.stat( ).st_size
+		logger.debug( f"[SCAN-TEXT] File size: {file_size} bytes ({file_size / 1024:.1f} KB)" )
+
 	start = time.perf_counter( )
+	file_ext = file_path.suffix.lower( ).strip( ).strip( "." )
 
-	# ── Attempt 1: Apache Tika ────────────────────────────────────────────
+	# ── Attempt 1: Apache Tika CLI ────────────────────────────────────────
+	java_str = str( JAVA_PATH )
+	tika_jar_str = str( TIKA_APP_JAR_PATH )
+	file_str = str( file_path )
+
+	logger.debug( f"[SCAN-TEXT] JAVA_PATH type={type( JAVA_PATH ).__name__}, value='{JAVA_PATH}'" )
+	logger.debug(
+			f"[SCAN-TEXT] TIKA_APP_JAR_PATH type={type( TIKA_APP_JAR_PATH ).__name__}, value='{TIKA_APP_JAR_PATH}'" )
+	logger.debug( f"[SCAN-TEXT] Java exists: {Path( java_str ).exists( )}" )
+	logger.debug( f"[SCAN-TEXT] Tika JAR exists: {Path( tika_jar_str ).exists( )}" )
+
+	cmd = [ java_str , "-jar" , tika_jar_str , "--text" , file_str ]
+	logger.debug( f"[SCAN-TEXT] Running Tika: {' '.join( cmd )}" )
+
 	try :
-		cmd = [ JAVA_PATH , "-jar" , str( TIKA_APP_JAR_PATH ) , "--text" , str( file_path ) ]
-		logger.debug( f"[SCAN-TEXT] Running Tika: {' '.join( cmd )}" )
-
 		proc = subprocess.run( cmd , capture_output=True , text=True , timeout=timeout )
+		logger.debug( f"[SCAN-TEXT] Tika exit code: {proc.returncode}" )
 
 		if proc.returncode == 0 and proc.stdout.strip( ) :
 			content = proc.stdout.strip( )
 			elapsed = time.perf_counter( ) - start
-			logger.info( f"[SCAN-TEXT] Tika extracted {len( content )} chars from '{file_path.name}' in {elapsed:.2f}s" )
+			logger.info(
+					f"[SCAN-TEXT] Tika extracted {len( content )} chars from "
+					f"'{file_path.name}' in {elapsed:.2f}s" ,
+			)
 			return content
 
-		logger.warning( f"[SCAN-TEXT] Tika returned empty or failed for '{file_path.name}' (exit code {proc.returncode})" )
+		logger.warning(
+				f"[SCAN-TEXT] Tika returned empty or failed for '{file_path.name}' "
+				f"(exit code {proc.returncode}, stdout length: {len( proc.stdout )})" ,
+		)
 		if proc.stderr :
-			logger.debug( f"[SCAN-TEXT] Tika stderr for '{file_path.name}': {proc.stderr[ :500 ]}" )
+			logger.debug( f"[SCAN-TEXT] Tika stderr: {proc.stderr[ :500 ]}" )
 
 	except subprocess.TimeoutExpired :
 		logger.warning( f"[SCAN-TEXT] Tika timed out after {timeout}s for '{file_path.name}'" )
-	except FileNotFoundError :
-		logger.error( "[SCAN-TEXT] Java or Tika JAR not found — check JAVA_PATH and TIKA_APP_JAR_PATH" )
+	except FileNotFoundError as e :
+		logger.error(
+				f"[SCAN-TEXT] Java or Tika JAR not found — check JAVA_PATH ({java_str}) "
+				f"and TIKA_APP_JAR_PATH ({tika_jar_str}): {e}" ,
+		)
 	except Exception as e :
-		logger.error( f"[SCAN-TEXT] Tika error for '{file_path.name}': {type( e ).__name__}: {e}" , exc_info=True )
+		logger.error(
+				f"[SCAN-TEXT] Tika error for '{file_path.name}': {type( e ).__name__}: {e}" ,
+				exc_info=True ,
+		)
 
 	# ── Attempt 2: Vision-based OCR fallback ──────────────────────────────
 	logger.info( f"[SCAN-TEXT] Falling back to vision OCR for '{file_path.name}'" )
-	result = _vision_generate( logger , file_path , user_prompt=ARTIFACT_SCANNING_PROMPT , system=SCAN_SYSTEM_PROMPT )
 
-	if result :
-		elapsed = time.perf_counter( ) - start
-		logger.info( f"[SCAN-TEXT] Vision OCR extracted {len( result )} chars from '{file_path.name}' in {elapsed:.2f}s" )
-		return result
+	if file_ext == "pdf" :
+		# PDFs must be rendered to images first — vision models can't read PDF bytes
+		logger.info( f"[SCAN-TEXT] '{file_path.name}' is a PDF — rendering pages to PNG for vision model" )
+		png_pages = _pdf_pages_to_png_bytes( logger , file_path , max_pages=3 )
+
+		if not png_pages :
+			elapsed = time.perf_counter( ) - start
+			logger.error(
+					f"[SCAN-TEXT] PDF rendering produced no images for '{file_path.name}' "
+					f"— cannot perform vision OCR. Elapsed: {elapsed:.2f}s" ,
+			)
+			return None
+
+		# OCR each rendered page and concatenate
+		all_text_parts: List[ str ] = [ ]
+		for idx , png_bytes in enumerate( png_pages ) :
+			logger.debug(
+					f"[SCAN-TEXT] Running vision OCR on page {idx + 1}/{len( png_pages )} "
+					f"({len( png_bytes ) / 1024:.1f} KB)" ,
+			)
+			page_text = _vision_generate(
+					logger ,
+					user_prompt=ARTIFACT_SCANNING_PROMPT ,
+					system=SCAN_SYSTEM_PROMPT ,
+					image_bytes=png_bytes ,
+			)
+			if page_text :
+				all_text_parts.append( page_text )
+				logger.debug(
+						f"[SCAN-TEXT] Page {idx + 1} OCR returned {len( page_text )} chars" ,
+				)
+			else :
+				logger.warning( f"[SCAN-TEXT] Page {idx + 1} OCR returned nothing" )
+
+		if all_text_parts :
+			combined = "\n\n".join( all_text_parts )
+			elapsed = time.perf_counter( ) - start
+			logger.info(
+					f"[SCAN-TEXT] Vision OCR extracted {len( combined )} chars from "
+					f"{len( all_text_parts )} page(s) of '{file_path.name}' in {elapsed:.2f}s" ,
+			)
+			return combined
+
+	elif file_ext in IMAGE_EXTENSIONS :
+		# Actual image file — can send directly
+		logger.debug( f"[SCAN-TEXT] '{file_path.name}' is an image — sending directly to vision model" )
+		result = _vision_generate(
+				logger ,
+				user_prompt=ARTIFACT_SCANNING_PROMPT ,
+				system=SCAN_SYSTEM_PROMPT ,
+				file_path=file_path ,
+		)
+		if result :
+			elapsed = time.perf_counter( ) - start
+			logger.info(
+					f"[SCAN-TEXT] Vision OCR extracted {len( result )} chars from "
+					f"'{file_path.name}' in {elapsed:.2f}s" ,
+			)
+			return result
+
+	else :
+		logger.warning(
+				f"[SCAN-TEXT] '{file_path.name}' (ext='{file_ext}') is not a PDF or image "
+				f"— vision OCR fallback not applicable" ,
+		)
 
 	elapsed = time.perf_counter( ) - start
 	logger.error( f"[SCAN-TEXT] All extraction methods failed for '{file_path.name}' after {elapsed:.2f}s" )
