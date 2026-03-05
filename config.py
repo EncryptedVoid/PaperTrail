@@ -169,11 +169,9 @@ APPLICATION_FOLDERS = [
 # Checksum algorithm for duplicate detection and integrity verification
 CHECKSUM_ALGORITHM = "sha3_512"
 CHECKSUM_CHUNK_SIZE_BYTES: int = 8192
-FILE_TRIAGE_BATCH_SIZE = 20  # flush pending operations every N confirms
-FILE_TRIAGE_MAX_PDF_PG = 10  # max pages to render in preview
-MIN_FILE_TYPE_CONF_SCORE: float = 75.0
-MAX_PDF_SIZE_BEFORE_SUBSETTING = 10
-METADATA_EXTRACTION_TIMEOUT = 60
+FILE_TRIAGE_BATCH_SIZE = 20
+FILE_TRIAGE_MAX_PDF_PG = 10
+PDF_SUBSET_SIZE = 10
 
 HUGGING_FACE_TOKEN = os.getenv( "HUGGING_FACE_TOKEN" )
 

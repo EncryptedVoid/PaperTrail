@@ -3106,6 +3106,8 @@ def ensure_apache_tika_server(
 			:param tika_server_process:
 	"""
 
+	ensure_apache_tika( )
+
 	# Already running?
 	if tika_server_process is not None and tika_server_process.poll( ) is None :
 		if is_apache_tika_server_alive( ) :

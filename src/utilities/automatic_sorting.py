@@ -16,14 +16,13 @@ Key Features:
 import email
 import json
 import logging
-import time
 from pathlib import Path
 
 from config import (
 	ANKI_EXTENSIONS ,
 	ARTIFACT_PREFIX ,
 	ARTIFACT_PROFILES_DIR ,
-	CAD_FILES ,
+	AUDIO_TYPES , CAD_FILES ,
 	CODE_EXTENSIONS ,
 	DIGITAL_CONTACT_EXTENSIONS ,
 	DOCUMENT_TYPES ,
@@ -33,7 +32,12 @@ from config import (
 	TEXT_TYPES ,
 	VIDEO_TYPES ,
 )
-from utilities.visual_processor import VisualProcessor
+from utilities.ai_processing import (detect_academic_theme , detect_book_theme , detect_document_scan ,
+																		 detect_financial_theme ,
+																		 detect_immigration_theme ,
+																		 detect_instruction_manual_theme ,
+																		 detect_legal_theme , detect_professional_theme , detect_textbook_theme ,
+																		 detect_video_course_theme)
 
 
 def _extract_from_email( artifact_location: Path , logger: logging.Logger ) -> str :
@@ -208,7 +212,7 @@ def is_anki_deck( artifact_location: Path ) -> bool :
 	return False
 
 
-def is_bitwarden_related( artifact_location: Path ) -> bool :
+def is_personal_security_item( artifact_location: Path ) -> bool :
 	"""
 	Detect if a file contains 2FA backup/recovery codes.
 
@@ -246,27 +250,190 @@ def is_bitwarden_related( artifact_location: Path ) -> bool :
 	return False
 
 
-def is_financial_document(
-		artifact_location: Path ,
-		visual_processor: VisualProcessor ,
-		logger: logging.Logger ,
-) -> bool :
+def is_code( artifact_location: Path ) -> bool :
+	"""
+	Check if file is source code based on extension.
+
+	Args:
+		artifact_location: Path object to check
+
+	Returns:
+		bool: True if file is code, False otherwise
+	"""
+
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( ).strip( "." ).strip( "_" )
+
+	return "readme" in artifact_label or artifact_ext in CODE_EXTENSIONS
+
+
+def is_executable( artifact_location: Path ) -> bool :
+	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in EXECUTABLE_EXTENSIONS
+
+
+def is_3d_file( artifact_location: Path ) -> bool :
+	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in CAD_FILES
+
+
+def is_digital_contact_file( artifact_location: Path ) -> bool :
+	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in DIGITAL_CONTACT_EXTENSIONS
+
+
+def is_video_course( artifact_location: Path , logger: logging.Logger ) -> bool :
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( " " ).strip( "." ).strip( "_" )
+
+	if artifact_ext not in VIDEO_TYPES :
+		return False
+
+	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	if not Path( profile_path ).exists( ) :
+		return False
+
+	with open( profile_path , "r" , encoding="utf-8" ) as f :
+		profile_data = json.load( f )  # returns a plain Python dict
+
+	print( f"profile_data: {profile_data}" )
+
+	if "youtube.com" in profile_data[ "metadata" ][ "format" ][ "PURL" ].lower( ) :
+		return True
+
+	if detect_video_course_theme( artifact_location=artifact_location , logger=logger ) :
+		return True
+
+	return False
+
+
+def is_book( artifact_location: Path , logger: logging.Logger ) -> bool :
+	"""
+	Detect whether a document is a book type.
+
+	Args:
+		artifact_location: Path object pointing to document file
+
+	Returns:
+		bool: True if document is likely a book, False otherwise
+
+	"""
+
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( " " ).strip( "." ).strip( "_" )
+
+	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
+		return True
+
+	if "solution" in artifact_label and "manual" in artifact_label :
+		return True
+
+	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" , "libgen" ] ) :
+		return True
+
+	if detect_book_theme( artifact_location=artifact_location , logger=logger ) :
+		return True
+
+	return False
+
+
+def is_textbook( artifact_location: Path , logger: logging.Logger ) -> bool :
+	"""
+	Detect whether a document is a book type.
+
+	Args:
+		artifact_location: Path object pointing to document file
+
+	Returns:
+		bool: True if document is likely a book, False otherwise
+
+	"""
+
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( " " ).strip( "." ).strip( "_" )
+
+	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
+		return True
+
+	if "solution" in artifact_label and "manual" in artifact_label :
+		return True
+
+	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" , "libgen" ] ) :
+		return True
+
+	if detect_textbook_theme( artifact_location=artifact_location , logger=logger ) :
+		return True
+
+	return False
+
+
+def is_professional( artifact_location: Path , logger: logging.Logger ) -> bool :
+	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
+	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+	# with open( profile_path , "r" , encoding="utf-8" ) as f :
+	# 	profile_data = json.load( f )  # returns a plain Python dict
+	#
+	# artifact_label = profile_data[ "original_name" ]
+
+	artifact_label = artifact_location.stem.lower( ).strip( ).strip( "." ).strip( "_" )
+
+	if artifact_ext not in DOCUMENT_TYPES :
+		return False
+
+	if "resume" in artifact_label or "certificate" in artifact_label :
+		return True
+
+	if detect_professional_theme( artifact_location=artifact_location , logger=logger ) :
+		return True
+
+	return False
+
+
+def is_financial_document( artifact_location: Path , logger: logging.Logger ) -> bool :
 	"""
 	Determine if a document contains financial, invoice, or purchase-related data.
 
 	Args:
 		artifact_location: Path object pointing to the document to analyze
-		visual_processor: VisualProcessor instance for OCR/text extraction
 		logger: Logger instance for tracking analysis progress
 
 	Returns:
 		bool: True if document contains financial data, False otherwise
 
 	"""
-
-	# Record start time for performance tracking
-	start_time = time.time( )
-	logger.info( f"Analyzing document for financial content: {artifact_location.name}" )
 
 	try :
 		# Extract text based on file type
@@ -291,6 +458,9 @@ def is_financial_document(
 		if any( keyword in artifact_label for keyword in [ "paystub" , " t4 " , "invoice" , "cheque" ] ) :
 			return True
 
+		if detect_financial_theme( artifact_location=artifact_location , logger=logger ) :
+			return True
+
 		return False
 
 	except Exception as e :
@@ -299,94 +469,212 @@ def is_financial_document(
 		return False
 
 
-def is_book( artifact_location: Path ) -> bool :
+def is_immigration( artifact_location: Path , logger: logging.Logger ) -> bool :
 	"""
-	Detect whether a document is a book type.
+	Determine if a document contains financial, invoice, or purchase-related data.
 
 	Args:
-		artifact_location: Path object pointing to document file
+		artifact_location: Path object pointing to the document to analyze
+		logger: Logger instance for tracking analysis progress
 
 	Returns:
-		bool: True if document is likely a book, False otherwise
+		bool: True if document contains financial data, False otherwise
 
 	"""
 
-	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	try :
+		# Extract text based on file type
+		# Different file types require different extraction methods
+		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	# with open( profile_path , "r" , encoding="utf-8" ) as f :
-	# 	profile_data = json.load( f )  # returns a plain Python dict
-	#
-	# artifact_label = profile_data[ "original_name" ]
+		# with open( profile_path , "r" , encoding="utf-8" ) as f :
+		# 	profile_data = json.load( f )  # returns a plain Python dict
+		#
+		# artifact_label = profile_data[ "original_name" ]
 
-	artifact_label = artifact_location.stem.lower( ).strip(" " ).strip(".").strip("_")
+		artifact_label = artifact_location.stem.lower( ).strip( )
 
-	if artifact_ext in [ "epub" , "cbr" , "djvu" ] :
-		return True
+		if artifact_ext in AUDIO_TYPES or artifact_ext in VIDEO_TYPES :
+			return False
 
-	if "solution" in artifact_label and "manual" in artifact_label :
-		return True
+		if any( keyword in artifact_label for keyword in [ "immigration" , "refugee" , "passport" , "work permit" ] ) :
+			return True
 
-	if any( title_keyword in artifact_label for title_keyword in [ "edition" , "book" , "libgen"] ) :
-		return True
+		if detect_immigration_theme( artifact_location=artifact_location , logger=logger ) :
+			return True
 
-	return False
+		return False
+
+	except Exception as e :
+		# Log error with full exception details using exc_info
+		logger.error( f"Error analyzing {artifact_location.name}: {e}" , exc_info=True )
+		return False
 
 
-def is_code( artifact_location: Path ) -> bool :
+def is_legal( artifact_location: Path , logger: logging.Logger ) -> bool :
 	"""
-	Check if file is source code based on extension.
+	Determine if a document contains financial, invoice, or purchase-related data.
 
 	Args:
-		artifact_location: Path object to check
+		artifact_location: Path object pointing to the document to analyze
+		logger: Logger instance for tracking analysis progress
 
 	Returns:
-		bool: True if file is code, False otherwise
+		bool: True if document contains financial data, False otherwise
+
 	"""
 
-	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-	# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+	try :
+		# Extract text based on file type
+		# Different file types require different extraction methods
+		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
 
-	# with open( profile_path , "r" , encoding="utf-8" ) as f :
-	# 	profile_data = json.load( f )  # returns a plain Python dict
-	#
-	# artifact_label = profile_data[ "original_name" ]
+		# with open( profile_path , "r" , encoding="utf-8" ) as f :
+		# 	profile_data = json.load( f )  # returns a plain Python dict
+		#
+		# artifact_label = profile_data[ "original_name" ]
 
-	artifact_label = artifact_location.stem.lower( ).strip( ).strip(".").strip("_")
+		artifact_label = artifact_location.stem.lower( ).strip( )
 
-	return "README" in artifact_label or artifact_ext in CODE_EXTENSIONS
+		if artifact_ext in AUDIO_TYPES or artifact_ext in VIDEO_TYPES :
+			return False
 
+		if detect_legal_theme( artifact_location=artifact_location , logger=logger ) :
+			return True
 
-def is_executable( artifact_location: Path ) -> bool :
-	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in EXECUTABLE_EXTENSIONS
-
-
-def is_3d_file( artifact_location: Path ) -> bool :
-	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in CAD_FILES
-
-
-def is_digital_contact_file( artifact_location: Path ) -> bool :
-	return artifact_location.suffix.lower( ).strip( ).strip( '.' ) in DIGITAL_CONTACT_EXTENSIONS
-
-
-def is_video_course( artifact_location: Path ) -> bool :
-	if artifact_location.suffix.lower( ).strip( ).strip( "." ) not in VIDEO_TYPES :
 		return False
 
-	artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
-	profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
-	
-	if not Path( profile_path ).exists( ) :
+	except Exception as e :
+		# Log error with full exception details using exc_info
+		logger.error( f"Error analyzing {artifact_location.name}: {e}" , exc_info=True )
 		return False
 
-	with open( profile_path , "r" , encoding="utf-8" ) as f :
-		profile_data = json.load( f )  # returns a plain Python dict
 
-	print( f"profile_data: {profile_data}" )
+def is_academic( artifact_location: Path , logger: logging.Logger ) -> bool :
+	"""
+	Determine if a document contains financial, invoice, or purchase-related data.
 
-	if "youtube.com" in profile_data[ "metadata" ][ "format" ][ "PURL" ].lower( ) :
-		return True
+	Args:
+		artifact_location: Path object pointing to the document to analyze
+		logger: Logger instance for tracking analysis progress
 
-	return False
+	Returns:
+		bool: True if document contains financial data, False otherwise
+
+	"""
+
+	try :
+		# Extract text based on file type
+		# Different file types require different extraction methods
+		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+		# with open( profile_path , "r" , encoding="utf-8" ) as f :
+		# 	profile_data = json.load( f )  # returns a plain Python dict
+		#
+		# artifact_label = profile_data[ "original_name" ]
+
+		artifact_label = artifact_location.stem.lower( ).strip( )
+
+		if artifact_ext in AUDIO_TYPES or artifact_ext in VIDEO_TYPES :
+			return False
+
+		if any( keyword in artifact_label for keyword in [ "syllabus" , "midterm" , "lecture" , "final exam" ] ) :
+			return True
+
+		if detect_academic_theme( artifact_location=artifact_location , logger=logger ) :
+			return True
+
+		return False
+
+	except Exception as e :
+		# Log error with full exception details using exc_info
+		logger.error( f"Error analyzing {artifact_location.name}: {e}" , exc_info=True )
+		return False
+
+
+def is_instruction_manual( artifact_location: Path , logger: logging.Logger ) -> bool :
+	"""
+	Determine if a document contains financial, invoice, or purchase-related data.
+
+	Args:
+		artifact_location: Path object pointing to the document to analyze
+		logger: Logger instance for tracking analysis progress
+
+	Returns:
+		bool: True if document contains financial data, False otherwise
+
+	"""
+
+	try :
+		# Extract text based on file type
+		# Different file types require different extraction methods
+		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+		# with open( profile_path , "r" , encoding="utf-8" ) as f :
+		# 	profile_data = json.load( f )  # returns a plain Python dict
+		#
+		# artifact_label = profile_data[ "original_name" ]
+
+		artifact_label = artifact_location.stem.lower( ).strip( )
+
+		if artifact_ext in AUDIO_TYPES or artifact_ext in VIDEO_TYPES or artifact_ext not in DOCUMENT_TYPES :
+			return False
+
+		if "solutions" not in artifact_label and "manual" in artifact_label :
+			return True
+
+		if detect_instruction_manual_theme( artifact_location=artifact_location , logger=logger ) :
+			return True
+
+		return False
+
+	except Exception as e :
+		# Log error with full exception details using exc_info
+		logger.error( f"Error analyzing {artifact_location.name}: {e}" , exc_info=True )
+		return False
+
+
+def is_unscanned_document( artifact_location: Path , logger: logging.Logger ) -> bool :
+	"""
+	Determine if a document contains financial, invoice, or purchase-related data.
+
+	Args:
+		artifact_location: Path object pointing to the document to analyze
+		logger: Logger instance for tracking analysis progress
+
+	Returns:
+		bool: True if document contains financial data, False otherwise
+
+	"""
+
+	try :
+		# Extract text based on file type
+		# Different file types require different extraction methods
+		artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( '.' )
+		# artifact_uuid = artifact_location.stem[ len( ARTIFACT_PREFIX ) + 1 : ]
+		# profile_path = f"{ARTIFACT_PROFILES_DIR}\\{PROFILE_PREFIX}-{artifact_uuid}.json"
+
+		# with open( profile_path , "r" , encoding="utf-8" ) as f :
+		# 	profile_data = json.load( f )  # returns a plain Python dict
+		#
+		# artifact_label = profile_data[ "original_name" ]
+
+		artifact_label = artifact_location.stem.lower( ).strip( )
+
+		if detect_document_scan( artifact_location=artifact_location , logger=logger ) :
+			return True
+
+		return False
+
+	except Exception as e :
+		# Log error with full exception details using exc_info
+		logger.error( f"Error analyzing {artifact_location.name}: {e}" , exc_info=True )
+		return False

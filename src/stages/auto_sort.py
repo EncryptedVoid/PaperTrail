@@ -14,34 +14,21 @@ from typing import List
 
 from tqdm import tqdm
 
-from config import (AFFINE_DIR , ANKI_DIR , AUDIO_TYPES , BITWARDEN_DIR , PERSONAL_LIBRARY_DIR ,
-                    DIGITAL_ASSET_MANAGEMENT_DIR ,
-                    DOCUMENT_TYPES , FIREFLYIII_DIR , GITLAB_DIR , IMMICH_DIR , JELLYFIN_DIR , LINKWARDEN_DIR ,
-                    MANUALS_ARCHIVE_DIR ,
-                    MONICA_CRM_DIR ,
-                    ODOO_CRM_DIR ,
-                    ODOO_INVENTORY_DIR ,
-                    ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
-                    SOFTWARE_ARCHIVE_DIR , ULTIMAKER_CURA_DIR , VIDEO_TYPES)
-from utilities.automatic_sorting import (
-	is_3d_file ,
-	is_anki_deck ,
-	is_bitwarden_related ,
-	is_book ,
-	is_bookmark_file ,
-	is_code ,
-	is_digital_contact_file ,
-	is_executable ,
-	is_financial_document , is_video_course ,
-)
-from utilities.dependancy_ensurance import ensure_apache_tika
+from config import (AFFINE_DIR , ANKI_DIR , BITWARDEN_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
+										FIREFLYIII_DIR , GITLAB_DIR , IMAGE_TYPES , IMMICH_DIR , JELLYFIN_DIR , LINKWARDEN_DIR ,
+										MANUALS_ARCHIVE_DIR , MONICA_CRM_DIR , ODOO_CRM_DIR , ODOO_INVENTORY_DIR , ODOO_MAINTENANCE_DIR ,
+										ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR , PERSONAL_LIBRARY_DIR ,
+										SCANNING_REQUIRED_DIR , SOFTWARE_ARCHIVE_DIR , TEXT_MODEL , ULTIMAKER_CURA_DIR , VISION_MODEL)
+from utilities.automatic_sorting import (is_3d_file , is_academic , is_anki_deck , is_book , is_bookmark_file ,
+																				 is_code , is_digital_contact_file , is_executable , is_financial_document ,
+																				 is_immigration , is_instruction_manual , is_legal , is_personal_security_item ,
+																				 is_professional , is_textbook , is_unscanned_document , is_video_course)
+from utilities.dependancy_ensurance import ensure_apache_tika , ensure_ollama , ensure_ollama_model
 from utilities.sanitization import sanitize_artifact_name
-from utilities.visual_processor import VisualProcessor
 
 
 def automatically_sorting(
 		logger: logging.Logger ,
-		visual_processor: VisualProcessor ,
 		source_dir: Path ,
 ) :
 	"""
@@ -49,7 +36,6 @@ def automatically_sorting(
 
 	Args:
 		logger: Logger instance for recording process information and errors
-		visual_processor: VisualProcessor instance for analyzing image/PDF content
 		source_dir: Path object pointing to the directory containing artifacts to sort
 
 	Returns:
@@ -58,6 +44,9 @@ def automatically_sorting(
 
 	logger.info( f"Starting automatic sorting process for directory: {source_dir}" )
 	ensure_apache_tika( )
+	ensure_ollama( )
+	ensure_ollama_model( VISION_MODEL , logger )
+	ensure_ollama_model( TEXT_MODEL , logger )
 
 	# Discover all artifact files in the source directory
 	# Using list() on iterdir() materializes the generator into a list for processing
@@ -81,14 +70,32 @@ def automatically_sorting(
 		try :
 			artifact_ext = artifact.suffix.lower( ).strip( ).strip( '.' )
 			artifact_label = artifact.stem.lower( )
+
+			if artifact_ext in IMAGE_TYPES and is_unscanned_document( artifact_location=artifact , logger=logger ) :
+				shutil.move(
+						src=artifact ,
+						dst=(SCANNING_REQUIRED_DIR / f"{artifact_label}.{artifact_ext}") ,
+				)
+				logger.info( f"Moved file to: {SCANNING_REQUIRED_DIR}" )
+
 			sanitized_label = sanitize_artifact_name( artifact_label )
 
-			if ("solutions" not in artifact_label
-					and "manual" in artifact.stem.lower( ).strip( )
-					and artifact_ext == "pdf"
+			if any(
+					(artifact_ext == extension
+					 for extension in [ "qpf" , "qsf" , "vwf" ]) ,
 			) :
-				shutil.move( src=artifact , dst=MANUALS_ARCHIVE_DIR / f"{sanitized_label}.{artifact_ext}" )
-				logger.info( f"Moved file to: {MANUALS_ARCHIVE_DIR}" )
+				logger.info(
+						f"Moving lab/simulation artifact to: "
+						f"{(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_LAB_REPORT")}" ,
+				)
+				shutil.move(
+						src=artifact ,
+						dst=(
+								DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_LAB_REPORT"
+								/ f"{sanitized_label}.{artifact_ext}"
+						) ,
+				)
+
 
 			elif artifact_ext in [ "arw" , "cr2" , "nef" ] :
 				shutil.move( src=artifact , dst=IMMICH_DIR / f"{sanitized_label}.{artifact_ext}" )
@@ -97,48 +104,13 @@ def automatically_sorting(
 			elif artifact_ext in [ "iso" ] :
 				shutil.move(
 						src=artifact ,
-						dst=(SOFTWARE_ARCHIVE_DIR / "OPERATING_SYSTEMS") / f"{sanitized_label}.{artifact_ext}" )
+						dst=(SOFTWARE_ARCHIVE_DIR / "OPERATING_SYSTEMS") / f"{sanitized_label}.{artifact_ext}" ,
+				)
 				logger.info( f"Moved file to: {(SOFTWARE_ARCHIVE_DIR / "OPERATING_SYSTEMS")}" )
 
 			elif artifact_ext in [ "onepkg" ] :
 				shutil.move( src=artifact , dst=AFFINE_DIR / f"{sanitized_label}.{artifact_ext}" )
 				logger.info( f"Copied file to: {AFFINE_DIR}" )
-
-			elif "resume" in artifact_label and artifact_ext in DOCUMENT_TYPES :
-				logger.info( f"Moving resume/professional document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL")}" )
-				shutil.move(
-						src=artifact ,
-						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL") / f"{sanitized_label}.{artifact_ext}" )
-
-			elif (any(
-					(keyword in artifact_label
-					 for keyword in [ "immigration" , "refugee" , "passport" , "work permit" ]) ,
-			) and artifact_ext not in AUDIO_TYPES and artifact_ext not in VIDEO_TYPES) :
-				logger.info( f"Moving immigration/legal document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "IMMIGRATION")}" )
-				shutil.move(
-						src=artifact ,
-						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "IMMIGRATION") / f"{sanitized_label}.{artifact_ext}" )
-
-			elif any(
-					(artifact_ext == extension
-					 for extension in [ "qpf" , "qsf" , "vwf" ]) ,
-			) :
-				logger.info(f"Moving lab/simulation artifact to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_LAB_REPORT")}" )
-				shutil.move(
-						src=artifact ,
-						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_LAB_REPORT") / f"{sanitized_label}.{artifact_ext}" )
-
-			elif any(
-					(keyword in artifact_label
-					 for keyword in [ "syllabus" , "midterm" , "lecture" , "final exam" ]) ,
-			) and artifact_ext in DOCUMENT_TYPES :
-				logger.info( f"Moving academic/educational document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" )}" )
-				shutil.move( src=artifact , dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC") / f"{sanitized_label}.{artifact_ext}" )
-
-			elif is_video_course( artifact_location=artifact ) :
-				logger.info( f"Detected video course file: {artifact.name}" )
-				shutil.move( src=artifact , dst=JELLYFIN_DIR / f"{sanitized_label}.{artifact_ext}" )
-				logger.info( f"Moved video course file to: {JELLYFIN_DIR}" )
 
 			elif is_bookmark_file( artifact_location=artifact ) :
 				logger.info( f"Detected bookmark file: {artifact.name}" )
@@ -176,21 +148,54 @@ def automatically_sorting(
 				shutil.move( src=artifact , dst=ODOO_CRM_DIR / f"{sanitized_label}.{artifact_ext}" )
 
 			# Check if file contains 2FA backup/recovery codes
-			elif is_bitwarden_related( artifact_location=artifact ) :
+			elif is_personal_security_item( artifact_location=artifact ) :
 				logger.info( f"Detected backup codes file: {artifact.name}" )
 				shutil.move( src=artifact , dst=BITWARDEN_DIR / f"{sanitized_label}.{artifact_ext}" )
 				logger.info( f"Moved backup codes to: {BITWARDEN_DIR}" )
 
-			elif is_book( artifact_location=artifact ) :
-				logger.info( f"Detected book: {artifact.name}" )
-				shutil.move( src=artifact , dst=PERSONAL_LIBRARY_DIR / f"{sanitized_label}.{artifact_ext}" )
-				logger.info( f"Moved book to: {PERSONAL_LIBRARY_DIR}" )
+			elif is_instruction_manual( artifact_location=artifact , logger=logger ) :
+				shutil.move( src=artifact , dst=MANUALS_ARCHIVE_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moved file to: {MANUALS_ARCHIVE_DIR}" )
 
-			elif is_financial_document(
-					artifact_location=artifact ,
-					visual_processor=visual_processor ,
-					logger=logger ,
-			) :
+			elif is_professional( artifact_location=artifact , logger=logger ) :
+				logger.info( f"Moving resume/professional document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL")}" )
+				shutil.move(
+						src=artifact ,
+						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL") / f"{sanitized_label}.{artifact_ext}" )
+
+			elif is_legal( artifact_location=artifact , logger=logger ) :
+				shutil.move(
+						src=artifact ,
+						dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "LEGAL") / f"{sanitized_label}.{artifact_ext}" )
+
+			elif is_immigration( artifact_location=artifact , logger=logger ) :
+				logger.info( f"Moving immigration/legal document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "IMMIGRATION")}" )
+				shutil.move(
+						src=artifact ,
+						dst=(
+										DIGITAL_ASSET_MANAGEMENT_DIR / "LEGAL" / "IMMIGRATION") / f"{sanitized_label}.{artifact_ext}" )
+
+			elif is_academic( artifact_location=artifact , logger=logger ) :
+				logger.info( f"Moving academic/educational document to: {(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC")}" )
+				shutil.move( src=artifact ,
+										 dst=(DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC") / f"{sanitized_label}.{artifact_ext}" )
+
+			elif is_video_course( artifact_location=artifact , logger=logger ) :
+				logger.info( f"Detected video course file: {artifact.name}" )
+				shutil.move( src=artifact , dst=JELLYFIN_DIR / f"{sanitized_label}.{artifact_ext}" )
+				logger.info( f"Moved video course file to: {JELLYFIN_DIR}" )
+
+			elif is_book( artifact_location=artifact , logger=logger ) :
+				logger.info( f"Detected book: {artifact.name}" )
+				shutil.move( src=artifact , dst=(PERSONAL_LIBRARY_DIR / "BOOK" / f"{sanitized_label}.{artifact_ext}") )
+				logger.info( f"Moved book to: {(PERSONAL_LIBRARY_DIR / "BOOK" / f"{sanitized_label}.{artifact_ext}")}" )
+
+			elif is_textbook( artifact_location=artifact , logger=logger ) :
+				logger.info( f"Detected book: {artifact.name}" )
+				shutil.move( src=artifact , dst=(PERSONAL_LIBRARY_DIR / "TEXTBOOK" / f"{sanitized_label}.{artifact_ext}") )
+				logger.info( f"Moved book to: {(PERSONAL_LIBRARY_DIR / "TEXTBOOK" / f"{sanitized_label}.{artifact_ext}")}" )
+
+			elif is_financial_document( artifact_location=artifact , logger=logger ) :
 				logger.info( f"Detected financial document: {artifact.name}" )
 
 				# Financial documents need to be copied to multiple locations

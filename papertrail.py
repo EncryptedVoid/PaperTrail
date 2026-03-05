@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 
 from applications.identify_duplicates import DuplicateReviewer
-# from applications.manual_file_triage import FileTriage
+from applications.manual_file_triage import FileTriage
 from config import (
 	COMPLETED_FORMAT_CONVERSION_DIR ,
 	COMPLETED_SANITIZATION_DIR ,
@@ -34,7 +34,6 @@ from stages.folder_decompression import decompressing_artifacts
 from stages.sanitize import sanitizing
 from utilities.artifact_data_manipulation import stop_apache_tika_server
 from utilities.dependancy_ensurance import ensure_apache_tika_server
-from utilities.visual_processor import VisualProcessor
 
 # ============================================================================
 # SYSTEM INITIALIZATION
@@ -126,16 +125,13 @@ converting_files(
 duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
 duplicate_reviewer.run( )
 
-visual_processor = VisualProcessor( logger=logger )
-
 automatically_sorting(
 		logger=logger ,
-		visual_processor=visual_processor ,
 		source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 )
 
-# manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
-# manual_artifact_triage.run( )
+manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
+manual_artifact_triage.run( )
 
 stop_apache_tika_server( logger=logger , tika_server_process=tika_server_process )
 
