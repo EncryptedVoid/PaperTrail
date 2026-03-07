@@ -16,7 +16,6 @@ processable files are accepted for further processing.
 """
 import logging
 import re
-import subprocess
 import zipfile
 from pathlib import Path
 
@@ -141,7 +140,6 @@ def is_password_protected( artifact_location: Path ) -> bool :
 def is_corrupted(
 		logger: logging.Logger ,
 		artifact_location: Path ,
-		tika_server_process: subprocess.Popen | None ,
 ) -> bool :
 	"""
 	Returns True if the file is detectably corrupted, False if valid or type unknown.
@@ -152,7 +150,6 @@ def is_corrupted(
 	Args:
 		logger: Logger instance.
 		artifact_location: Path to the file to check.
-		tika_server_process: Running Tika server process for fallback detection.
 	"""
 
 	if not artifact_location.exists( ) :
@@ -171,7 +168,7 @@ def is_corrupted(
 		return True
 
 	# Detect actual content type via magic bytes / Tika server
-	detected_ext = detect_filetype( logger , artifact_location , tika_server_process )
+	detected_ext = detect_filetype( logger , artifact_location )
 
 	if not detected_ext :
 		logger.warning( f"Could not detect content type for {artifact_location.name}" )

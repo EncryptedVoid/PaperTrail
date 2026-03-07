@@ -320,7 +320,6 @@ def _mime_to_dot_extension( mime: str ) -> str :
 def detect_filetype(
 		logger: logging.Logger ,
 		artifact: Path ,
-		tika_server_process: subprocess.Popen | None ,
 ) -> str :
 	"""
 	Detect a file's type by its content and return the canonical extension.
@@ -359,9 +358,6 @@ def detect_filetype(
 		logger.debug( f"filetype returned unmapped MIME {mime} for {artifact.name}, falling back to Tika" )
 
 	# ── Slow path: Tika server ───────────────────────────────────────
-	if tika_server_process is None or tika_server_process.poll( ) is not None :
-		raise ModuleNotFoundError( f"Tika server not running for fallback detection of {artifact.name}." )
-
 	tika_mime = _detect_via_tika_server( logger , artifact )
 	if not tika_mime :
 		logger.warning( f"Tika returned empty MIME for {artifact.name}" )
@@ -379,7 +375,6 @@ def detect_filetype(
 def get_metadata(
 		logger: logging.Logger ,
 		artifact: Path ,
-		tika_server_process: subprocess.Popen | None ,
 ) -> dict | None :
 	"""
 	Extract metadata from a file via the Tika server.
@@ -387,14 +382,10 @@ def get_metadata(
 	Args:
 			logger:               Logger instance.
 			artifact:             Path to the file.
-			tika_server_process:  Running Tika server process.
 
 	Returns:
 			Dictionary of metadata key-value pairs, or None on failure.
 	"""
-	if tika_server_process is None or tika_server_process.poll( ) is not None :
-		logger.error( f"Tika server not running; cannot extract metadata for {artifact.name}" )
-		return { }
 
 	safe_name = quote( artifact.name , safe="" )
 	try :
@@ -416,21 +407,6 @@ def get_metadata(
 	except Exception as e :
 		logger.error( f"Tika metadata extraction failed for {artifact.name}: {e}" )
 		return None
-
-
-def stop_apache_tika_server(
-		logger: logging.Logger ,
-		tika_server_process: subprocess.Popen | None ,
-) -> None :
-	if tika_server_process is not None :
-		tika_server_process.terminate( )
-		logger.debug( f"Apache Tika server terminated." )
-		try :
-			tika_server_process.wait( timeout=10 )
-		except subprocess.TimeoutExpired :
-			tika_server_process.kill( )
-
-	logger.debug( f"Apache Tika server was not running. Nothing to terminate." )
 
 
 def inject_metadata(

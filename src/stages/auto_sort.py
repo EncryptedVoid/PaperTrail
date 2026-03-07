@@ -12,15 +12,20 @@ import shutil
 from pathlib import Path
 from typing import List
 
-from tqdm import tqdm
-
-from config import (AFFINE_DIR , ANKI_DIR , ARTIFACT_PROFILES_DIR , BITWARDEN_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
-										DOCUMENT_TYPES , FIREFLYIII_DIR , GITLAB_DIR , IMAGE_TYPES , IMMICH_DIR , JELLYFIN_DIR ,
-										LINKWARDEN_DIR ,
+from config import (ACADEMIC_FILES_DIR , ALTERATIONS_REQUIRED_DIR , ANKI_DIR , ARTIFACT_PROFILES_DIR , AUDIO_TYPES ,
+										BITWARDEN_DIR ,
+										BOOK_LIBRARY_DIR , COMPLETED_SANITIZATION_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
+										DOCUMENT_TYPES , EMAIL_TYPES , FIREFLYIII_DIR , GITLAB_DIR , IMAGE_TYPES , IMMICH_DIR ,
+										IMMIGRATION_FILES_DIR ,
+										JELLYFIN_DIR ,
+										LEGAL_FILES_DIR , LINKWARDEN_DIR ,
 										MANUALS_ARCHIVE_DIR , MONICA_CRM_DIR , ODOO_CRM_DIR , ODOO_INVENTORY_DIR , ODOO_MAINTENANCE_DIR ,
-										ODOO_PLM_DIR , ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR , PERSONAL_LIBRARY_DIR ,
-										PROFILE_PREFIX , SCANNING_REQUIRED_DIR , SOFTWARE_ARCHIVE_DIR , TEXT_MODEL , ULTIMAKER_CURA_DIR ,
-										VISION_MODEL)
+										ODOO_PLM_DIR , ODOO_PURCHASE_DIR , OS_ISO_ARCHIVE_DIR , PERFORMANCE_PORTFOLIO_DIR ,
+										PROFESSIONAL_FILES_DIR , PROFILE_PREFIX , SCANNING_REQUIRED_DIR , SCIENTIFIC_SIMULATION_DATA_DIR ,
+										SOFTWARE_ARCHIVE_DIR ,
+										TEXTBOOK_LIBRARY_DIR , TEXT_MODEL , ULTIMAKER_CURA_DIR ,
+										VIDEO_TYPES , VISION_MODEL , VISUAL_NOTE_FILES_DIR)
+from tqdm import tqdm
 from utilities.ai_processing import extract_text_for_detection , generate_filename , generate_tags
 from utilities.automatic_sorting import (is_3d_file , is_academic , is_anki_deck , is_book , is_bookmark_file ,
 																				 is_code , is_digital_contact_file , is_executable , is_financial_document ,
@@ -89,10 +94,21 @@ def automatically_sorting(
 
 			sanitized_label = sanitize_artifact_name( artifact_label )
 
+			if (
+					(artifact_ext in DOCUMENT_TYPES and artifact_ext != "pdf")
+					or (artifact_ext in VIDEO_TYPES and artifact_ext != "mp4")
+					or (artifact_ext in AUDIO_TYPES and artifact_ext != "mp3")
+					or (artifact_ext in EMAIL_TYPES and (artifact_ext != "pdf" or artifact_ext != "eml"))
+			) :
+				dest = COMPLETED_SANITIZATION_DIR / f"{sanitized_label}.{artifact_ext}"
+				logger.info(
+						f"[UNFORMATTED-FILES] '{artifact.name}' is in the incorrect format, moving'{artifact_ext}' to {dest} for formatting" )
+				shutil.move( src=artifact , dst=dest )
+
 			# --- Extension-based sorting (no content extraction needed) ---
 
-			if artifact_ext in [ "qpf" , "qsf" , "vwf" ] :
-				dest = DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_LAB_REPORT" / f"{sanitized_label}.{artifact_ext}"
+			elif artifact_ext in [ "qpf" , "qsf" , "vwf" , "bdf" ] :
+				dest = SCIENTIFIC_SIMULATION_DATA_DIR / f"{sanitized_label}.{artifact_ext}"
 				logger.info(
 						f"[LAB_SIMULATION] '{artifact.name}' matched lab/simulation extension '{artifact_ext}', moving to {dest}" )
 				shutil.move( src=artifact , dst=dest )
@@ -102,14 +118,20 @@ def automatically_sorting(
 				logger.info( f"[RAW_PHOTO] '{artifact.name}' matched RAW photo extension '{artifact_ext}', moving to {dest}" )
 				shutil.move( src=artifact , dst=dest )
 
-			elif artifact_ext in [ "iso" ] :
-				dest = (SOFTWARE_ARCHIVE_DIR / "OPERATING_SYSTEMS") / f"{sanitized_label}.{artifact_ext}"
+			elif artifact_ext in [ "iso" , "img" , "vbox" , "vdi" ] :
+				dest = OS_ISO_ARCHIVE_DIR / f"{sanitized_label}.{artifact_ext}"
 				logger.info( f"[DISK_IMAGE] '{artifact.name}' matched ISO disk image extension, moving to {dest}" )
 				shutil.move( src=artifact , dst=dest )
 
 			elif artifact_ext in [ "onepkg" , "one" , "onetoc2" ] :
-				dest = AFFINE_DIR / f"{sanitized_label}.{artifact_ext}"
+				dest = VISUAL_NOTE_FILES_DIR / f"{sanitized_label}.{artifact_ext}"
 				logger.info( f"[ONENOTE_PACKAGE] '{artifact.name}' matched OneNote package extension, moving to {dest}" )
+				shutil.move( src=artifact , dst=dest )
+
+			elif artifact_ext in [ "json" ] :
+				dest = ALTERATIONS_REQUIRED_DIR / f"{sanitized_label}.{artifact_ext}"
+				logger.info(
+						f"[ALTERATIONS_REQUIRED] '{artifact.name}' is a json file, moving to {dest} for manual review later" )
 				shutil.move( src=artifact , dst=dest )
 
 			# --- Detection-based sorting (heuristic / AI classification) ---
@@ -189,36 +211,39 @@ def automatically_sorting(
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_professional( artifact_location=artifact , logger=logger , content=content ) :
-					dest = (DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL") / f"{sanitized_label}.{artifact_ext}"
+					improved_label = generate_filename( logger=logger , content=content )
+					dest = PROFESSIONAL_FILES_DIR / f"{sanitized_label}.{artifact_ext}"
 					logger.info(
 							f"[PROFESSIONAL] '{sanitized_label}' detected as professional/resume document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_legal( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
-					dest = (DIGITAL_ASSET_MANAGEMENT_DIR / "LEGAL") / f"{improved_label}.{artifact_ext}"
+					dest = LEGAL_FILES_DIR / f"{improved_label}.{artifact_ext}"
 					logger.info( f"[LEGAL] '{sanitized_label}' detected as legal document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_immigration( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
-					dest = (DIGITAL_ASSET_MANAGEMENT_DIR / "LEGAL" / "IMMIGRATION") / f"{improved_label}.{artifact_ext}"
+					dest = IMMIGRATION_FILES_DIR / f"{improved_label}.{artifact_ext}"
 					logger.info( f"[IMMIGRATION] '{sanitized_label}' detected as immigration document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_academic( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
-					dest = (DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC") / f"{improved_label}.{artifact_ext}"
+					dest = ACADEMIC_FILES_DIR / f"{improved_label}.{artifact_ext}"
 					logger.info( f"[ACADEMIC] '{sanitized_label}' detected as academic document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_book( artifact_location=artifact , logger=logger , content=content ) :
-					dest = PERSONAL_LIBRARY_DIR / "BOOK" / f"{sanitized_label}.{artifact_ext}"
+					improved_label = generate_filename( logger=logger , content=content )
+					dest = BOOK_LIBRARY_DIR / f"{sanitized_label}.{artifact_ext}"
 					logger.info( f"[BOOK] '{sanitized_label}' detected as book, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_textbook( artifact_location=artifact , logger=logger , content=content ) :
-					dest = PERSONAL_LIBRARY_DIR / "TEXTBOOK" / f"{sanitized_label}.{artifact_ext}"
+					improved_label = generate_filename( logger=logger , content=content )
+					dest = TEXTBOOK_LIBRARY_DIR / f"{sanitized_label}.{artifact_ext}"
 					logger.info( f"[TEXTBOOK] '{sanitized_label}' detected as textbook, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 

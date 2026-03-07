@@ -14,16 +14,23 @@ Author: Ashiq Gazi
 import logging
 from datetime import datetime
 
-from applications.manual_file_triage import FileTriage
+# from applications.identify_duplicates import DuplicateReviewer
 from config import (
 	COMPLETED_FORMAT_CONVERSION_DIR ,
+	COMPLETED_SANITIZATION_DIR ,
 	LOG_DIR ,
 	LOG_FORMAT ,
 	LOG_LEVEL ,
+	RECURSIVE_SORT_DIR ,
 	SESSION_LOG_FILE_PREFIX ,
 	SYSTEM_DIRECTORIES ,
-	SYSTEM_PROGRAM_TRACKING_FILES , )
+	SYSTEM_PROGRAM_TRACKING_FILES ,
+	UNPROCESSED_ARTIFACTS_DIR ,
+)
 from stages.auto_sort import automatically_sorting
+from stages.file_conversion import converting_files
+from stages.folder_decompression import decompressing_artifacts
+from stages.sanitize import sanitizing
 from utilities.dependancy_ensurance import ensure_apache_tika_server
 
 # ============================================================================
@@ -95,25 +102,23 @@ try :
 	# app = FolderManagerApp( source_dir=RECURSIVE_SORT_DIR , dest_dir=UNPROCESSED_ARTIFACTS_DIR , logger=logger )
 	# app.mainloop( )
 
-	# decompressing_artifacts(
-	# 		logger=logger ,
-	# 		source_dir=RECURSIVE_SORT_DIR ,
-	# 		dest_dir=UNPROCESSED_ARTIFACTS_DIR ,
-	# )
+	decompressing_artifacts(
+			logger=logger ,
+			source_dir=RECURSIVE_SORT_DIR ,
+			dest_dir=UNPROCESSED_ARTIFACTS_DIR ,
+	)
 
-	# sanitizing(
-	# 		logger=logger ,
-	# 		source_dir=UNPROCESSED_ARTIFACTS_DIR ,
-	# 		dest_dir=COMPLETED_SANITIZATION_DIR ,
-	# 		tika_server_process=tika_server_process ,
-	# )
+	sanitizing(
+			logger=logger ,
+			source_dir=UNPROCESSED_ARTIFACTS_DIR ,
+			dest_dir=COMPLETED_SANITIZATION_DIR ,
+	)
 
-	# converting_files(
-	# 		logger=logger ,
-	# 		source_dir=COMPLETED_SANITIZATION_DIR ,
-	# 		dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
-	# 		tika_server_process=tika_server_process ,
-	# )
+	converting_files(
+			logger=logger ,
+			source_dir=COMPLETED_SANITIZATION_DIR ,
+			dest_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
+	)
 
 	# duplicate_reviewer = DuplicateReviewer( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
 	# duplicate_reviewer.run( )
@@ -123,8 +128,8 @@ try :
 			source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
 	)
 
-	manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
-	manual_artifact_triage.run( )
+# manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )
+# manual_artifact_triage.run( )
 
 finally :
 	# ── Always clean up Tika, even if the pipeline crashes ────────────

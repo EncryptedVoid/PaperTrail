@@ -87,8 +87,26 @@ MANUALS_ARCHIVE_DIR: Path = Path(
 		DIGITAL_ASSET_MANAGEMENT_DIR / "MANUALS_ARCHIVE" )
 SOFTWARE_ARCHIVE_DIR: Path = Path(
 		DIGITAL_ASSET_MANAGEMENT_DIR / "SOFTWARE_ARCHIVE" )
+OS_ISO_ARCHIVE_DIR: Path = Path(
+		SOFTWARE_ARCHIVE_DIR / "OPERATING_SYSTEMS" )
 ANKI_DIR: Path = Path(
 		DIGITAL_ASSET_MANAGEMENT_DIR / "ANKI" )  # https://apps.ankiweb.net/
+SCIENTIFIC_SIMULATION_DATA_DIR: Path = Path(
+		DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" / "SCIENTIFIC_SIMULATION_DATA" )
+VISUAL_NOTE_FILES_DIR: Path = Path(
+		AFFINE_DIR / "MC_ONENOTE" )
+PROFESSIONAL_FILES_DIR: Path = Path(
+		DIGITAL_ASSET_MANAGEMENT_DIR / "PROFESSIONAL" )
+LEGAL_FILES_DIR: Path = Path(
+		DIGITAL_ASSET_MANAGEMENT_DIR / "LEGAL" )
+IMMIGRATION_FILES_DIR: Path = Path(
+		DIGITAL_ASSET_MANAGEMENT_DIR / "LEGAL" / "IMMIGRATION" )
+ACADEMIC_FILES_DIR: Path = Path(
+		DIGITAL_ASSET_MANAGEMENT_DIR / "ACADEMIC" )
+BOOK_LIBRARY_DIR: Path = Path(
+		PERSONAL_LIBRARY_DIR / "BOOK" )
+TEXTBOOK_LIBRARY_DIR: Path = Path(
+		PERSONAL_LIBRARY_DIR / "TEXTBOOK" )
 BITWARDEN_DIR: Path = Path(
 		DIGITAL_ASSET_MANAGEMENT_DIR / "BITWARDEN" )  # https://bitwarden.com/
 
@@ -139,6 +157,15 @@ SYSTEM_DIRECTORIES: set[ Path ] = {
 	COMPLETED_SANITIZATION_DIR ,
 	COMPLETED_FORMAT_CONVERSION_DIR ,
 	DELETE_DIR ,
+	OS_ISO_ARCHIVE_DIR ,
+	SCIENTIFIC_SIMULATION_DATA_DIR ,
+	VISUAL_NOTE_FILES_DIR ,
+	PROFESSIONAL_FILES_DIR ,
+	LEGAL_FILES_DIR ,
+	IMMIGRATION_FILES_DIR ,
+	ACADEMIC_FILES_DIR ,
+	BOOK_LIBRARY_DIR ,
+	TEXTBOOK_LIBRARY_DIR ,
 }
 
 APPLICATION_FOLDERS = [
@@ -525,6 +552,8 @@ FILETYPE_TRUSTED_EXTENSIONS.update( EMAIL_TYPES )
 FILETYPE_TRUSTED_EXTENSIONS.update( EXECUTABLE_EXTENSIONS )
 FILETYPE_TRUSTED_EXTENSIONS.update( ext.lstrip( "." ) for ext in ARCHIVE_TYPES )
 
+PDF_SUBSET_PAGE_LIMIT = 6  # max pages before subsetting kicks in
+OLLAMA_PORT = 11434
 TIKA_SERVER_PORT: int = 9998
 JAVA_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"jdk-25.0.2+10-jre/bin/java.exe" )
 TIKA_APP_JAR_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"tika-app-3.2.3.jar" )
@@ -1230,12 +1259,6 @@ QWEN_VL_MODEL_TIERS = [
 	} ,
 ]
 
-FILENAME_SYSTEM_PROMPT = (
-	"You are a file-naming tool. You receive document content and return a single "
-	"descriptive filename (no extension). Use lowercase words separated by underscores. "
-	"Max 8 words. No explanations, no quotes, no extra text — just the filename."
-)
-
 VISUAL_DESC_SYSTEM_PROMPT = (
 	"You are a visual analysis tool. Describe what you see in the image clearly and "
 	"concisely. Focus on: document type, visible text/headings, logos, layout, key visual "
@@ -1256,15 +1279,6 @@ SCAN_SYSTEM_PROMPT = (
 	"paragraphs, lists, tables. Fix obvious OCR artifacts but do not infer or add content. "
 	"No commentary — just the extracted text."
 )
-
-FILENAME_PROMPT_TEMPLATE = """Content:
-{content}
-
-Return ONLY a descriptive filename (no extension). Examples:
-- immigration_board_hearing_notice_2024
-- rental_lease_agreement_toronto
-- passport_renewal_application_form
-- landscape_mountain_sunset_photo"""
 
 VISUAL_DESC_PROMPT = "Describe this image. Be specific about visible text, layout, and content type."
 

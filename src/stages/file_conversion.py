@@ -4,7 +4,6 @@ Conversion Pipeline Module (excerpt — key changes only)
 import json
 import logging
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import List , Optional
@@ -49,7 +48,6 @@ def converting_files(
 		logger: logging.Logger ,
 		source_dir: Path ,
 		dest_dir: Path ,
-		tika_server_process: subprocess.Popen | None = None ,
 ) -> None :
 	ensure_ffmpeg( )
 	ensure_imagemagick( )
@@ -108,18 +106,14 @@ def converting_files(
 
 			# ── Extract metadata via Tika SERVER (fast, non-fatal) ───
 			metadata: Optional[ dict ] = None
-			if tika_server_process is not None :
-				metadata = get_metadata(
-						logger=logger ,
-						artifact=artifact ,
-						tika_server_process=tika_server_process ,
-				)
-				if metadata :
-					logger.info( f"Extracted {len( metadata )} metadata fields via Tika server" )
-				else :
-					logger.warning( f"Metadata extraction returned nothing for {artifact.name} — continuing" )
+			metadata = get_metadata(
+					logger=logger ,
+					artifact=artifact ,
+			)
+			if metadata :
+				logger.info( f"Extracted {len( metadata )} metadata fields via Tika server" )
 			else :
-				logger.debug( "No Tika server available — skipping metadata extraction" )
+				logger.warning( f"Metadata extraction returned nothing for {artifact.name} — continuing" )
 
 			# ── Convert based on type ────────────────────────────────
 			formatted_artifact = None

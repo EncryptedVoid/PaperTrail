@@ -20,7 +20,6 @@ status. Processing statistics and timing information are logged for monitoring.
 
 import logging
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import List , Set
@@ -42,7 +41,6 @@ def sanitizing(
 		logger: logging.Logger ,
 		source_dir: Path ,
 		dest_dir: Path ,
-		tika_server_process: subprocess.Popen | None = None ,  # ← add this
 ) -> None :
 	ensure_apache_tika( )
 	ensure_ffmpeg( )
@@ -126,7 +124,7 @@ def sanitizing(
 
 			logger.info( f"Artifact \"{artifact.name}\" is supported by PaperTrail as of Mar 1st, 2026" )
 
-			if is_corrupted( logger=logger , artifact_location=artifact , tika_server_process=tika_server_process ) :
+			if is_corrupted( logger=logger , artifact_location=artifact ) :
 				logger.info( f"Corrupted artifact detected: {artifact.name}" )
 				shutil.move( src=artifact , dst=CORRUPTED_ARTIFACTS_DIR / artifact.name )
 				logger.info( f"Moved corrupted artifact to: {CORRUPTED_ARTIFACTS_DIR / artifact.name}" )

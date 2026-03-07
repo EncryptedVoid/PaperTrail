@@ -71,14 +71,14 @@ def _extract_from_email( artifact_location: Path , logger: logging.Logger ) -> s
 						body += part.get_payload( decode=True ).decode( "utf-8" , errors="ignore" )
 					except :
 						logger.debug(
-							f"[EMAIL_EXTRACT] Failed to decode a text/plain part in '{artifact_location.name}', skipping" )
+								f"[EMAIL_EXTRACT] Failed to decode a text/plain part in '{artifact_location.name}', skipping" )
 		else :
 			try :
 				body = msg.get_payload( decode=True ).decode( "utf-8" , errors="ignore" )
 			except :
 				body = str( msg.get_payload( ) )
 				logger.debug(
-					f"[EMAIL_EXTRACT] Payload decode failed for '{artifact_location.name}', fell back to string representation" )
+						f"[EMAIL_EXTRACT] Payload decode failed for '{artifact_location.name}', fell back to string representation" )
 
 		text = f"{subject}\n\n{body}"
 		logger.debug( f"[EMAIL_EXTRACT] Extracted {len( text )} characters from '{artifact_location.name}'" )
@@ -160,11 +160,11 @@ def is_personal_security_item( artifact_location: Path ) -> bool :
 		bool: True if backup codes detected, False otherwise
 	"""
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
-	artifact_label = artifact_location.stem.lower( ).strip( )
+	artifact_label = artifact_location.stem.lower( ).strip( ).strip( "." ).strip( "_" )
 
 	if (artifact_ext not in TEXT_TYPES
-			or artifact_ext not in DOCUMENT_TYPES
-			or artifact_ext not in EMAIL_TYPES
+			and artifact_ext not in DOCUMENT_TYPES
+			and artifact_ext not in EMAIL_TYPES
 	) :
 		return False
 
@@ -365,10 +365,6 @@ def is_professional( artifact_location: Path , logger: logging.Logger , content:
 	artifact_ext = artifact_location.suffix.lower( ).strip( ).strip( "." )
 	artifact_label = artifact_location.stem.lower( ).strip( ).strip( "." ).strip( "_" )
 
-	if artifact_ext not in DOCUMENT_TYPES :
-		logger.debug( f"[PROFESSIONAL] '{artifact_location.name}' is not a document type (ext='{artifact_ext}'), skipping" )
-		return False
-
 	if "resume" in artifact_label or "certificate" in artifact_label :
 		logger.info( f"[PROFESSIONAL] '{artifact_location.name}' matched professional keyword in filename" )
 		return True
@@ -547,12 +543,12 @@ def is_instruction_manual( artifact_location: Path , logger: logging.Logger , co
 
 		if artifact_ext in AUDIO_TYPES or artifact_ext in VIDEO_TYPES or artifact_ext not in DOCUMENT_TYPES :
 			logger.debug(
-				f"[INSTRUCTION_MANUAL] '{artifact_location.name}' is not a valid document type (ext='{artifact_ext}'), skipping" )
+					f"[INSTRUCTION_MANUAL] '{artifact_location.name}' is not a valid document type (ext='{artifact_ext}'), skipping" )
 			return False
 
 		if "solutions" not in artifact_label and "manual" in artifact_label :
 			logger.info(
-				f"[INSTRUCTION_MANUAL] '{artifact_location.name}' matched 'manual' keyword in filename (excluding 'solutions manual')" )
+					f"[INSTRUCTION_MANUAL] '{artifact_location.name}' matched 'manual' keyword in filename (excluding 'solutions manual')" )
 			return True
 
 		logger.debug( f"[INSTRUCTION_MANUAL] Running AI theme detection on '{artifact_location.name}'" )
