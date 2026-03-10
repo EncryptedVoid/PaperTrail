@@ -236,6 +236,8 @@ DOCUMENT_TYPES = [
 	"xlsx" ,
 	"xps" ,  # XML Paper Specification
 	"chm" ,
+	"pbm" ,
+	"ppm" ,
 ]
 
 MICROSOFT_FILE_TYPES = [
@@ -292,6 +294,7 @@ IMAGE_TYPES = [
 	"tiff" ,
 	"webp" ,
 	"xcf" ,  # GIMP native format
+	"hif" ,
 ]
 
 VIDEO_TYPES = [

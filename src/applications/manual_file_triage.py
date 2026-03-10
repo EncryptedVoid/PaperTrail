@@ -23,9 +23,6 @@ import cv2
 import fitz
 import pygame
 from PIL import Image
-from customtkinter import CTkScrollableFrame
-from tkinterweb import HtmlFrame
-
 from config import (AFFINE_DIR , ALTERATIONS_CSV , ALTERATIONS_REQUIRED_DIR , ANKI_DIR , ARCHIVAL_DIR , AUDIO_TYPES ,
 										BITWARDEN_DIR , DELETE_DIR , DIGITAL_ASSET_MANAGEMENT_DIR , DOCUMENT_TYPES , EMAIL_TYPES ,
 										FILE_TRIAGE_BATCH_SIZE , FILE_TRIAGE_MAX_PDF_PG , FIREFLYIII_DIR , GAMES_ARCHIVE_DIR , GITLAB_DIR ,
@@ -34,12 +31,13 @@ from config import (AFFINE_DIR , ALTERATIONS_CSV , ALTERATIONS_REQUIRED_DIR , AN
 										ODOO_PURCHASE_DIR , PERFORMANCE_PORTFOLIO_DIR , PERSONAL_ARCHIVE_DIR , PERSONAL_LIBRARY_DIR ,
 										SCANNING_REQUIRED_DIR , SOFTWARE_ARCHIVE_DIR , TIKA_APP_JAR_PATH , ULTIMAKER_CURA_DIR ,
 										UNESSENTIAL_DIR , UNSUPPORTED_ARTIFACTS_DIR , VIDEO_TYPES)
+from customtkinter import CTkScrollableFrame
+from tkinterweb import HtmlFrame
 from utilities.ai_processing import (
-	extract_document_text ,
-	extract_visual_description ,
+	extract_text_for_detection ,
 	generate_filename ,
-	generate_tags
 )
+from utilities.artifact_data_manipulation import (detect_filetype , get_metadata)
 from utilities.document_scanning import process_handwritten_notes , process_printed_documents
 from utilities.format_converting import (
 	convert_audio_to_mp3 , convert_document_to_pdf , convert_email_to_pdf ,
@@ -74,13 +72,11 @@ RED = "#CC2222"
 FONT = "Segoe UI";
 EMOJI_FONT = "Segoe UI Emoji"
 
-# Directories that trigger auto-tagging on confirm
-_TAG_DIRS = {
-	DIGITAL_ASSET_MANAGEMENT_DIR , FIREFLYIII_DIR , JELLYFIN_DIR ,
-	ODOO_MAINTENANCE_DIR , ODOO_PLM_DIR , ODOO_PURCHASE_DIR ,
-	ODOO_INVENTORY_DIR , PERFORMANCE_PORTFOLIO_DIR , PERSONAL_ARCHIVE_DIR ,
-	MANUALS_ARCHIVE_DIR , SOFTWARE_ARCHIVE_DIR ,
-}
+# ═══════════════════════════════════════════════════════════════════════════
+# FILE CATEGORY PRIORITY  (lower = processed first)
+# ═══════════════════════════════════════════════════════════════════════════
+_CATEGORY_PRIORITY = { "pdf"  : 0 , "image" : 1 , "video" : 2 , "audio" : 3 ,
+											 "html" : 4 , "text" : 4 , "other" : 5 }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # BOLD-UNICODE HELPER
@@ -242,15 +238,28 @@ def _file_category( file: Path ) -> str :
 	return "other"
 
 
-def _is_document_type( file: Path ) -> bool :
-	ext = file.suffix.lower( ).lstrip( "." )
-	return ext in _DOC_EXTS or ext == "pdf" or ext in _HTML_EXTS or ext in _EML_EXTS or ext in {
-		"txt" , "log" , "json" , "csv" , "xml" , "md" , "yaml" , "yml" , "toml" , "ini" ,
-	}
+def _file_sort_key( file: Path ) -> tuple[ int , int ] :
+	"""Return (category_priority, negative_file_size) for queue ordering.
+	   Lower priority number = processed first.  Larger files first within each group."""
+	cat = _file_category( file )
+	priority = _CATEGORY_PRIORITY.get( cat , 5 )
+	try :
+		size = file.stat( ).st_size
+	except OSError :
+		size = 0
+	return (priority , -size)
 
 
-def _is_image_type( file: Path ) -> bool :
-	return file.suffix.lower( ).lstrip( "." ) in _IMG_EXTS
+def _format_file_size( size_bytes: int ) -> str :
+	"""Human-readable file size."""
+	if size_bytes < 1024 :
+		return f"{size_bytes} B"
+	elif size_bytes < 1024 * 1024 :
+		return f"{size_bytes / 1024:.1f} KB"
+	elif size_bytes < 1024 * 1024 * 1024 :
+		return f"{size_bytes / (1024 * 1024):.1f} MB"
+	else :
+		return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -296,7 +305,7 @@ class FileTriage :
 	def __init__( self , source_dir: Path , logger: logging.Logger ) :
 		self.source_dir = Path( source_dir )
 		self.logger = logger
-		self.logger.info( "Initialising FileTriage v6.2 with source: %s" , self.source_dir )
+		self.logger.info( "Initialising FileTriage v7.0 with source: %s" , self.source_dir )
 
 		# ── file queue & history ──────────────────────────────────────────
 		self.queue: deque[ Path ] = deque( )
@@ -357,7 +366,7 @@ class FileTriage :
 
 		# ── build window ─────────────────────────────────────────────────
 		self.root = ctk.CTk( )
-		self.root.title( "File Triage  v6" )
+		self.root.title( "File Triage  v7" )
 		self.root.geometry( "1920x1060" )
 		self.root.configure( fg_color=BG )
 		self._build_ui( )
@@ -372,22 +381,41 @@ class FileTriage :
 		self.logger.info( "Application ready — %d files in queue" , len( self.queue ) )
 
 	# ──────────────────────────────────────────────────────────────────────
-	# FILE LOADING
+	# FILE LOADING  (sorted: PDF → Image → Video → Other, each largest-first)
 	# ──────────────────────────────────────────────────────────────────────
 	def _load_files( self ) :
+		all_files: list[ Path ] = [ ]
+
+		# primary source directory
 		primary = [ f for f in self.source_dir.iterdir( )
 								if f.is_file( ) and f.parent == self.source_dir ]
-		self.queue.extend( primary )
-		self.logger.info( "Loaded %d file(s) from source directory: %s" , len( primary ) , self.source_dir )
-		for f in primary :
-			self.logger.debug( "  queued: %s (%s)" , f.name , f.suffix )
+		all_files.extend( primary )
+		self.logger.info( "Found %d file(s) in source directory: %s" , len( primary ) , self.source_dir )
+
+		# unsupported artifacts overflow
 		if UNSUPPORTED_ARTIFACTS_DIR.exists( ) and UNSUPPORTED_ARTIFACTS_DIR != self.source_dir :
 			extras = [ f for f in UNSUPPORTED_ARTIFACTS_DIR.iterdir( )
 								 if f.is_file( ) and f.parent == UNSUPPORTED_ARTIFACTS_DIR ]
 			if extras :
-				self.queue.extend( extras )
+				all_files.extend( extras )
 				self.logger.info( "Appended %d file(s) from UNSUPPORTED_ARTIFACTS: %s" ,
 													len( extras ) , UNSUPPORTED_ARTIFACTS_DIR )
+
+		# ── sort: category priority first, then largest file size first ──
+		all_files.sort( key=_file_sort_key )
+
+		self.queue.extend( all_files )
+
+		# log the ordering summary
+		cat_counts: dict[ str , int ] = { }
+		for f in all_files :
+			cat = _file_category( f )
+			cat_counts[ cat ] = cat_counts.get( cat , 0 ) + 1
+		order_summary = ", ".join( f"{cat}={n}" for cat , n in
+															 sorted( cat_counts.items( ) ,
+																			 key=lambda kv : _CATEGORY_PRIORITY.get( kv[ 0 ] , 5 ) ) )
+		self.logger.info( "Queue ordered (%d total): %s  — each group largest-first" ,
+											len( all_files ) , order_summary )
 
 	# ══════════════════════════════════════════════════════════════════════
 	# UI CONSTRUCTION
@@ -415,6 +443,8 @@ class FileTriage :
 		info.pack_propagate( False )
 		self.file_lbl = ctk.CTkLabel( info , text="—" , font=(FONT , 13 , "bold") , text_color=FG )
 		self.file_lbl.pack( side=tk.LEFT , padx=14 )
+		self.size_lbl = ctk.CTkLabel( info , text="" , font=(FONT , 11) , text_color=FG2 )
+		self.size_lbl.pack( side=tk.LEFT , padx=4 )
 		self.action_lbl = ctk.CTkLabel( info , text="" , font=(FONT , 11 , "bold") , text_color=ACCENT )
 		self.action_lbl.pack( side=tk.LEFT , padx=8 )
 		self.queue_lbl = ctk.CTkLabel( info , text="Queue: 0" , font=(FONT , 11) , text_color=FG2 )
@@ -440,7 +470,7 @@ class FileTriage :
 									 corner_radius=8 , text_color=FG , font=(EMOJI_FONT , 10) ,
 									 ).pack( side=tk.LEFT , padx=3 )
 
-		# Zoom controls: − label +
+		# Zoom controls
 		ctk.CTkButton( tb , text="−" , command=self._zoom_out ,
 									 fg_color=CARD , hover_color=CARD_SEL , width=34 , height=34 ,
 									 corner_radius=8 , text_color=FG , font=(FONT , 14 , "bold") ,
@@ -493,13 +523,13 @@ class FileTriage :
 		dest_panel = ctk.CTkFrame( center , fg_color=SIDEBAR , corner_radius=12 )
 		dest_panel.pack( fill=tk.X , pady=(0 , 5) )
 
-		# Header row with clear button
+		# Header row
 		dest_hdr = ctk.CTkFrame( dest_panel , fg_color=SIDEBAR )
 		dest_hdr.pack( fill=tk.X , padx=14 , pady=(8 , 4) )
 		ctk.CTkLabel( dest_hdr , text="TRIAGE ACTIONS" ,
 									font=(FONT , 10 , "bold") , text_color=FG2 ).pack( side=tk.LEFT )
 
-		# ---- scan / AI action buttons row ----
+		# ---- scan / AI / metadata action buttons row ----
 		action_row = ctk.CTkFrame( dest_panel , fg_color=SIDEBAR )
 		action_row.pack( fill=tk.X , padx=10 , pady=(0 , 6) )
 		ctk.CTkButton( action_row , text="✅ SCAN HANDWRITING" , command=self._scan_handwriting ,
@@ -512,6 +542,14 @@ class FileTriage :
 									 ).pack( side=tk.LEFT , padx=3 )
 		ctk.CTkButton( action_row , text="🤖 NEW FILENAME" , command=self._ai_rename ,
 									 fg_color="#5B4A78" , hover_color="#6B5A88" , width=150 , height=32 ,
+									 corner_radius=8 , text_color=FG , font=(EMOJI_FONT , 10 , "bold") ,
+									 ).pack( side=tk.LEFT , padx=3 )
+		ctk.CTkButton( action_row , text="📋 METADATA" , command=self._show_metadata_panel ,
+									 fg_color="#4A6B3A" , hover_color="#5A8040" , width=130 , height=32 ,
+									 corner_radius=8 , text_color=FG , font=(EMOJI_FONT , 10 , "bold") ,
+									 ).pack( side=tk.LEFT , padx=3 )
+		ctk.CTkButton( action_row , text="🔍 DETECT TYPE" , command=self._detect_type ,
+									 fg_color="#6B5A3A" , hover_color="#806A4A" , width=140 , height=32 ,
 									 corner_radius=8 , text_color=FG , font=(EMOJI_FONT , 10 , "bold") ,
 									 ).pack( side=tk.LEFT , padx=3 )
 
@@ -557,7 +595,6 @@ class FileTriage :
 		nav = ctk.CTkFrame( foot , fg_color=BG );
 		nav.pack( side=tk.RIGHT , padx=8 )
 
-		# Action buttons on the right: unessential, flag, delete, prev, confirm
 		ctk.CTkButton( nav , text="↓ UNESSENTIAL [↓]" , command=self._send_to_unessential ,
 									 fg_color=CARD , hover_color=CARD_SEL , width=150 , height=42 ,
 									 corner_radius=10 , text_color=FG2 , font=(EMOJI_FONT , 10 , "bold") ,
@@ -571,7 +608,6 @@ class FileTriage :
 									 corner_radius=10 , text_color=FG , font=(EMOJI_FONT , 10 , "bold") ,
 									 ).pack( side=tk.LEFT , padx=3 )
 
-		# Separator
 		ctk.CTkFrame( nav , fg_color=FG2 , width=2 , height=32 ).pack( side=tk.LEFT , padx=8 )
 
 		ctk.CTkButton( nav , text="← Prev" , command=self.show_previous , fg_color=CARD ,
@@ -602,12 +638,10 @@ class FileTriage :
 			var.set( 1 );
 			self.selected_dests.add( name )
 			cb.configure( text_color=FG )
-			self.logger.debug( "Destination selected: %s" , name )
 		else :
 			var.set( 0 );
 			self.selected_dests.discard( name )
 			cb.configure( text_color=FG2 )
-			self.logger.debug( "Destination deselected: %s" , name )
 		self._refresh_action_label( )
 
 	def _reset_dest_checkboxes( self ) :
@@ -703,7 +737,6 @@ class FileTriage :
 		self.zoom_scale = max( 0.2 , min( 4.0 , new_scale ) )
 		self.zoom_lbl.configure( text=f"🔍 {int( self.zoom_scale * 100 )}%" )
 		if int( old * 100 ) != int( self.zoom_scale * 100 ) :
-			self.logger.debug( "Zoom changed: %d%% → %d%%" , int( old * 100 ) , int( self.zoom_scale * 100 ) )
 			self._display_file( )
 
 	def _zoom( self , event ) :
@@ -730,7 +763,6 @@ class FileTriage :
 			elif cat == "image" : _rotate_image( Path( self.current_file ) , degrees , self.logger )
 			elif cat == "video" : _rotate_video( Path( self.current_file ) , degrees , self.logger )
 			else :
-				self.logger.warning( "Rotation not supported for category '%s'" , cat )
 				self.status_lbl.configure( text="Rotation not supported" , text_color=FG2 );
 				return
 			self.status_lbl.configure( text=f"✓ Rotated {degrees}°" , text_color=GREEN )
@@ -746,23 +778,17 @@ class FileTriage :
 	# SCANNING & AI TOOLS
 	# ══════════════════════════════════════════════════════════════════════
 	def _scan_handwriting( self ) :
-		if not self.current_file or not Path( self.current_file ).exists( ) :
-			self.logger.warning( "Scan handwriting: no current file or file missing." )
-			return
+		if not self.current_file or not Path( self.current_file ).exists( ) : return
 		src = Path( self.current_file )
 		out_pdf = src.parent / f"{src.stem}_handwritten.pdf"
 		self.logger.info( "Starting handwriting scan: src='%s', out='%s'" , src , out_pdf )
-		self.logger.info( "  src exists: %s, src size: %s bytes" , src.exists( ) ,
-											src.stat( ).st_size if src.exists( ) else "N/A" )
 		self.status_lbl.configure( text="⏳ Scanning handwriting…" , text_color=YELLOW )
 		self.root.update_idletasks( )
 		self._executor.submit( self._scan_handwriting_worker , src , out_pdf )
 
 	def _scan_handwriting_worker( self , src: Path , out_pdf: Path ) :
 		try :
-			self.logger.info( "[SCAN-HW] Calling process_handwritten_notes('%s', '%s')" , src , out_pdf )
 			result = process_handwritten_notes( str( src ) , str( out_pdf ) )
-			self.logger.info( "[SCAN-HW] Success: result='%s'" , result )
 			self.root.after( 0 , lambda : self._scan_done(
 					f"✓ Handwriting scan → {Path( result ).name}" , Path( result ) ) )
 		except Exception as e :
@@ -772,23 +798,17 @@ class FileTriage :
 					text=f"✗ Scan failed: {msg}" , text_color=RED ) )
 
 	def _scan_printed( self ) :
-		if not self.current_file or not Path( self.current_file ).exists( ) :
-			self.logger.warning( "Scan printed: no current file or file missing." )
-			return
+		if not self.current_file or not Path( self.current_file ).exists( ) : return
 		src = Path( self.current_file )
 		out_dir = src.parent / f"{src.stem}_scanned"
 		self.logger.info( "Starting printed scan: src='%s', out_dir='%s'" , src , out_dir )
-		self.logger.info( "  src exists: %s, src size: %s bytes" , src.exists( ) ,
-											src.stat( ).st_size if src.exists( ) else "N/A" )
 		self.status_lbl.configure( text="⏳ Scanning printed document…" , text_color=YELLOW )
 		self.root.update_idletasks( )
 		self._executor.submit( self._scan_printed_worker , src , out_dir )
 
 	def _scan_printed_worker( self , src: Path , out_dir: Path ) :
 		try :
-			self.logger.info( "[SCAN-PR] Calling process_printed_documents('%s', '%s')" , src , out_dir )
 			result = process_printed_documents( str( src ) , str( out_dir ) )
-			self.logger.info( "[SCAN-PR] Success: result='%s'" , result )
 			self.root.after( 0 , lambda : self._scan_done(
 					f"✓ Printed scan → {Path( result ).name}" , None ) )
 		except Exception as e :
@@ -798,7 +818,6 @@ class FileTriage :
 					text=f"✗ Scan failed: {msg}" , text_color=RED ) )
 
 	def _scan_done( self , msg: str , new_file: Path | None ) :
-		self.logger.info( "Scan complete: %s" , msg )
 		self.status_lbl.configure( text=msg , text_color=GREEN )
 		if new_file and new_file.exists( ) :
 			self.current_file = new_file
@@ -806,10 +825,11 @@ class FileTriage :
 				self.history[ self.current_index ][ 0 ] = new_file
 			self._display_file( )
 
+	# ══════════════════════════════════════════════════════════════════════
+	# AI RENAME  (unified extraction via extract_text_for_detection)
+	# ══════════════════════════════════════════════════════════════════════
 	def _ai_rename( self ) :
-		if not self.current_file or not Path( self.current_file ).exists( ) :
-			self.logger.warning( "AI rename: no current file." )
-			return
+		if not self.current_file or not Path( self.current_file ).exists( ) : return
 		self.logger.info( "Starting AI rename for '%s'" , Path( self.current_file ).name )
 		self.ai_status_lbl.configure( text="⏳ Generating filename…" , text_color=YELLOW )
 		self.root.update_idletasks( )
@@ -817,30 +837,31 @@ class FileTriage :
 
 	def _ai_rename_worker( self , src: Path ) :
 		try :
-			if _is_document_type( src ) :
-				self.logger.debug( "[AI-RENAME] Extracting document text from '%s'" , src.name )
-				content = extract_document_text( self.logger , src )
-			elif _is_image_type( src ) :
-				self.logger.debug( "[AI-RENAME] Extracting visual description from '%s'" , src.name )
-				content = extract_visual_description( self.logger , src )
-			else :
-				self.logger.debug( "[AI-RENAME] Extracting Tika metadata from '%s'" , src.name )
-				content = _tika_metadata( src )
+			# unified extraction: handles PDFs (→ PNG → vision OCR),
+			# images (→ vision), and other docs (→ Tika) automatically
+			content = extract_text_for_detection( self.logger , src )
+
+			# fallback to raw Tika CLI metadata if unified extraction fails
 			if not content :
-				self.logger.warning( "[AI-RENAME] No content extracted for '%s'" , src.name )
+				self.logger.debug( "[AI-RENAME] Unified extraction empty, trying Tika CLI metadata" )
+				content = _tika_metadata( src )
+
+			if not content :
 				self.root.after( 0 , lambda : self.ai_status_lbl.configure(
 						text="✗ Could not extract content" , text_color=RED ) )
 				return
+
 			new_name = generate_filename( self.logger , content )
 			if not new_name :
-				self.logger.warning( "[AI-RENAME] Filename generation returned empty for '%s'" , src.name )
 				self.root.after( 0 , lambda : self.ai_status_lbl.configure(
 						text="✗ Filename generation failed" , text_color=RED ) )
 				return
+
 			new_path = src.parent / f"{new_name}{src.suffix}"
 			new_path = _unique( src.parent , new_path ) if new_path.exists( ) else new_path
 			self.logger.info( "[AI-RENAME] Suggested: '%s' → '%s'" , src.name , new_path.name )
 			self.root.after( 0 , lambda : self._ai_rename_confirm( src , new_path , new_name ) )
+
 		except Exception as e :
 			err_msg = str( e )
 			self.logger.error( "[AI-RENAME] Failed for '%s': %s" , src.name , err_msg , exc_info=True )
@@ -853,7 +874,6 @@ class FileTriage :
 				f"Current: {src.name}\n\nSuggested name (edit if needed):" ,
 				initialvalue=f"{new_name}{src.suffix}" , parent=self.root )
 		if result is None :
-			self.logger.info( "[AI-RENAME] User cancelled rename for '%s'" , src.name )
 			self.ai_status_lbl.configure( text="Cancelled" , text_color=FG2 );
 			return
 		self._release_media( )
@@ -874,50 +894,88 @@ class FileTriage :
 			self.ai_status_lbl.configure( text=f"✗ Rename failed: {e}" , text_color=RED )
 
 	# ══════════════════════════════════════════════════════════════════════
-	# AUTO-TAGGING PIPELINE
+	# METADATA PANEL  (via Tika server get_metadata)
 	# ══════════════════════════════════════════════════════════════════════
-	def _needs_tagging( self , dest_names: list[ str ] ) -> bool :
-		for dname in dest_names :
-			db = DEST_BY_NAME.get( dname )
-			if db :
-				for tgt in db.targets :
-					if tgt in _TAG_DIRS : return True
-		return False
+	def _show_metadata_panel( self ) :
+		if not self.current_file or not Path( self.current_file ).exists( ) : return
+		self.ai_status_lbl.configure( text="⏳ Extracting metadata…" , text_color=YELLOW )
+		self.root.update_idletasks( )
+		self._executor.submit( self._metadata_worker , Path( self.current_file ) )
 
-	def _run_tagging( self , file: Path ) :
-		self.logger.info( "[AUTO-TAG] Queuing tagging for '%s'" , file.name )
-		self._executor.submit( self._tag_worker , file )
-
-	def _tag_worker( self , file: Path ) :
+	def _metadata_worker( self , src: Path ) :
 		try :
-			self.logger.info( "[AUTO-TAG] Starting for '%s'" , file.name )
-			if _is_document_type( file ) :
-				content = extract_document_text( self.logger , file )
-			elif _is_image_type( file ) :
-				content = extract_visual_description( self.logger , file )
+			meta = get_metadata( logger=self.logger , artifact=src )
+			if meta :
+				lines = [ ]
+				for k , v in meta.items( ) :
+					if isinstance( v , list ) :
+						v = "; ".join( str( item ) for item in v )
+					lines.append( f"{k}: {v}" )
+				text = "\n".join( lines )
+				self.root.after( 0 , lambda t=text : self._display_metadata_popup( src.name , t ) )
 			else :
-				content = _tika_metadata( file )
-			if not content :
-				self.logger.warning( "[AUTO-TAG] No content extracted for '%s'" , file.name )
-				return
-			tags = generate_tags( self.logger , content )
-			if tags :
-				tag_file = file.parent / f"{file.stem}.tags.txt"
-				tag_file.write_text( tags , encoding="utf-8" )
-				self.logger.info( "[AUTO-TAG] Tags saved: %s → %s" , file.name , tags[ :80 ] )
-			else :
-				self.logger.warning( "[AUTO-TAG] Tag generation failed for '%s'" , file.name )
+				self.root.after( 0 , lambda : self.ai_status_lbl.configure(
+						text="✗ No metadata returned" , text_color=RED ) )
 		except Exception as e :
-			self.logger.error( "[AUTO-TAG] Error for '%s': %s" , file.name , e , exc_info=True )
+			err_msg = str( e )
+			self.logger.error( "[METADATA] Failed for '%s': %s" , src.name , err_msg )
+			self.root.after( 0 , lambda msg=err_msg : self.ai_status_lbl.configure(
+					text=f"✗ {msg}" , text_color=RED ) )
+
+	def _display_metadata_popup( self , filename: str , text: str ) :
+		self.ai_status_lbl.configure( text=f"✓ Metadata extracted ({len( text )} chars)" , text_color=GREEN )
+
+		popup = ctk.CTkToplevel( self.root )
+		popup.title( f"Metadata — {filename}" )
+		popup.geometry( "720x520" )
+		popup.configure( fg_color=SIDEBAR )
+		popup.attributes( "-topmost" , True )
+
+		ctk.CTkLabel( popup , text=f"📋  {filename}" ,
+									font=(EMOJI_FONT , 13 , "bold") , text_color=ACCENT ).pack( pady=(14 , 6) )
+
+		box = ctk.CTkTextbox( popup , fg_color=CARD , text_color=FG ,
+													font=("Consolas" , 10) , corner_radius=10 )
+		box.pack( fill=tk.BOTH , expand=True , padx=14 , pady=(0 , 10) )
+		box.insert( "1.0" , text )
+		box.configure( state="disabled" )
+
+		ctk.CTkButton( popup , text="Close" , command=popup.destroy ,
+									 fg_color=ACCENT , hover_color=ACCENT_L , width=100 , height=34 ,
+									 corner_radius=8 , text_color=FG , font=(FONT , 11) ).pack( pady=(0 , 14) )
+
+	# ══════════════════════════════════════════════════════════════════════
+	# DETECT FILE TYPE  (magic bytes + Tika fallback)
+	# ══════════════════════════════════════════════════════════════════════
+	def _detect_type( self ) :
+		if not self.current_file or not Path( self.current_file ).exists( ) : return
+		self.ai_status_lbl.configure( text="⏳ Detecting file type…" , text_color=YELLOW )
+		self.root.update_idletasks( )
+		self._executor.submit( self._detect_type_worker , Path( self.current_file ) )
+
+	def _detect_type_worker( self , src: Path ) :
+		try :
+			detected_ext = detect_filetype( self.logger , src )
+			current_ext = src.suffix.lower( )
+			if detected_ext :
+				match = "✓ matches" if detected_ext == current_ext else f"⚠ mismatch (current: {current_ext})"
+				msg = f"Detected: {detected_ext}  — {match}"
+				colour = GREEN if detected_ext == current_ext else YELLOW
+			else :
+				msg = "Could not detect file type"
+				colour = RED
+			self.root.after( 0 , lambda : self.ai_status_lbl.configure( text=msg , text_color=colour ) )
+		except Exception as e :
+			err_msg = str( e )
+			self.root.after( 0 , lambda msg=err_msg : self.ai_status_lbl.configure(
+					text=f"✗ {msg}" , text_color=RED ) )
 
 	# ══════════════════════════════════════════════════════════════════════
 	# CONFIRM  +  BATCH FLUSH
 	# ══════════════════════════════════════════════════════════════════════
 	def _confirm( self ) :
 		self._release_media( )
-		if not self.current_file :
-			self.logger.debug( "Confirm called with no current file." )
-			return
+		if not self.current_file : return
 		self.logger.info( "CONFIRM: file='%s', dests=%s, conv=%s" ,
 											Path( self.current_file ).name ,
 											list( self.selected_dests ) , self.selected_conversion )
@@ -934,8 +992,6 @@ class FileTriage :
 			self.pending.append( (Path( self.current_file ) , dest_list) )
 			self.batch_n += 1
 			self.logger.info( "Pending batch: %d / %d" , self.batch_n , FILE_TRIAGE_BATCH_SIZE )
-			if self._needs_tagging( dest_list ) :
-				self._run_tagging( Path( self.current_file ) )
 			if self.batch_n >= FILE_TRIAGE_BATCH_SIZE :
 				self._flush_silent( )
 
@@ -1037,20 +1093,12 @@ class FileTriage :
 						self.logger.info( "  copied to '%s'" , final )
 					except Exception as e :
 						errors.append( f"copy {file.name}→{label}: {e}" )
-						self.logger.error( "  copy failed: %s" , e )
 						ok = False
 				if ok and file.exists( ) :
-					try :
-						file.unlink( )
-						self.logger.info( "  original deleted." )
-					except Exception as e :
-						errors.append( f"delete {file.name}: {e}" )
+					try : file.unlink( )
+					except Exception as e : errors.append( f"delete {file.name}: {e}" )
 
 		count = len( batch )
-		if errors :
-			self.logger.warning( "Flush completed with %d error(s): %s" , len( errors ) , errors )
-		else :
-			self.logger.info( "Flush completed: %d files, no errors." , count )
 		self.root.after( 0 , lambda : self._flush_done( count , errors ) )
 
 	def _flush_done( self , count: int , errors: list[ str ] ) :
@@ -1071,15 +1119,12 @@ class FileTriage :
 		if self.selected_conversion : self._run_conversion( self.selected_conversion )
 		desc = simpledialog.askstring( "Flag for Review" ,
 																	 f"File: {Path( self.current_file ).name}\n\nNotes:" , parent=self.root )
-		if desc is None :
-			self.logger.info( "Flag cancelled by user." )
-			return
+		if desc is None : return
 		try :
 			dst = _unique( ALTERATIONS_REQUIRED_DIR , Path( self.current_file ) )
 			shutil.move( str( Path( self.current_file ) ) , str( dst ) )
 			self.flagged.add( dst )
 			_write_alteration_csv( dst.name , desc.strip( ) , self.logger )
-			self.logger.info( "Flagged '%s' → '%s' with note: %s" , Path( self.current_file ).name , dst , desc[ :80 ] )
 			self.status_lbl.configure( text="🚩 Flagged → ALTERATIONS REQUIRED" , text_color=ACCENT )
 			self.show_next( )
 		except Exception as e :
@@ -1089,11 +1134,9 @@ class FileTriage :
 	def _send_to_unessential( self ) :
 		self._release_media( )
 		if not self.current_file or not Path( self.current_file ).exists( ) : return
-		self.logger.info( "Sending to UNESSENTIAL: '%s'" , Path( self.current_file ).name )
 		try :
 			dst = _unique( UNESSENTIAL_DIR , Path( self.current_file ) )
 			shutil.move( str( Path( self.current_file ) ) , str( dst ) )
-			self.logger.info( "Moved '%s' → '%s'" , Path( self.current_file ).name , dst )
 			self.status_lbl.configure( text="↓ Moved to UNESSENTIAL" , text_color=FG2 )
 			self.show_next( )
 		except Exception as e :
@@ -1104,13 +1147,10 @@ class FileTriage :
 		self._release_media( )
 		if not self.current_file or not Path( self.current_file ).exists( ) : return
 		fname = Path( self.current_file ).name
-		if not messagebox.askyesno( "Confirm Delete" , f"Move '{fname}' to DELETE folder?" ) :
-			self.logger.info( "Delete cancelled by user for '%s'" , fname )
-			return
+		if not messagebox.askyesno( "Confirm Delete" , f"Move '{fname}' to DELETE folder?" ) : return
 		try :
 			dst = _unique( DELETE_DIR , Path( self.current_file ) )
 			shutil.move( str( Path( self.current_file ) ) , str( dst ) )
-			self.logger.info( "Deleted '%s' → '%s'" , fname , dst )
 			self.status_lbl.configure( text="🗑 Deleted" , text_color=RED )
 			self.show_next( )
 		except Exception as e :
@@ -1124,32 +1164,24 @@ class FileTriage :
 		if self.file_start :
 			elapsed = time.time( ) - self.file_start
 			self.file_times.append( elapsed )
-			self.logger.debug( "File processing time: %.1fs" , elapsed )
 		self._release_media( )
 
 		if self.current_index < len( self.history ) - 1 :
 			self.current_index += 1
 			self.current_file = self.history[ self.current_index ][ 0 ]
-			self.logger.info( "Navigating forward (history) → '%s' [%d]" ,
-												Path( self.current_file ).name , self.current_index )
 		elif self.queue :
 			self.current_file = self.queue.popleft( )
 			self.history.append( [ Path( self.current_file ) , [ ] , None ] )
 			self.current_index = len( self.history ) - 1
 			self.file_start = time.time( )
-			self.logger.info( "Dequeued new file → '%s' [%d] (queue remaining: %d)" ,
-												Path( self.current_file ).name , self.current_index , len( self.queue ) )
 		else :
 			self.current_file = None
 			self._clear_preview( );
 			self._update_info_bar( )
 			self._reset_dest_checkboxes( );
 			self._refresh_conv_visibility( )
-			# Flush any remaining pending files
 			if self.pending :
-				self.logger.info( "All files reviewed — flushing remaining %d pending files." , len( self.pending ) )
 				self._flush_silent( )
-			self.logger.info( "All files have been processed. Starting auto-close countdown." )
 			self.status_lbl.configure( text="✓ All files reviewed!" , text_color=GREEN )
 			self._start_auto_close( )
 			return
@@ -1162,8 +1194,6 @@ class FileTriage :
 		if self.current_index > 0 :
 			self.current_index -= 1
 			self.current_file = self.history[ self.current_index ][ 0 ]
-			self.logger.info( "Navigating back → '%s' [%d]" ,
-												Path( self.current_file ).name , self.current_index )
 			self._on_file_changed( )
 
 	def _jump_to( self , idx: int ) :
@@ -1171,7 +1201,6 @@ class FileTriage :
 			self._release_media( )
 			self.current_index = idx
 			self.current_file = self.history[ idx ][ 0 ]
-			self.logger.info( "Jumping to history [%d] → '%s'" , idx , Path( self.current_file ).name )
 			self._on_file_changed( )
 
 	def _on_file_changed( self ) :
@@ -1184,12 +1213,17 @@ class FileTriage :
 		self._update_history_highlight( )
 
 	def _update_info_bar( self ) :
-		if self.current_file :
+		if self.current_file and Path( self.current_file ).exists( ) :
+			p = Path( self.current_file )
 			total = len( self.history ) + len( self.queue )
+			cat = _file_category( p )
+			size_str = _format_file_size( p.stat( ).st_size )
 			self.file_lbl.configure(
-					text=f"{Path( self.current_file ).name}  ({self.current_index + 1}/{total})" )
+					text=f"{p.name}  ({self.current_index + 1}/{total})" )
+			self.size_lbl.configure( text=f"[{cat.upper( )}  ·  {size_str}]" )
 		else :
 			self.file_lbl.configure( text="—" )
+			self.size_lbl.configure( text="" )
 		self.queue_lbl.configure(
 				text=f"Queue: {len( self.queue )}  |  Flagged: {len( self.flagged )}" )
 
@@ -1217,24 +1251,21 @@ class FileTriage :
 									 fg_color=ACCENT , hover_color=ACCENT_L , width=180 , height=38 ,
 									 corner_radius=10 , text_color=FG , font=(FONT , 12 , "bold") ,
 									 ).pack( )
-
 		self._close_popup.protocol( "WM_DELETE_WINDOW" , self._cancel_auto_close )
 		self._tick_auto_close( )
 
 	def _tick_auto_close( self ) :
 		if not self._closing : return
 		if self._close_remaining <= 0 :
-			self.logger.info( "Auto-close countdown reached 0. Shutting down." )
 			try : self._close_popup.destroy( )
 			except : pass
-			self.root.destroy( )
+			self.root.destroy( );
 			return
 		self._close_countdown_lbl.configure( text=f"Auto-closing in {self._close_remaining}s…" )
 		self._close_remaining -= 1
 		self._close_after_id = self.root.after( 1000 , self._tick_auto_close )
 
 	def _cancel_auto_close( self ) :
-		self.logger.info( "Auto-close cancelled by user." )
 		self._closing = False
 		if self._close_after_id :
 			self.root.after_cancel( self._close_after_id )
@@ -1375,8 +1406,6 @@ class FileTriage :
 		self._clear_preview( )
 		if not self.current_file or not Path( self.current_file ).exists( ) : return
 		cat = _file_category( Path( self.current_file ) )
-		self.logger.debug( "Displaying file '%s' (category: %s, zoom: %d%%)" ,
-											 Path( self.current_file ).name , cat , int( self.zoom_scale * 100 ) )
 		try :
 			{ "pdf"   : self._show_pdf , "image" : self._show_image ,
 				"video" : self._show_video , "audio" : self._show_audio ,
@@ -1441,7 +1470,6 @@ class FileTriage :
 		cols = min( 4 , show )
 		for c in range( cols ) : grid.grid_columnconfigure( c , weight=1 )
 
-		# Base scale 1.0 so that at 50% zoom → 0.5 matrix (readable)
 		scale = 1.0 * self.zoom_scale
 		preloaded_pages = [ ]
 		if cached and isinstance( cached , tuple ) and cached[ 0 ] == "pdf_pages" :
@@ -1630,13 +1658,11 @@ class FileTriage :
 	def _open_external( self ) :
 		if not self.current_file or not Path( self.current_file ).exists( ) : return
 		p = Path( self.current_file )
-		self.logger.info( "Opening external: '%s'" , p )
 		try :
 			if os.name == "nt" : os.startfile( p )
 			elif os.name == "posix" : subprocess.run( [ "xdg-open" , str( p ) ] )
 			else : subprocess.run( [ "open" , str( p ) ] )
 		except Exception as e :
-			self.logger.error( "Open external failed: %s" , e )
 			messagebox.showerror( "Error" , str( e ) )
 
 	# ══════════════════════════════════════════════════════════════════════
