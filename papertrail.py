@@ -14,15 +14,8 @@ Author: Ashiq Gazi
 import logging
 from datetime import datetime
 
-from config import (
-	COMPLETED_FORMAT_CONVERSION_DIR ,
-	LOG_DIR ,
-	LOG_FORMAT ,
-	LOG_LEVEL ,
-	SESSION_LOG_FILE_PREFIX ,
-	SYSTEM_DIRECTORIES ,
-	SYSTEM_PROGRAM_TRACKING_FILES ,
-)
+from config import (COMPLETED_AI_PROCESSING_DIR , COMPLETED_FORMAT_CONVERSION_DIR , LOG_DIR , LOG_FORMAT , LOG_LEVEL ,
+										SESSION_LOG_FILE_PREFIX , SYSTEM_DIRECTORIES , SYSTEM_PROGRAM_TRACKING_FILES)
 from stages.auto_sort import automatically_sorting
 from utilities.dependancy_ensurance import ensure_apache_tika_server
 
@@ -119,6 +112,7 @@ try :
 	automatically_sorting(
 			logger=logger ,
 			source_dir=COMPLETED_FORMAT_CONVERSION_DIR ,
+			dest_dir=COMPLETED_AI_PROCESSING_DIR ,
 	)
 
 # manual_artifact_triage = FileTriage( logger=logger , source_dir=COMPLETED_FORMAT_CONVERSION_DIR )

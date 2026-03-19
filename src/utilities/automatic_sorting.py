@@ -395,8 +395,8 @@ def is_financial_document( artifact_location: Path , logger: logging.Logger , co
 		artifact_label = artifact_location.stem.lower( ).strip( )
 
 		if (artifact_ext not in DOCUMENT_TYPES
-				or artifact_ext not in EMAIL_TYPES
-				or artifact_ext not in TEXT_TYPES
+				and artifact_ext not in EMAIL_TYPES
+				and artifact_ext not in TEXT_TYPES
 		) :
 			logger.debug( f"[FINANCIAL] '{artifact_location.name}' is not a supported type (ext='{artifact_ext}'), skipping" )
 			return False

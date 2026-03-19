@@ -12,9 +12,12 @@ import shutil
 from pathlib import Path
 from typing import List
 
+from tqdm import tqdm
+
 from config import (ACADEMIC_FILES_DIR , ALTERATIONS_REQUIRED_DIR , ANKI_DIR , ARTIFACT_PROFILES_DIR , AUDIO_TYPES ,
 										BITWARDEN_DIR ,
-										BOOK_LIBRARY_DIR , COMPLETED_SANITIZATION_DIR , DIGITAL_ASSET_MANAGEMENT_DIR ,
+										BOOK_LIBRARY_DIR , COMPLETED_SANITIZATION_DIR ,
+										DIGITAL_ASSET_MANAGEMENT_DIR ,
 										DOCUMENT_TYPES , EMAIL_TYPES , FIREFLYIII_DIR , GITLAB_DIR , IMAGE_TYPES , IMMICH_DIR ,
 										IMMIGRATION_FILES_DIR ,
 										JELLYFIN_DIR ,
@@ -25,7 +28,6 @@ from config import (ACADEMIC_FILES_DIR , ALTERATIONS_REQUIRED_DIR , ANKI_DIR , A
 										SOFTWARE_ARCHIVE_DIR ,
 										TEXTBOOK_LIBRARY_DIR , TEXT_MODEL , ULTIMAKER_CURA_DIR ,
 										VIDEO_TYPES , VISION_MODEL , VISUAL_NOTE_FILES_DIR)
-from tqdm import tqdm
 from utilities.ai_processing import extract_text_for_detection , generate_filename , generate_tags
 from utilities.automatic_sorting import (is_3d_file , is_academic , is_anki_deck , is_book , is_bookmark_file ,
 																				 is_code , is_digital_contact_file , is_executable , is_financial_document ,
@@ -39,6 +41,7 @@ from utilities.sanitization import sanitize_artifact_name
 def automatically_sorting(
 		logger: logging.Logger ,
 		source_dir: Path ,
+		dest_dir: Path ,
 ) :
 	"""
 	Automatically sort and organize artifact files to detected locations.
@@ -80,6 +83,7 @@ def automatically_sorting(
 			artifact_ext = artifact.suffix.lower( ).strip( ).strip( '.' )
 			artifact_label = artifact.stem.lower( )
 			artifact_size = artifact.stat( ).st_size
+			artifact_checksum = generate_checksum( logger=logger , artifact_path=artifact )
 			logger.info( f"Processing '{artifact.name}' (ext='{artifact_ext}', size={artifact_size} bytes)" )
 
 			# --- Pre-sort scan: check if image needs physical scanning ---
@@ -212,39 +216,39 @@ def automatically_sorting(
 
 				elif is_professional( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
-					dest = PROFESSIONAL_FILES_DIR / f"{sanitized_label}.{artifact_ext}"
+					dest = PROFESSIONAL_FILES_DIR / f"{improved_label}.{artifact_ext}"
 					logger.info(
-							f"[PROFESSIONAL] '{sanitized_label}' detected as professional/resume document, moving to {dest}" )
+							f"[PROFESSIONAL] '{artifact_label}' detected as professional/resume document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_legal( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
 					dest = LEGAL_FILES_DIR / f"{improved_label}.{artifact_ext}"
-					logger.info( f"[LEGAL] '{sanitized_label}' detected as legal document, moving to {dest}" )
+					logger.info( f"[LEGAL] '{artifact_label}' detected as legal document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_immigration( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
 					dest = IMMIGRATION_FILES_DIR / f"{improved_label}.{artifact_ext}"
-					logger.info( f"[IMMIGRATION] '{sanitized_label}' detected as immigration document, moving to {dest}" )
+					logger.info( f"[IMMIGRATION] '{artifact_label}' detected as immigration document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_academic( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
 					dest = ACADEMIC_FILES_DIR / f"{improved_label}.{artifact_ext}"
-					logger.info( f"[ACADEMIC] '{sanitized_label}' detected as academic document, moving to {dest}" )
+					logger.info( f"[ACADEMIC] '{artifact_label}' detected as academic document, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_book( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
-					dest = BOOK_LIBRARY_DIR / f"{sanitized_label}.{artifact_ext}"
-					logger.info( f"[BOOK] '{sanitized_label}' detected as book, moving to {dest}" )
+					dest = BOOK_LIBRARY_DIR / f"{improved_label}.{artifact_ext}"
+					logger.info( f"[BOOK] '{artifact_label}' detected as book, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_textbook( artifact_location=artifact , logger=logger , content=content ) :
 					improved_label = generate_filename( logger=logger , content=content )
-					dest = TEXTBOOK_LIBRARY_DIR / f"{sanitized_label}.{artifact_ext}"
-					logger.info( f"[TEXTBOOK] '{sanitized_label}' detected as textbook, moving to {dest}" )
+					dest = TEXTBOOK_LIBRARY_DIR / f"{improved_label}.{artifact_ext}"
+					logger.info( f"[TEXTBOOK] '{artifact_label}' detected as textbook, moving to {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				elif is_financial_document( artifact_location=artifact , logger=logger , content=content ) :
@@ -263,16 +267,18 @@ def automatically_sorting(
 					]
 					for target_name , target_dir in copy_targets :
 						copy_dest = target_dir / f"{improved_label}.{artifact_ext}"
-						logger.info( f"[FINANCIAL] Copying '{sanitized_label}' to {target_name} at {copy_dest}" )
+						logger.info( f"[FINANCIAL] Copying '{artifact_label}' to {target_name} at {copy_dest}" )
 						shutil.copy2( src=artifact , dst=copy_dest )
 
 					dest = (DIGITAL_ASSET_MANAGEMENT_DIR / "FINANCIAL") / f"{sanitized_label}.{artifact_ext}"
-					logger.info( f"[FINANCIAL] Moving '{sanitized_label}' to primary storage at {dest}" )
+					logger.info( f"[FINANCIAL] Moving '{artifact_label}' to primary storage at {dest}" )
 					shutil.move( src=artifact , dst=dest )
 
 				else :
 					logger.warning(
-							f"[DOCUMENT] '{artifact.name}' did not match any content-based category, leaving in place for manual review" )
+							f"[DOCUMENT] '{artifact.name}' did not match any content-based category, moving to {dest_dir} for manual review" )
+					dest = dest_dir / sanitized_label
+					shutil.move( src=artifact , dst=dest )
 
 				papertrail_metadata = {
 					"papertrail_metadata" : {
@@ -283,7 +289,7 @@ def automatically_sorting(
 
 				profile_path = Path(
 						ARTIFACT_PROFILES_DIR
-						/ f"{PROFILE_PREFIX}-{generate_checksum( logger=logger , artifact_path=artifact )}.json" ,
+						/ f"{PROFILE_PREFIX}-{artifact_checksum}.json" ,
 				)
 				try :
 					profile_path.parent.mkdir( parents=True , exist_ok=True )
