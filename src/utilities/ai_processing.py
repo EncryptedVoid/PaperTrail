@@ -38,6 +38,454 @@ from config import (ARTIFACT_SCANNING_PROMPT , IMAGE_TYPES ,
 										VISUAL_DESC_PROMPT , VISUAL_DESC_SYSTEM_PROMPT)
 from utilities.artifact_data_manipulation import get_metadata
 
+"""
+Add these to the BOTTOM of ai_processing.py, replacing the individual
+detect_*_theme functions for the auto-sort pipeline.
+
+The old detect_* functions can stay — they're still used by manual_file_triage.
+"""
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Model recommendation for classification
+# ──────────────────────────────────────────────────────────────────────────────
+# For 95%+ accuracy on single-call classification, use a 14B+ model.
+# In config.py, change:
+#     CLASSIFICATION_MODEL: str = "qwen2.5:14b-instruct-q4_K_M"
+# Then pass it to classify_document(). Falls back to TEXT_MODEL if not set.
+#
+# To pull it:  ollama pull qwen2.5:14b-instruct-q4_K_M
+# VRAM usage:  ~9-10 GB (fits on 12GB GPUs with headroom)
+# ──────────────────────────────────────────────────────────────────────────────
+
+try :
+	from config import CLASSIFICATION_MODEL
+except ImportError :
+	CLASSIFICATION_MODEL = TEXT_MODEL  # fallback to qwen2.5:7b
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Keyword-based pre-classification (zero LLM cost)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Each entry: (category, filename_keywords, extension_keywords)
+# If ANY filename keyword matches OR the extension matches, return that category.
+# Order matters — first match wins, so put high-confidence checks first.
+
+_KEYWORD_RULES: list[ tuple[ str , list[ str ] , list[ str ] ] ] = [
+	# ── professional ─────────────────────────────────────────────────
+	("professional" , [
+		"resume" , "cv " , " cv" , "curriculum vitae" , "cover letter" ,
+		"coverletter" , "certificate" , "letter of recommendation" ,
+		"job offer" , "employment contract" , "performance review" ,
+	] , [ ]) ,
+
+	# ── financial ────────────────────────────────────────────────────
+	("financial" , [
+		"paystub" , "pay stub" , "pay_stub" , "payslip" , "pay slip" ,
+		"invoice" , "receipt" , "cheque" , "check_" , " t4 " , "_t4_" ,
+		"t4a" , "t5_" , " t5 " , "w-2" , "w2_" , "1099" , "t2202" ,
+		"bank statement" , "bank_statement" , "credit card statement" ,
+		"tax return" , "tax_return" , "notice of assessment" ,
+		"notice_of_assessment" , "billing" , "expense report" ,
+		"expense_report" , "purchase order" , "purchase_order" ,
+		"financial statement" , "balance sheet" , "profit loss" ,
+		"rrsp" , "tfsa" , "gst credit" , "hst credit" ,
+	] , [ ]) ,
+
+	# ── immigration ──────────────────────────────────────────────────
+	("immigration" , [
+		"immigration" , "refugee" , "passport" , "work permit" ,
+		"work_permit" , "study permit" , "study_permit" ,
+		"permanent residen" , "visa" , "ircc" , "uscis" , "cbsa" ,
+		"travel authori" , "boarding pass" , "boarding_pass" ,
+		"flight ticket" , "flight_ticket" , "port of entry" ,
+		"nexus" , "global entry" , "citizenship" ,
+	] , [ ]) ,
+
+	# ── academic ─────────────────────────────────────────────────────
+	("academic" , [
+		"syllabus" , "midterm" , "mid-term" , "mid_term" ,
+		"lecture" , "final exam" , "final_exam" , "assignment" ,
+		"homework" , "lab report" , "lab_report" , "transcript" ,
+		"grade report" , "grade_report" , "thesis" , "dissertation" ,
+		"course outline" , "course_outline" ,
+	] , [ ]) ,
+
+	# ── instruction_manual ───────────────────────────────────────────
+	# NOTE: "solutions manual" is excluded — that's a textbook thing
+	("instruction_manual" , [
+		"user guide" , "user_guide" , "userguide" ,
+		"setup guide" , "setup_guide" , "quick start" ,
+		"quick_start" , "quickstart" , "installation guide" ,
+		"troubleshooting" , "owner manual" , "owners manual" ,
+		"owner's manual" , "assembly instruction" ,
+		"maintenance guide" , "maintenance_guide" ,
+		"getting started" , "getting_started" ,
+	] , [ ]) ,
+
+	# ── textbook ─────────────────────────────────────────────────────
+	# Check BEFORE book since textbooks are more specific
+	("textbook" , [
+		"textbook" , "text book" , "text_book" ,
+		"edition" , "solutions manual" , "solution manual" ,
+		"solution_manual" , "problem set" , "problem_set" ,
+		"study guide" , "study_guide" ,
+	] , [ ]) ,
+
+	# ── book ─────────────────────────────────────────────────────────
+	("book" , [
+		"libgen" , "epub" , "novel" ,
+	] , [ "epub" , "cbr" , "djvu" , "mobi" ]) ,
+
+	# ── legal ────────────────────────────────────────────────────────
+	("legal" , [
+		"contract" , "lease agreement" , "lease_agreement" ,
+		"rental agreement" , "rental_agreement" ,
+		"nda" , "non-disclosure" , "non_disclosure" ,
+		"affidavit" , "court filing" , "court_filing" ,
+		"power of attorney" , "power_of_attorney" ,
+		"settlement" , "notarized" , "terms and conditions" ,
+		"terms_and_conditions" , "liability waiver" ,
+	] , [ ]) ,
+]
+
+
+def _keyword_preclassify(
+		filename_stem: str ,
+		file_ext: str ,
+		logger: logging.Logger ,
+) -> Optional[ str ] :
+	"""
+	Attempt to classify a file based on filename keywords and extension alone.
+
+	Returns a category string if a confident match is found, or None if
+	the LLM should be consulted.
+	"""
+	name_lower = filename_stem.lower( ).strip( )
+
+	# Special case: "manual" in name but NOT "solutions manual" → instruction_manual
+	if "manual" in name_lower and "solution" not in name_lower :
+		logger.info(
+				f"[KEYWORD] '{filename_stem}' matched 'manual' "
+				f"(not solutions manual) → instruction_manual" ,
+		)
+		return "instruction_manual"
+
+	# Special case: "book" in name could be book or textbook
+	# Only match book if no textbook indicators present
+	if "book" in name_lower and "text" not in name_lower :
+		# Check for textbook indicators first
+		textbook_hints = [ "edition" , "solution" , "problem" , "study guide" ]
+		if any( hint in name_lower for hint in textbook_hints ) :
+			logger.info( f"[KEYWORD] '{filename_stem}' has 'book' + textbook hints → textbook" )
+			return "textbook"
+
+	for category , name_keywords , ext_keywords in _KEYWORD_RULES :
+		# Check extension match
+		if ext_keywords and file_ext in ext_keywords :
+			logger.info(
+					f"[KEYWORD] '{filename_stem}.{file_ext}' matched "
+					f"extension rule → {category}" ,
+			)
+			return category
+
+		# Check filename keyword match
+		for kw in name_keywords :
+			if kw in name_lower :
+				logger.info(
+						f"[KEYWORD] '{filename_stem}' matched keyword "
+						f"'{kw}' → {category}" ,
+				)
+				return category
+
+	return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Unified single-call classification
+# ──────────────────────────────────────────────────────────────────────────────
+
+VALID_CATEGORIES = frozenset( {
+	"instruction_manual" ,
+	"professional" ,
+	"legal" ,
+	"immigration" ,
+	"academic" ,
+	"book" ,
+	"textbook" ,
+	"financial" ,
+	"unknown" ,
+} )
+
+_UNIFIED_CLASSIFY_SYSTEM = (
+	"You are a document classification engine. You receive text extracted from "
+	"a document and return EXACTLY ONE category label from the allowed list. "
+	"No explanation, no punctuation, no quotes — just the single lowercase label."
+)
+
+_UNIFIED_CLASSIFY_PROMPT = """\
+Classify this document into EXACTLY ONE of these categories:
+
+  instruction_manual  — product manuals, user guides, setup/assembly instructions,
+                        troubleshooting guides, owner's manuals, maintenance guides
+  professional        — resumes, CVs, cover letters, job offers, employment contracts,
+                        performance reviews, professional certificates, letters of
+                        recommendation (NOT pay stubs or any financial records)
+  legal               — contracts, lease agreements, court filings, NDAs, wills,
+                        affidavits, notarized documents, lawyer correspondence,
+                        terms & conditions (NOT routine CRA/IRS tax correspondence)
+  immigration         — visas, work/study permits, passport applications, refugee claims,
+                        permanent residency docs, travel authorizations, IRCC/USCIS docs,
+                        boarding passes, flight tickets, hotel bookings for travel
+  academic            — research papers, theses, assignments, transcripts, grade reports,
+                        lecture notes, exam papers, lab reports, syllabi, school newsletters
+                        (NOT textbooks)
+  book                — published novels, memoirs, biographies, poetry anthologies,
+                        cookbooks, reference books, any commercially published literary
+                        work with ISBN, publisher info, chapters, dedication pages
+                        (NOT textbooks or educational material)
+  textbook            — educational textbooks with edition numbers, exercises, problem
+                        sets, learning objectives, academic publishers (Pearson,
+                        McGraw-Hill, Wiley, O'Reilly), glossaries, indices
+  financial           — invoices, receipts, bank statements, tax forms (T4, W-2, 1099),
+                        pay stubs, credit card statements, insurance policies, investment
+                        statements, CRA/IRS notices of assessment, benefit statements,
+                        purchase confirmations, expense reports, any document involving
+                        money, payments, or financial accounts
+  unknown             — does not clearly fit any of the above categories
+
+Respond with ONLY the category label. Nothing else.
+
+Document content:
+{content}
+
+Category:"""
+
+_UNIFIED_CLASSIFY_RETRIES = 2
+
+
+def classify_document(
+		logger: logging.Logger ,
+		content: str ,
+		filename_stem: str = "" ,
+		file_ext: str = "" ,
+		max_content_chars: int = 12000 ,
+		model: Optional[ str ] = None ,
+) -> str :
+	"""
+	Classify a document into one category.
+
+	Pipeline:
+			1. Try keyword-based pre-classification (instant, free)
+			2. If no keyword match, use the LLM (single call)
+			3. Falls back to 'unknown' on failure
+
+	Args:
+			logger:           Logger instance
+			content:          Extracted text content of the document
+			filename_stem:    Filename without extension (for keyword matching)
+			file_ext:         File extension without dot (for keyword matching)
+			max_content_chars: Max chars to send to LLM
+			model:            Override model (defaults to CLASSIFICATION_MODEL)
+
+	Returns:
+			One of the VALID_CATEGORIES strings.
+	"""
+	# ── Step 1: Keyword pre-classification ────────────────────────────
+	if filename_stem or file_ext :
+		keyword_result = _keyword_preclassify( filename_stem , file_ext , logger )
+		if keyword_result is not None :
+			logger.info(
+					f"[CLASSIFY] Keyword match for '{filename_stem}' → "
+					f"'{keyword_result}' (no LLM needed)" ,
+			)
+			return keyword_result
+
+	# ── Step 2: LLM classification ────────────────────────────────────
+	use_model = model or CLASSIFICATION_MODEL
+	logger.info(
+			f"[CLASSIFY] No keyword match, running LLM classification "
+			f"({len( content )} chars, model={use_model})" ,
+	)
+
+	truncated = content[ :max_content_chars ]
+	prompt = _UNIFIED_CLASSIFY_PROMPT.format( content=truncated )
+
+	for attempt in range( _UNIFIED_CLASSIFY_RETRIES + 1 ) :
+		result = _llm_generate(
+				logger ,
+				prompt=prompt ,
+				system=_UNIFIED_CLASSIFY_SYSTEM ,
+				model=use_model ,
+		)
+
+		if result is None :
+			logger.warning( f"[CLASSIFY] LLM returned None (attempt {attempt + 1})" )
+			continue
+
+		# Clean up response
+		cleaned = (
+			result
+			.strip( )
+			.strip( "\"'`.,!:;()" )
+			.lower( )
+			.replace( " " , "_" )
+			.replace( "-" , "_" )
+		)
+
+		# Remove any "category:" prefix the model might add
+		if ":" in cleaned :
+			cleaned = cleaned.split( ":" )[ -1 ].strip( ).strip( "_" )
+
+		# Exact match
+		if cleaned in VALID_CATEGORIES :
+			logger.info( f"[CLASSIFY] Result: {cleaned} (attempt {attempt + 1})" )
+			return cleaned
+
+		# Fuzzy: check if any valid category is a substring
+		for cat in VALID_CATEGORIES :
+			if cat in cleaned :
+				logger.info(
+						f"[CLASSIFY] Fuzzy matched '{cat}' from '{cleaned}' "
+						f"(attempt {attempt + 1})" ,
+				)
+				return cat
+
+		logger.warning(
+				f"[CLASSIFY] Unrecognized response '{cleaned}' "
+				f"(attempt {attempt + 1}, raw: '{result}')" ,
+		)
+
+	logger.warning( "[CLASSIFY] All attempts failed, defaulting to 'unknown'" )
+	return "unknown"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Improved filename generation
+# ──────────────────────────────────────────────────────────────────────────────
+
+_IMPROVED_FILENAME_SYSTEM = (
+	"You are a precise document-naming assistant. You generate filenames that are "
+	"specific, descriptive, and immediately tell someone what the document contains "
+	"without opening it. Your filenames should read like a short, informative label. "
+	"You MUST include concrete identifying details from the document."
+)
+
+_IMPROVED_FILENAME_PROMPT = """\
+Below is content extracted from a document. Generate a single descriptive
+filename (NO file extension) that captures the specific identity of this
+document.
+
+Rules:
+- Use lowercase words separated by underscores.
+- Be MAXIMALLY SPECIFIC: include dates, names, companies, account numbers,
+  addresses, subject lines, course names, chapter numbers, or any other
+  concrete identifying details visible in the content.
+- Aim for 5-10 words. More specific is ALWAYS better.
+- If the document has a clear title or heading, incorporate it.
+- If there are dates, include them in YYYY_MM format.
+- If there are names of people or organizations, include them.
+- If there are reference numbers, case numbers, or account numbers, include them.
+
+Good examples:
+    cra_notice_of_assessment_2023_john_smith
+    td_visa_infinite_statement_2024_03
+    mcmaster_university_transcript_fall_2022
+    lease_agreement_45_queen_st_apt_302_2024
+    udemy_python_bootcamp_section_12_decorators
+    canon_eos_r5_user_manual_en
+    rbc_chequing_acct_4521_statement_2024_01
+    ircc_work_permit_approval_2023_08_smith
+    ontario_residential_tenancy_agreement_2024
+    pearson_calculus_early_transcendentals_9th_edition
+
+Bad examples (too vague — NEVER generate these):
+    tax_form
+    resume
+    bank_document
+    lease
+    video_lecture
+    financial_statement
+    legal_document
+
+Content (use ALL of this to find specific details):
+{content}
+
+Filename:"""
+
+
+def generate_filename_v2(
+		logger: logging.Logger ,
+		content: str ,
+		max_content_chars: int = 18000 ,
+		model: Optional[ str ] = None ,
+) -> Optional[ str ] :
+	"""
+	Generate a descriptive filename from document content.
+
+	v2 improvements:
+	- 18k chars of content (vs 9k) for better detail extraction
+	- Aggressive prompt requiring concrete identifiers
+	- Retries once if result is too vague (< 3 words)
+	- Uses CLASSIFICATION_MODEL for better quality
+	"""
+	use_model = model or CLASSIFICATION_MODEL
+	logger.info( f"[FILENAME-V2] Generating from {len( content )} chars (model={use_model})" )
+
+	truncated = content[ :max_content_chars ]
+	prompt = _IMPROVED_FILENAME_PROMPT.format( content=truncated )
+
+	result = _llm_generate(
+			logger , prompt=prompt , system=_IMPROVED_FILENAME_SYSTEM , model=use_model ,
+	)
+
+	if not result :
+		logger.warning( "[FILENAME-V2] LLM returned no result" )
+		return None
+
+	cleaned = _clean_filename_response( result )
+
+	# Reject overly short/vague names — retry with emphasis
+	if len( cleaned.split( "_" ) ) < 3 :
+		logger.warning(
+				f"[FILENAME-V2] Result too vague ('{cleaned}'), retrying" ,
+		)
+		retry_prompt = (
+			f"The filename '{cleaned}' is TOO VAGUE. I need a MORE SPECIFIC "
+			f"filename with at least 5 descriptive words. Include actual dates, "
+			f"names, companies, or reference numbers from this content:\n\n"
+			f"{truncated[ :8000 ]}\n\nFilename:"
+		)
+		retry = _llm_generate(
+				logger , prompt=retry_prompt , system=_IMPROVED_FILENAME_SYSTEM ,
+				model=use_model ,
+		)
+		if retry :
+			cleaned = _clean_filename_response( retry )
+
+	# Truncate absurdly long names
+	parts = cleaned.split( "_" )
+	if len( parts ) > 14 :
+		cleaned = "_".join( parts[ :14 ] )
+
+	logger.info( f"[FILENAME-V2] Generated: '{cleaned}'" )
+	return cleaned
+
+
+def _clean_filename_response( raw: str ) -> str :
+	"""Normalize an LLM filename response into a clean underscore-separated name."""
+	return (
+		raw
+		.strip( "\"'`\n " )
+		.replace( " " , "_" )
+		.replace( "-" , "_" )
+		.replace( "__" , "_" )
+		.lower( )
+		.split( "." )[ 0 ]  # strip any extension
+		.split( "\n" )[ 0 ]  # first line only
+		.strip( "_" )
+	)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Detection system prompt & prompt templates
 # ──────────────────────────────────────────────────────────────────────────────

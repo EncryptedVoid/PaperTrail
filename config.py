@@ -558,7 +558,7 @@ FILETYPE_TRUSTED_EXTENSIONS.update( EMAIL_TYPES )
 FILETYPE_TRUSTED_EXTENSIONS.update( EXECUTABLE_EXTENSIONS )
 FILETYPE_TRUSTED_EXTENSIONS.update( ext.lstrip( "." ) for ext in ARCHIVE_TYPES )
 
-PDF_SUBSET_PAGE_LIMIT = 4  # max pages before subsetting kicks in
+PDF_SUBSET_PAGE_LIMIT = 5  # max pages before subsetting kicks in
 OLLAMA_PORT = 11434
 TIKA_SERVER_PORT: int = 9998
 JAVA_PATH: Path = Path( PROGRAM_ASSETS_DIR / r"jdk-25.0.2+10-jre/bin/java.exe" )
@@ -1216,8 +1216,22 @@ MIME_TO_EXT_MAP: dict[ str , List[ str ] ] = {
 # Adjust thresholds if you observe OOM in practice.
 
 QWEN_VL_CPU_FALLBACK = "Qwen/Qwen2.5-VL-3B-Instruct"
+# ── Model Configuration ───────────────────────────────────────────────────────
+# TEXT_MODEL is used for fast tasks (tags, simple extraction)
+# CLASSIFICATION_MODEL is used for high-accuracy classification + filenames
+# On 12GB VRAM (RTX 3060): 14b-q4 uses ~9-10GB, leaves room for vision model
+#
+# To install:  ollama pull qwen2.5:14b-instruct-q4_K_M
+#
+# If you have MORE VRAM (24GB+), upgrade to:
+#   CLASSIFICATION_MODEL = "qwen2.5:32b-instruct-q4_K_M"
+#
+# If you have LESS VRAM (8GB), downgrade to (accuracy will drop to ~85-90%):
+#   CLASSIFICATION_MODEL = "qwen2.5:7b"
+
 TEXT_MODEL: str = "qwen2.5:7b"
 VISION_MODEL: str = "minicpm-v:8b"
+CLASSIFICATION_MODEL: str = "qwen2.5:14b-instruct-q4_K_M"
 
 QWEN_VL_MODEL_TIERS = [
 	# ── Full precision tiers ──────────────────────────────────────────────
