@@ -99,7 +99,7 @@ def converting_files(
 				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 				continue
 
-			elif artifact_ext in [ "pdf" , "mp4" , "mp3" , "png" ] :
+			elif artifact_ext in [ "pdf" , "mp4" , "mp3" , "png" , "docx" ] :
 				logger.info( f"Already in target format. No conversion needed." )
 				shutil.move( src=artifact , dst=dest_dir / artifact.name )
 				continue
